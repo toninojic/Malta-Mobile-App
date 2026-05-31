@@ -1,0 +1,25 @@
+{
+  "name": "malta-craftsman-marketplace",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/api",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "api:dev": "npm run start:dev --workspace @malta-marketplace/api",
+    "mobile:start": "npm run start --workspace @malta-marketplace/mobile",
+    "mobile:api-url:set": "npm run api-url:set --workspace @malta-marketplace/mobile --",
+    "mobile:api-url:check": "npm run api-url:check --workspace @malta-marketplace/mobile",
+    "mobile:apk": "npm run build:android:apk --workspace @malta-marketplace/mobile",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspaces"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "react-dom": "19.1.0",
+    "react-native-web": "^0.21.0"
+  }
+}

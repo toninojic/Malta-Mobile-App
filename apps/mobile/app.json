@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Malta Craftsman",
+    "slug": "malta-craftsman-marketplace",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "maltacraftsman",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "mt.marketplace.craftsman"
+    },
+    "android": {
+      "package": "mt.marketplace.craftsman"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiUrl": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",
+      "apiDebug": false,
+      "eas": {
+        "projectId": "783f09f3-8378-4d15-b699-9bdfc2b4842f"
+      }
+    }
+  }
+}

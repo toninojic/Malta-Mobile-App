@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-malta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-malta_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-malta_marketplace}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-malta} -d ${POSTGRES_DB:-malta_marketplace}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: ${API_PORT:-3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-malta}:${POSTGRES_PASSWORD:-malta_dev_password}@postgres:5432/${POSTGRES_DB:-malta_marketplace}?schema=public
+      JWT_ACCESS_SECRET: change-me-access-secret
+      JWT_REFRESH_SECRET: change-me-refresh-secret
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 30d
+      APP_ORIGIN: "*"
+    ports:
+      - "${API_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:

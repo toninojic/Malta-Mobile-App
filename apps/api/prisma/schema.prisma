@@ -1,0 +1,422 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  EMPLOYER
+  CONTRACTOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum JobStatus {
+  ACTIVE
+  EXPIRED
+  COMPLETED
+  CLOSED
+}
+
+enum OfferStatus {
+  PENDING
+  SELECTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum TokenTransactionType {
+  PURCHASE
+  SPEND
+  REFUND
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ContactUnlockStatus {
+  PENDING
+  UNLOCKED
+}
+
+enum JobCompletionStatus {
+  PENDING_EMPLOYER_CONFIRMATION
+  CONFIRMED
+  DISPUTED
+  CANCELLED
+}
+
+enum ReviewStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum NotificationType {
+  NEW_OFFER
+  NEW_MESSAGE
+  CONTACT_UNLOCKED
+  REFUND_APPROVED
+  REFUND_DENIED
+  JOB_COMPLETED
+  REVIEW_RECEIVED
+  REVIEW_REPLIED
+  REVIEW_REMOVED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VOICE
+}
+
+model User {
+  id               String             @id @default(uuid()) @db.Uuid
+  email            String             @unique @db.VarChar(320)
+  passwordHash     String
+  role             UserRole
+  status           UserStatus         @default(ACTIVE)
+  refreshTokenHash String?
+  profile          UserProfile?
+  jobRequests      JobRequest[]       @relation("EmployerJobs")
+  offers           Offer[]            @relation("ContractorOffers")
+  tokenBalance     UserTokenBalance?
+  tokenTransactions TokenTransaction[]
+  notifications    Notification[]
+  refundRequests   RefundRequest[]    @relation("RefundRequester")
+  reviewedRefunds  RefundRequest[]    @relation("RefundReviewer")
+  sentMessages      Message[]
+  employerConversations Conversation[] @relation("EmployerConversations")
+  contractorConversations Conversation[] @relation("ContractorConversations")
+  employerChats     Chat[]            @relation("EmployerChats")
+  contractorChats   Chat[]            @relation("ContractorChats")
+  employerUnlocks   ContactUnlock[]   @relation("EmployerUnlocks")
+  contractorUnlocks ContactUnlock[]   @relation("ContractorUnlocks")
+  performedUnlocks  ContactUnlock[]   @relation("PerformedUnlocks")
+  employerCompletions JobCompletion[]  @relation("EmployerCompletions")
+  contractorCompletions JobCompletion[] @relation("ContractorCompletions")
+  reviewsGiven      Review[]          @relation("EmployerReviews")
+  reviewsReceived   Review[]          @relation("ContractorReviews")
+  reviewsRemoved     Review[]          @relation("ReviewRemovals")
+  ratingSummary      ContractorRatingSummary? @relation("ContractorRatingSummary")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([role, status])
+}
+
+model UserProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @unique @db.Uuid
+  displayName     String   @db.VarChar(120)
+  phone           String?  @db.VarChar(50)
+  location        String?  @db.VarChar(160)
+  bio             String?  @db.VarChar(1000)
+  avatarUrl       String?  @db.VarChar(2048)
+  companyName     String?  @db.VarChar(160)
+  tradeCategories String[] @default([])
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model JobRequest {
+  id                            String       @id @default(uuid()) @db.Uuid
+  employerId                    String       @db.Uuid
+  employer                      User         @relation("EmployerJobs", fields: [employerId], references: [id], onDelete: Cascade)
+  title                         String       @db.VarChar(160)
+  description                   String       @db.VarChar(4000)
+  category                      String       @db.VarChar(100)
+  subcategory                   String       @db.VarChar(100)
+  location                      String       @db.VarChar(160)
+  status                        JobStatus    @default(ACTIVE)
+  expiresAt                     DateTime
+  contractorMarkedCompletedAt   DateTime?
+  employerConfirmedCompletedAt  DateTime?
+  images                        JobImage[]
+  offers                        Offer[]
+  contactUnlocks                ContactUnlock[]
+  completions                    JobCompletion[]
+  chats                         Chat[]
+  reviews                       Review[]
+  createdAt                     DateTime     @default(now())
+  updatedAt                     DateTime     @updatedAt
+
+  @@index([employerId, status])
+  @@index([category, subcategory, location])
+  @@index([expiresAt])
+}
+
+model JobImage {
+  id           String     @id @default(uuid()) @db.Uuid
+  jobRequestId String     @db.Uuid
+  jobRequest   JobRequest @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  url          String     @db.VarChar(2048)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  @@index([jobRequestId])
+}
+
+model Offer {
+  id                      String         @id @default(uuid()) @db.Uuid
+  jobRequestId            String         @db.Uuid
+  contractorId            String         @db.Uuid
+  jobRequest              JobRequest     @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  contractor              User           @relation("ContractorOffers", fields: [contractorId], references: [id], onDelete: Cascade)
+  estimatedPrice          Decimal        @db.Decimal(12, 2)
+  estimatedCompletionDays Int
+  message                 String?        @db.VarChar(1500)
+  status                  OfferStatus    @default(PENDING)
+  selectedByEmployer      Boolean        @default(false)
+  deletedAt               DateTime?
+  contactUnlock           ContactUnlock?
+  chat                    Chat?
+  completion              JobCompletion?
+  review                  Review?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([jobRequestId, status])
+  @@index([contractorId])
+  @@index([deletedAt])
+}
+
+model ContactUnlock {
+  id                 String           @id @default(uuid()) @db.Uuid
+  jobRequestId       String           @db.Uuid
+  offerId            String           @unique @db.Uuid
+  contractorId       String           @db.Uuid
+  employerId         String           @db.Uuid
+  unlockedByContractorId String?      @db.Uuid
+  tokenTransactionId String?          @unique @db.Uuid
+  status             ContactUnlockStatus @default(PENDING)
+  jobRequest         JobRequest       @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  offer              Offer            @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  contractor         User             @relation("ContractorUnlocks", fields: [contractorId], references: [id], onDelete: Cascade)
+  employer           User             @relation("EmployerUnlocks", fields: [employerId], references: [id], onDelete: Cascade)
+  unlockedByContractor User?          @relation("PerformedUnlocks", fields: [unlockedByContractorId], references: [id], onDelete: SetNull)
+  tokenTransaction   TokenTransaction? @relation(fields: [tokenTransactionId], references: [id], onDelete: SetNull)
+  conversation       Conversation?
+  completion         JobCompletion?
+  review             Review?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([jobRequestId])
+  @@index([contractorId])
+  @@index([employerId])
+  @@index([status])
+}
+
+model Conversation {
+  id              String        @id @default(uuid()) @db.Uuid
+  contactUnlockId String       @unique @db.Uuid
+  employerId      String       @db.Uuid
+  contractorId    String       @db.Uuid
+  contactUnlock   ContactUnlock @relation(fields: [contactUnlockId], references: [id], onDelete: Cascade)
+  employer        User          @relation("EmployerConversations", fields: [employerId], references: [id], onDelete: Cascade)
+  contractor      User          @relation("ContractorConversations", fields: [contractorId], references: [id], onDelete: Cascade)
+  messages        Message[]
+  lastMessageAt   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([employerId, lastMessageAt])
+  @@index([contractorId, lastMessageAt])
+  @@index([createdAt])
+}
+
+model Chat {
+  id           String     @id @default(uuid()) @db.Uuid
+  jobRequestId String     @db.Uuid
+  offerId      String     @unique @db.Uuid
+  employerId   String     @db.Uuid
+  contractorId String     @db.Uuid
+  jobRequest   JobRequest @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  offer        Offer      @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  employer     User       @relation("EmployerChats", fields: [employerId], references: [id], onDelete: Cascade)
+  contractor   User       @relation("ContractorChats", fields: [contractorId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  unlockedAt   DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([jobRequestId])
+  @@index([employerId])
+  @@index([contractorId])
+}
+
+model Message {
+  id        String      @id @default(uuid()) @db.Uuid
+  chatId    String?     @db.Uuid
+  conversationId String? @db.Uuid
+  senderId  String      @db.Uuid
+  chat      Chat?       @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  type      MessageType @default(TEXT)
+  content   String      @db.VarChar(4000)
+  isRead    Boolean     @default(false)
+  metadata  Json?
+  deletedAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([chatId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([isRead, createdAt])
+}
+
+model JobCompletion {
+  id                 String              @id @default(uuid()) @db.Uuid
+  jobRequestId       String              @db.Uuid
+  offerId            String              @unique @db.Uuid
+  contactUnlockId    String              @unique @db.Uuid
+  employerId         String              @db.Uuid
+  contractorId       String              @db.Uuid
+  status             JobCompletionStatus @default(PENDING_EMPLOYER_CONFIRMATION)
+  contractorMarkedAt DateTime?
+  employerConfirmedAt DateTime?
+  jobRequest         JobRequest          @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  offer              Offer               @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  contactUnlock      ContactUnlock       @relation(fields: [contactUnlockId], references: [id], onDelete: Cascade)
+  employer           User                @relation("EmployerCompletions", fields: [employerId], references: [id], onDelete: Cascade)
+  contractor         User                @relation("ContractorCompletions", fields: [contractorId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([jobRequestId])
+  @@index([employerId, status])
+  @@index([contractorId, status])
+  @@index([status, createdAt])
+}
+
+model Review {
+  id                 String     @id @default(uuid()) @db.Uuid
+  jobRequestId       String     @db.Uuid
+  offerId            String     @unique @db.Uuid
+  contactUnlockId    String?    @unique @db.Uuid
+  employerId         String     @db.Uuid
+  contractorId       String     @db.Uuid
+  jobRequest         JobRequest @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  offer              Offer      @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  contactUnlock      ContactUnlock? @relation(fields: [contactUnlockId], references: [id], onDelete: Cascade)
+  employer           User       @relation("EmployerReviews", fields: [employerId], references: [id], onDelete: Cascade)
+  contractor         User       @relation("ContractorReviews", fields: [contractorId], references: [id], onDelete: Cascade)
+  rating             Int
+  comment            String?    @db.VarChar(1500)
+  contractorReply    String?    @db.VarChar(1500)
+  contractorReplyAt  DateTime?
+  status             ReviewStatus @default(ACTIVE)
+  removedByAdminId   String?    @db.Uuid
+  removedByAdmin     User?      @relation("ReviewRemovals", fields: [removedByAdminId], references: [id], onDelete: SetNull)
+  removedAt          DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([jobRequestId, contractorId])
+  @@index([contractorId, status, removedAt])
+  @@index([employerId])
+}
+
+model ContractorRatingSummary {
+  id            String   @id @default(uuid()) @db.Uuid
+  contractorId  String   @unique @db.Uuid
+  contractor    User     @relation("ContractorRatingSummary", fields: [contractorId], references: [id], onDelete: Cascade)
+  averageRating Decimal  @default(0) @db.Decimal(3, 2)
+  totalReviews  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TokenPackage {
+  id            String             @id @default(uuid()) @db.Uuid
+  title         String             @unique @db.VarChar(100)
+  tokenCount    Int
+  price         Decimal            @db.Decimal(12, 2)
+  currency      String             @default("EUR") @db.Char(3)
+  isActive      Boolean            @default(true)
+  transactions  TokenTransaction[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model UserTokenBalance {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  version   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TokenTransaction {
+  id            String               @id @default(uuid()) @db.Uuid
+  userId        String               @db.Uuid
+  packageId     String?              @db.Uuid
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  package       TokenPackage?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  type          TokenTransactionType
+  amount        Int
+  description   String               @db.VarChar(500)
+  balanceAfter  Int
+  externalRef   String?              @db.VarChar(255)
+  relatedRefundRequestId String?     @unique @db.Uuid
+  relatedRefundRequest   RefundRequest? @relation("RefundLedgerTransaction", fields: [relatedRefundRequestId], references: [id], onDelete: SetNull)
+  contactUnlock ContactUnlock?
+  refundRequest RefundRequest?       @relation("RefundPurchaseTransaction")
+  createdAt     DateTime             @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type])
+}
+
+model RefundRequest {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @db.Uuid
+  tokenTransactionId String       @unique @db.Uuid
+  requestedBy    User             @relation("RefundRequester", fields: [userId], references: [id], onDelete: Cascade)
+  tokenTransaction TokenTransaction @relation("RefundPurchaseTransaction", fields: [tokenTransactionId], references: [id], onDelete: Restrict)
+  refundTransaction TokenTransaction? @relation("RefundLedgerTransaction")
+  amount         Int
+  status         RefundStatus     @default(PENDING)
+  reason         String           @db.VarChar(2000)
+  adminNote      String?          @db.VarChar(2000)
+  reviewedByAdminId String?       @db.Uuid
+  reviewedBy     User?            @relation("RefundReviewer", fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String           @db.VarChar(160)
+  body      String           @db.VarChar(1000)
+  data      Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, isRead, createdAt])
+}

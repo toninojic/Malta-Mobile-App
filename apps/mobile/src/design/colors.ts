@@ -1,0 +1,47 @@
+export const palette = {
+  emerald700: '#047857',
+  emerald600: '#059669',
+  emerald500: '#10B981',
+  teal700: '#0F766E',
+  amber500: '#F59E0B',
+  sky600: '#0284C7',
+  rose600: '#E11D48',
+  neutral50: '#F8FAFC',
+  neutral100: '#F1F5F9',
+  neutral200: '#E2E8F0',
+  neutral400: '#94A3B8',
+  neutral500: '#64748B',
+  neutral700: '#334155',
+  neutral800: '#1E293B',
+  neutral900: '#0F172A',
+  neutral950: '#020617',
+  white: '#FFFFFF',
+};
+
+export const lightColors = {
+  background: palette.neutral50,
+  surface: palette.white,
+  surfaceMuted: palette.neutral100,
+  border: palette.neutral200,
+  text: palette.neutral900,
+  textMuted: palette.neutral500,
+  primary: palette.emerald600,
+  primaryPressed: palette.emerald700,
+  accent: palette.sky600,
+  warning: palette.amber500,
+  danger: palette.rose600,
+};
+
+export const darkColors = {
+  background: palette.neutral950,
+  surface: palette.neutral900,
+  surfaceMuted: palette.neutral800,
+  border: palette.neutral700,
+  text: palette.neutral50,
+  textMuted: palette.neutral400,
+  primary: palette.emerald500,
+  primaryPressed: palette.emerald600,
+  accent: '#38BDF8',
+  warning: palette.amber500,
+  danger: '#FB7185',
+};
