@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { ConversationsModule } from './conversations/conversations.module';
@@ -13,6 +14,7 @@ import { OffersModule } from './offers/offers.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { TokensModule } from './tokens/tokens.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -39,6 +41,8 @@ import { UsersModule } from './users/users.module';
     ConversationsModule,
     MessagesModule,
     ReviewsModule,
+    UploadsModule,
+    AdminModule,
   ],
   providers: [
     {

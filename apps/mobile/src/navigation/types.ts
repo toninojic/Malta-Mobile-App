@@ -39,9 +39,14 @@ export type MessagesStackParamList = {
 };
 
 export type AppTabParamList = {
+  AdminDashboardTab: undefined;
+  AdminUsersTab: undefined;
+  AdminJobsTab: undefined;
+  AdminModerationTab: undefined;
   JobsTab: NavigatorScreenParams<JobsStackParamList>;
   ActivityTab: NavigatorScreenParams<ActivityStackParamList>;
   WalletTab: NavigatorScreenParams<WalletStackParamList>;
   MessagesTab: NavigatorScreenParams<MessagesStackParamList>;
+  AlertsTab: undefined;
   ProfileTab: undefined;
 };

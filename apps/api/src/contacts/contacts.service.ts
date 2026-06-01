@@ -5,11 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ContactUnlockStatus, NotificationType, OfferStatus, Prisma, TokenTransactionType, UserRole } from '@prisma/client';
+import { ContactUnlockStatus, JobStatus, NotificationType, OfferStatus, Prisma, TokenTransactionType, UserRole } from '@prisma/client';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminContactsQueryDto } from './dto/admin-contacts-query.dto';
 
 const CONTACT_UNLOCK_COST = 1;
 
@@ -236,15 +237,23 @@ export class ContactsService {
     return this.toContact(contact);
   }
 
-  async findAdminContacts(query: PaginationQueryDto): Promise<PaginatedResponse<ReturnType<ContactsService['toContact']>>> {
+  async findAdminContacts(query: AdminContactsQueryDto): Promise<PaginatedResponse<ReturnType<ContactsService['toContact']>>> {
+    const where: Prisma.ContactUnlockWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.employerId ? { employerId: query.employerId } : {}),
+      ...(query.contractorId ? { contractorId: query.contractorId } : {}),
+      ...(query.jobRequestId ? { jobRequestId: query.jobRequestId } : {}),
+    };
+
     const [contacts, total] = await this.prisma.$transaction([
       this.prisma.contactUnlock.findMany({
+        where,
         include: contactInclude,
         orderBy: { updatedAt: 'desc' },
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
-      this.prisma.contactUnlock.count(),
+      this.prisma.contactUnlock.count({ where }),
     ]);
 
     return {
@@ -279,8 +288,16 @@ export class ContactsService {
       throw new NotFoundException('Offer not found.');
     }
 
-    if (offer.deletedAt || offer.status === OfferStatus.WITHDRAWN) {
+    if (offer.deletedAt || offer.status === OfferStatus.WITHDRAWN || offer.status === OfferStatus.REJECTED) {
       throw new BadRequestException('Inactive offers cannot be unlocked.');
+    }
+
+    if (offer.status !== OfferStatus.SELECTED) {
+      throw new BadRequestException('Only selected offers can unlock contact information.');
+    }
+
+    if (offer.jobRequest.status === JobStatus.CLOSED || offer.jobRequest.status === JobStatus.COMPLETED) {
+      throw new BadRequestException('Closed or completed job requests cannot be unlocked.');
     }
 
     return offer;

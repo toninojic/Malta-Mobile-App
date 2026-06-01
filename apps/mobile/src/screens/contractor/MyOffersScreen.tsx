@@ -3,6 +3,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BriefcaseBusiness, CalendarClock, Edit3, LockOpen, RefreshCw, Trash2 } from 'lucide-react-native';
 import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
+import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -18,6 +19,7 @@ type Props = NativeStackScreenProps<JobsStackParamList, 'MyOffers'>;
 export function MyOffersScreen({ navigation }: Props) {
   const theme = useTheme();
   const queryClient = useQueryClient();
+  const ensureConversationMutation = useEnsureConversationForContact();
 
   const query = useQuery({
     queryKey: ['offers', 'mine'],
@@ -83,9 +85,16 @@ export function MyOffersScreen({ navigation }: Props) {
             onOpenChat={
               offer.contactId
                 ? () =>
-                    navigation
-                      .getParent()
-                      ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: offer.contactId } })
+                    ensureConversationMutation.mutate(offer.contactId as string, {
+                      onSuccess: (conversation) => {
+                        navigation
+                          .getParent()
+                          ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
+                      },
+                      onError: (error) => {
+                        Alert.alert('Could not open chat', error instanceof Error ? error.message : 'Please try again.');
+                      },
+                    })
                 : undefined
             }
             onWithdraw={() => confirmWithdraw(offer.id)}
@@ -116,6 +125,7 @@ function OfferCard({
   const theme = useTheme();
   const isWithdrawn = offer.status === 'WITHDRAWN';
   const isUnlocked = offer.unlockStatus === 'UNLOCKED';
+  const canUnlock = offer.status === 'SELECTED' && !isUnlocked;
 
   return (
     <Card onPress={onOpenJob}>
@@ -144,10 +154,10 @@ function OfferCard({
       <View style={styles.actions}>
         <Button title="Edit Offer" icon={Edit3} variant="secondary" disabled={isWithdrawn} onPress={onEdit} style={styles.actionButton} />
         <Button
-          title={isUnlocked ? 'Message' : 'Unlock Contact'}
+          title={isUnlocked ? 'Message' : 'Unlock Contact - 1 token'}
           icon={LockOpen}
           variant={isUnlocked ? 'primary' : 'secondary'}
-          disabled={isWithdrawn}
+          disabled={isWithdrawn || (!isUnlocked && !canUnlock)}
           onPress={isUnlocked && onOpenChat ? onOpenChat : onUnlock}
           style={styles.actionButton}
         />

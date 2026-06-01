@@ -10,11 +10,13 @@ import {
   JobCompletionStatus,
   JobStatus,
   NotificationType,
+  OfferStatus,
   Prisma,
   Review,
   ReviewStatus,
   UserRole,
 } from '@prisma/client';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -80,6 +82,7 @@ export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async markComplete(user: AuthenticatedUser, contactId: string) {
@@ -94,6 +97,14 @@ export class ReviewsService {
 
     if (contact.jobRequest.status === JobStatus.CLOSED) {
       throw new BadRequestException('Closed job requests cannot be completed.');
+    }
+
+    if (contact.jobRequest.status === JobStatus.COMPLETED) {
+      throw new BadRequestException('Completed job requests cannot be completed again.');
+    }
+
+    if (contact.offer.status !== OfferStatus.SELECTED) {
+      throw new BadRequestException('Only selected offers can be marked completed.');
     }
 
     const existing = await this.prisma.jobCompletion.findUnique({
@@ -126,7 +137,10 @@ export class ReviewsService {
 
       await tx.jobRequest.update({
         where: { id: contact.jobRequestId },
-        data: { contractorMarkedCompletedAt: now },
+        data: {
+          status: JobStatus.IN_PROGRESS,
+          contractorMarkedCompletedAt: now,
+        },
       });
 
       await this.notificationsService.create(
@@ -134,7 +148,7 @@ export class ReviewsService {
           userId: contact.employerId,
           type: NotificationType.JOB_COMPLETED,
           title: 'Completion confirmation needed',
-          body: `${contact.contractor.profile?.displayName ?? contact.contractor.email} marked ${contact.jobRequest.title} as completed.`,
+          body: 'Contractor marked your job as completed. Please confirm.',
           data: {
             contactId: contact.id,
             jobRequestId: contact.jobRequestId,
@@ -197,12 +211,20 @@ export class ReviewsService {
         },
       });
 
+      await tx.offer.update({
+        where: { id: contact.offerId },
+        data: {
+          status: OfferStatus.COMPLETED,
+          selectedByEmployer: true,
+        },
+      });
+
       await this.notificationsService.create(
         {
           userId: contact.contractorId,
           type: NotificationType.JOB_COMPLETED,
           title: 'Job completion confirmed',
-          body: `${contact.employer.profile?.displayName ?? contact.employer.email} confirmed ${contact.jobRequest.title} as completed.`,
+          body: 'Employer confirmed job completion.',
           data: {
             contactId: contact.id,
             jobRequestId: contact.jobRequestId,
@@ -511,6 +533,24 @@ export class ReviewsService {
             contactId: review.contactUnlockId,
             jobRequestId: review.jobRequestId,
             offerId: review.offerId,
+          },
+        },
+        tx,
+      );
+
+      await this.auditLogsService.create(
+        {
+          adminId: user.id,
+          action: 'REVIEW_REMOVED',
+          entityType: 'Review',
+          entityId: review.id,
+          metadata: {
+            jobRequestId: review.jobRequestId,
+            offerId: review.offerId,
+            employerId: review.employerId,
+            contractorId: review.contractorId,
+            previousStatus: review.status,
+            newStatus: ReviewStatus.REMOVED,
           },
         },
         tx,

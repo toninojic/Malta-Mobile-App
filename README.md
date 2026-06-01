@@ -142,6 +142,8 @@ npm run mobile:apk
 
 - [Architecture](docs/architecture.md)
 - [Database Schema](docs/database.md)
+- [Business Flow](docs/business-flow.md)
+- [Admin Dashboard](docs/admin-dashboard.md)
 - [Android APK Testing](docs/apk-testing.md)
 - [Milestone 1](docs/milestone-1.md)
 - [Milestone 2](docs/milestone-2.md)

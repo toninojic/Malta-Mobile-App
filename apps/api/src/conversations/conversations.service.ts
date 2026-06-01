@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, UserRole } from '@prisma/client';
+import { ContactUnlockStatus, Prisma, UserRole } from '@prisma/client';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { PrismaService } from '../prisma/prisma.service';
@@ -84,6 +84,41 @@ export class ConversationsService {
     return this.toConversation(conversation, user.id);
   }
 
+  async ensureForContact(user: AuthenticatedUser, contactUnlockId: string) {
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException('Admins can view conversations but cannot create participant conversations.');
+    }
+
+    const contactUnlock = await this.prisma.contactUnlock.findUnique({
+      where: { id: contactUnlockId },
+      include: {
+        jobRequest: true,
+        offer: true,
+      },
+    });
+
+    if (!contactUnlock || contactUnlock.status !== ContactUnlockStatus.UNLOCKED) {
+      throw new NotFoundException('Unlocked contact relationship not found.');
+    }
+
+    if (contactUnlock.employerId !== user.id && contactUnlock.contractorId !== user.id) {
+      throw new ForbiddenException('You cannot open conversations outside your unlocked relationships.');
+    }
+
+    const conversation = await this.prisma.conversation.upsert({
+      where: { contactUnlockId },
+      create: {
+        contactUnlockId,
+        employerId: contactUnlock.employerId,
+        contractorId: contactUnlock.contractorId,
+      },
+      update: {},
+      include: conversationInclude,
+    });
+
+    return this.toConversation(conversation, user.id);
+  }
+
   async findAll(query: PaginationQueryDto): Promise<PaginatedResponse<Awaited<ReturnType<ConversationsService['toConversation']>>>> {
     const [conversations, total] = await this.prisma.$transaction([
       this.prisma.conversation.findMany({
@@ -130,17 +165,38 @@ export class ConversationsService {
 
     return {
       ...(await this.toConversation(conversation, '')),
-      messages: messages.map((message) => ({
-        id: message.id,
-        conversationId: message.conversationId,
-        senderId: message.senderId,
-        content: message.content,
-        isRead: message.isRead,
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-        sender: message.sender,
-      })),
+      messages: messages.map((message) => this.toMessage(message)),
     };
+  }
+
+  async findAdminMessages(id: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found.');
+    }
+
+    const messages = await this.prisma.message.findMany({
+      where: {
+        conversationId: id,
+        deletedAt: null,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            email: true,
+            profile: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return messages.map((message) => this.toMessage(message));
   }
 
   private whereForUser(user: AuthenticatedUser): Prisma.ConversationWhereInput {
@@ -215,6 +271,28 @@ export class ConversationsService {
           }
         : null,
       unreadCount,
+    };
+  }
+
+  private toMessage(message: {
+    id: string;
+    conversationId: string | null;
+    senderId: string;
+    content: string;
+    isRead: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    sender?: unknown;
+  }) {
+    return {
+      id: message.id,
+      conversationId: message.conversationId,
+      senderId: message.senderId,
+      content: message.content,
+      isRead: message.isRead,
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt,
+      sender: message.sender,
     };
   }
 }

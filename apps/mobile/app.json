@@ -14,7 +14,8 @@
       "package": "mt.marketplace.craftsman"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-image-picker"
     ],
     "extra": {
       "apiUrl": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",

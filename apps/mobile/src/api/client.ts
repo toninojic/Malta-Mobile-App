@@ -1,6 +1,9 @@
 import {
   AuthResponse,
   AuthUser,
+  AdminStatistics,
+  AdminUser,
+  AuditLog,
   ChatMessage,
   CompletionStatusResponse,
   ContactUnlock,
@@ -23,8 +26,10 @@ import {
   TokenTransaction,
   UnlockResult,
   UnlockStatusResponse,
+  UploadedJobImage,
   UserProfile,
   UserRole,
+  UserStatus,
 } from '../types/domain';
 import { getAccessToken, getRefreshToken, useAuthStore } from '../store/auth.store';
 import { apiConfig } from '../config/apiConfig';
@@ -34,6 +39,7 @@ const API_URL = apiConfig.baseUrl;
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
+  formData?: FormData;
   authenticated?: boolean;
   retryOnUnauthorized?: boolean;
   debugLabel?: 'login';
@@ -61,10 +67,13 @@ export class ApiNetworkError extends Error {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const url = buildUrl(path);
   const method = options.method ?? 'GET';
+  const isMultipart = Boolean(options.formData);
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
   };
+  if (!isMultipart) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (apiConfig.shouldSkipNgrokBrowserWarning) {
     headers['ngrok-skip-browser-warning'] = 'true';
@@ -83,7 +92,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     response = await fetch(url, {
       method,
       headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: options.formData ?? (options.body ? JSON.stringify(options.body) : undefined),
     });
   } catch (error) {
     logNetworkError(method, url, error);
@@ -515,6 +524,11 @@ export const api = {
   conversation(id: string) {
     return request<Conversation>(`/conversations/${id}`);
   },
+  ensureConversationForContact(contactId: string) {
+    return request<Conversation>(`/conversations/contacts/${contactId}`, {
+      method: 'POST',
+    });
+  },
   conversationMessages(id: string) {
     return request<ChatMessage[]>(`/conversations/${id}/messages`);
   },
@@ -559,5 +573,88 @@ export const api = {
     return request<PaginatedResponse<InAppNotification>>(
       `/admin/notifications${queryString({ page: input.page, limit: input.limit })}`,
     );
+  },
+  adminStatistics() {
+    return request<AdminStatistics>('/admin/statistics');
+  },
+  adminUsers(input: { page?: number; limit?: number; role?: UserRole; status?: UserStatus; search?: string } = {}) {
+    return request<PaginatedResponse<AdminUser>>(
+      `/admin/users${queryString({
+        page: input.page,
+        limit: input.limit,
+        role: input.role,
+        status: input.status,
+        search: input.search?.trim(),
+      })}`,
+    );
+  },
+  adminUser(userId: string) {
+    return request<AdminUser>(`/admin/users/${userId}`);
+  },
+  suspendUser(userId: string) {
+    return request<AdminUser>(`/admin/users/${userId}/suspend`, {
+      method: 'PATCH',
+    });
+  },
+  activateUser(userId: string) {
+    return request<AdminUser>(`/admin/users/${userId}/activate`, {
+      method: 'PATCH',
+    });
+  },
+  adminJobs(input: { page?: number; limit?: number; status?: string; category?: string; location?: string; employerId?: string } = {}) {
+    return request<PaginatedResponse<JobRequest>>(
+      `/admin/jobs${queryString({
+        page: input.page,
+        limit: input.limit,
+        status: input.status,
+        category: input.category?.trim(),
+        location: input.location?.trim(),
+        employerId: input.employerId,
+      })}`,
+    );
+  },
+  adminJob(jobId: string) {
+    return request<JobRequest>(`/admin/jobs/${jobId}`);
+  },
+  closeAdminJob(jobId: string) {
+    return request<JobRequest>(`/admin/jobs/${jobId}/close`, {
+      method: 'PATCH',
+    });
+  },
+  adminOffers(input: { page?: number; limit?: number; status?: OfferStatus; jobRequestId?: string; contractorId?: string } = {}) {
+    return request<PaginatedResponse<Offer>>(
+      `/admin/offers${queryString({
+        page: input.page,
+        limit: input.limit,
+        status: input.status,
+        jobRequestId: input.jobRequestId,
+        contractorId: input.contractorId,
+      })}`,
+    );
+  },
+  adminAuditLogs(input: { page?: number; limit?: number; action?: string; entityType?: string; entityId?: string } = {}) {
+    return request<PaginatedResponse<AuditLog>>(
+      `/admin/audit-logs${queryString({
+        page: input.page,
+        limit: input.limit,
+        action: input.action?.trim(),
+        entityType: input.entityType?.trim(),
+        entityId: input.entityId?.trim(),
+      })}`,
+    );
+  },
+  adminConversationMessages(id: string) {
+    return request<ChatMessage[]>(`/admin/conversations/${id}/messages`);
+  },
+  uploadJobImages(images: Array<{ uri: string; name: string; type: string }>) {
+    const formData = new FormData();
+    images.forEach((image) => {
+      formData.append('images', image as unknown as Blob);
+    });
+
+    return request<{ images: UploadedJobImage[] }>('/uploads/job-images', {
+      method: 'POST',
+      formData,
+    });
   },
 };

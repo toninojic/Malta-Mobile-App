@@ -3,8 +3,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarClock, CheckCircle2, Edit3, LockOpen, MapPin, MessageCircle, RefreshCw, SendHorizontal, Star, Trash2 } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRequestContact } from '../../api/contactHooks';
 import { api } from '../../api/client';
+import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -67,14 +67,18 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   const selectOfferMutation = useMutation({
     mutationFn: api.selectOffer,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['offers', 'job', jobId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['offers', 'job', jobId] }),
+        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+      ]);
     },
     onError: (error) => {
       Alert.alert('Could not select offer', error instanceof Error ? error.message : 'Please try again.');
     },
   });
 
-  const requestContactMutation = useRequestContact();
+  const ensureConversationMutation = useEnsureConversationForContact();
 
   const withdrawOfferMutation = useMutation({
     mutationFn: api.withdrawOffer,
@@ -202,10 +206,10 @@ export function JobDetailsScreen({ route, navigation }: Props) {
                   onPress={() => navigation.navigate('OfferForm', { jobId, offerId: myOffer.id })}
                 />
                 <Button
-                  title={myOffer.unlockStatus === 'UNLOCKED' ? 'Unlocked' : 'Unlock'}
+                  title={myOffer.unlockStatus === 'UNLOCKED' ? 'Unlocked' : 'Unlock Contact - 1 token'}
                   icon={LockOpen}
                   variant="secondary"
-                  disabled={myOffer.status === 'WITHDRAWN' || myOffer.unlockStatus === 'UNLOCKED'}
+                  disabled={myOffer.status !== 'SELECTED' || myOffer.unlockStatus === 'UNLOCKED'}
                   onPress={() => navigation.navigate('UnlockContact', { offerId: myOffer.id })}
                 />
                 <Button
@@ -262,20 +266,19 @@ export function JobDetailsScreen({ route, navigation }: Props) {
               canSelect={canSelectOffers}
               selecting={selectOfferMutation.isPending}
               onSelect={() => selectOfferMutation.mutate(offer.id)}
-              requesting={requestContactMutation.isPending}
-              onRequestContact={() =>
-                requestContactMutation.mutate(offer.id, {
-                  onError: (error) => {
-                    Alert.alert('Could not request contact', error instanceof Error ? error.message : 'Please try again.');
-                  },
-                })
-              }
               onOpenChat={
                 offer.contactId
                   ? () =>
-                      navigation
-                        .getParent()
-                        ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: offer.contactId } })
+                      ensureConversationMutation.mutate(offer.contactId as string, {
+                        onSuccess: (conversation) => {
+                          navigation
+                            .getParent()
+                            ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
+                        },
+                        onError: (error) => {
+                          Alert.alert('Could not open chat', error instanceof Error ? error.message : 'Please try again.');
+                        },
+                      })
                   : undefined
               }
             />
@@ -291,16 +294,12 @@ function EmployerOfferCard({
   canSelect,
   selecting,
   onSelect,
-  requesting,
-  onRequestContact,
   onOpenChat,
 }: {
   offer: Offer;
   canSelect: boolean;
   selecting: boolean;
   onSelect: () => void;
-  requesting: boolean;
-  onRequestContact: () => void;
   onOpenChat?: () => void;
 }) {
   const theme = useTheme();
@@ -353,16 +352,7 @@ function EmployerOfferCard({
           onPress={onSelect}
         />
       ) : null}
-      {canSelect ? (
-        <Button
-          title={isUnlocked ? 'Contact Unlocked' : isPending ? 'Contact Requested' : 'Request Contact'}
-          icon={LockOpen}
-          variant="secondary"
-          disabled={isUnlocked || isPending}
-          loading={requesting && !isUnlocked && !isPending}
-          onPress={onRequestContact}
-        />
-      ) : null}
+      {canSelect && isPending && !isUnlocked ? <Badge status="LOCKED" /> : null}
       {isUnlocked && onOpenChat ? (
         <Button title="Open Chat" icon={MessageCircle} onPress={onOpenChat} />
       ) : null}

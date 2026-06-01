@@ -75,6 +75,8 @@ export function useApproveRefund() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['tokens'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'tokens', 'refunds'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
       ]);
     },
   });
@@ -90,6 +92,8 @@ export function useRejectRefund() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['tokens', 'refunds'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'tokens', 'refunds'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
       ]);
     },
   });

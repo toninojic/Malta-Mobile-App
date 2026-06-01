@@ -1,9 +1,9 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
-import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { AdminContactsQueryDto } from './dto/admin-contacts-query.dto';
 import { ContactsService } from './contacts.service';
 
 @Controller({
@@ -16,7 +16,7 @@ export class AdminContactsController {
   constructor(private readonly contactsService: ContactsService) {}
 
   @Get()
-  contacts(@Query() query: PaginationQueryDto) {
+  contacts(@Query() query: AdminContactsQueryDto) {
     return this.contactsService.findAdminContacts(query);
   }
 

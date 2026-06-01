@@ -6,7 +6,7 @@ import {
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { BriefcaseBusiness, ClipboardList, MessageCircle, UserRound, WalletCards } from 'lucide-react-native';
+import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle, ShieldCheck, UserRound, UsersRound, WalletCards } from 'lucide-react-native';
 import { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useConversations } from '../api/messageHooks';
@@ -32,6 +32,10 @@ import { WalletScreen } from '../screens/wallet/WalletScreen';
 import { ConversationThreadScreen } from '../screens/messages/ConversationThreadScreen';
 import { ConversationsScreen } from '../screens/messages/ConversationsScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
+import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
+import { AdminJobsScreen } from '../screens/admin/AdminJobsScreen';
+import { AdminModerationScreen } from '../screens/admin/AdminModerationScreen';
+import { AdminUsersScreen } from '../screens/admin/AdminUsersScreen';
 import { AdminReviewsScreen } from '../screens/reviews/AdminReviewsScreen';
 import { ContractorProfileScreen } from '../screens/reviews/ContractorProfileScreen';
 import { LeaveReviewScreen } from '../screens/reviews/LeaveReviewScreen';
@@ -150,7 +154,18 @@ function MessagesRoutes() {
 }
 
 function AuthenticatedTabs() {
+  const user = useAuthStore((state) => state.user);
+
+  if (user?.role === 'ADMIN') {
+    return <AdminTabs />;
+  }
+
+  return <UserTabs />;
+}
+
+function UserTabs() {
   const theme = useTheme();
+  const user = useAuthStore((state) => state.user);
   const conversationsQuery = useConversations();
   const notificationsCountQuery = useUnreadNotificationCount();
   const unreadMessages =
@@ -182,7 +197,7 @@ function AuthenticatedTabs() {
         component={ActivityRoutes}
         options={{
           title: 'Activity',
-          tabBarBadge: unreadNotifications || undefined,
+          tabBarBadge: user?.role === 'EMPLOYER' ? undefined : unreadNotifications || undefined,
           tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />,
         }}
       />
@@ -195,12 +210,83 @@ function AuthenticatedTabs() {
           tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
         }}
       />
+      {user?.role === 'EMPLOYER' ? (
+        <Tabs.Screen
+          name="AlertsTab"
+          component={NotificationsScreen}
+          options={{
+            title: 'Alerts',
+            tabBarBadge: unreadNotifications || undefined,
+            tabBarIcon: ({ color, size }) => <Bell color={color} size={size} />,
+          }}
+        />
+      ) : (
+        <Tabs.Screen
+          name="WalletTab"
+          component={WalletRoutes}
+          options={{
+            title: 'Wallet',
+            tabBarIcon: ({ color, size }) => <WalletCards color={color} size={size} />,
+          }}
+        />
+      )}
       <Tabs.Screen
-        name="WalletTab"
-        component={WalletRoutes}
+        name="ProfileTab"
+        component={ProfileEditScreen}
         options={{
-          title: 'Wallet',
-          tabBarIcon: ({ color, size }) => <WalletCards color={color} size={size} />,
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => <UserRound color={color} size={size} />,
+        }}
+      />
+    </Tabs.Navigator>
+  );
+}
+
+function AdminTabs() {
+  const theme = useTheme();
+
+  return (
+    <Tabs.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.border,
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="AdminDashboardTab"
+        component={AdminDashboardScreen}
+        options={{
+          title: 'Dashboard',
+          tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="AdminUsersTab"
+        component={AdminUsersScreen}
+        options={{
+          title: 'Users',
+          tabBarIcon: ({ color, size }) => <UsersRound color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="AdminJobsTab"
+        component={AdminJobsScreen}
+        options={{
+          title: 'Jobs',
+          tabBarIcon: ({ color, size }) => <BriefcaseBusiness color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="AdminModerationTab"
+        component={AdminModerationScreen}
+        options={{
+          title: 'Moderation',
+          tabBarIcon: ({ color, size }) => <ShieldCheck color={color} size={size} />,
         }}
       />
       <Tabs.Screen

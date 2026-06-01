@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CheckCircle2, ClipboardCheck, Mail, MessageCircle, Phone, RefreshCw, Star, UserRound } from 'lucide-react-native';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useContact } from '../../api/contactHooks';
+import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { useCompleteContact, useCompletionStatus, useConfirmCompletion } from '../../api/reviewHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -20,6 +21,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
   const user = useAuthStore((state) => state.user);
   const query = useContact(route.params.contactId, Boolean(route.params.admin));
   const completionQuery = useCompletionStatus(route.params.contactId);
+  const ensureConversationMutation = useEnsureConversationForContact();
   const completeMutation = useCompleteContact();
   const confirmMutation = useConfirmCompletion();
 
@@ -66,6 +68,19 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
     });
   };
 
+  const openConversation = () => {
+    ensureConversationMutation.mutate(contact.id, {
+      onSuccess: (conversation) => {
+        navigation
+          .getParent()
+          ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
+      },
+      onError: (error) => {
+        Alert.alert('Could not open chat', error instanceof Error ? error.message : 'Please try again.');
+      },
+    });
+  };
+
   return (
     <Screen>
       <Card>
@@ -92,11 +107,8 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
         <Button
           title="Open Conversation"
           icon={MessageCircle}
-          onPress={() =>
-            navigation
-              .getParent()
-              ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: contact.id } })
-          }
+          loading={ensureConversationMutation.isPending}
+          onPress={openConversation}
         />
       ) : null}
       <Card>

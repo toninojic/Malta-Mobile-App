@@ -6,6 +6,7 @@ export function useConversations(enabled = true) {
     queryKey: ['messages', 'conversations'],
     queryFn: () => api.conversations({ limit: 50 }),
     enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 
@@ -14,6 +15,7 @@ export function useAdminConversations(enabled: boolean) {
     queryKey: ['admin', 'messages', 'conversations'],
     queryFn: () => api.adminConversations({ limit: 100 }),
     enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 
@@ -37,6 +39,17 @@ export function useSendMessage() {
         queryClient.invalidateQueries({ queryKey: ['notifications'] }),
         queryClient.invalidateQueries({ queryKey: ['messages', 'conversation', result.conversation.id] }),
       ]);
+    },
+  });
+}
+
+export function useEnsureConversationForContact() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: api.ensureConversationForContact,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['messages'] });
     },
   });
 }

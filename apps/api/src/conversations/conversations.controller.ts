@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -25,5 +25,10 @@ export class ConversationsController {
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.conversationsService.findOne(user, id);
+  }
+
+  @Post('contacts/:contactId')
+  ensureForContact(@CurrentUser() user: AuthenticatedUser, @Param('contactId', ParseUUIDPipe) contactId: string) {
+    return this.conversationsService.ensureForContact(user, contactId);
   }
 }

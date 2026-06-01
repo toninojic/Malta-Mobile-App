@@ -4,6 +4,7 @@ import { LockOpen, RefreshCw } from 'lucide-react-native';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useUnlockOffer, useUnlockStatus } from '../../api/contactHooks';
 import { api } from '../../api/client';
+import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
@@ -22,6 +23,7 @@ export function UnlockContactScreen({ route, navigation }: Props) {
   });
   const statusQuery = useUnlockStatus(offerId);
   const unlockMutation = useUnlockOffer();
+  const ensureConversationMutation = useEnsureConversationForContact();
   const cost = statusQuery.data?.cost ?? 1;
   const balance = balanceQuery.data?.balance ?? 0;
   const canUnlock = balance >= cost && statusQuery.data?.status !== 'UNLOCKED';
@@ -34,9 +36,13 @@ export function UnlockContactScreen({ route, navigation }: Props) {
           {
             text: 'Open Chat',
             onPress: () =>
-              navigation
-                .getParent()
-                ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: result.contact.id } }),
+              ensureConversationMutation.mutate(result.contact.id, {
+                onSuccess: (conversation) => {
+                  navigation
+                    .getParent()
+                    ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
+                },
+              }),
           },
         ]);
       },
@@ -94,7 +100,14 @@ export function UnlockContactScreen({ route, navigation }: Props) {
         onPress={confirmUnlock}
       />
       {!canUnlock && statusQuery.data?.status !== 'UNLOCKED' ? (
-        <Text style={[styles.warning, { color: theme.colors.danger }]}>You need at least {cost} token to unlock this contact.</Text>
+        <>
+          <Text style={[styles.warning, { color: theme.colors.danger }]}>You do not have enough tokens.</Text>
+          <Button
+            title="Buy Tokens"
+            variant="secondary"
+            onPress={() => navigation.getParent()?.navigate('WalletTab', { screen: 'WalletHome' })}
+          />
+        </>
       ) : null}
     </Screen>
   );

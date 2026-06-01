@@ -15,7 +15,9 @@ export default function App() {
       new QueryClient({
         defaultOptions: {
           queries: {
-            refetchOnWindowFocus: false,
+            refetchOnMount: true,
+            refetchOnWindowFocus: true,
+            refetchOnReconnect: true,
             retry: (failureCount, error) => {
               if (error instanceof ApiError && error.status === 429) {
                 return false;
@@ -23,7 +25,7 @@ export default function App() {
 
               return failureCount < 1;
             },
-            staleTime: 10_000,
+            staleTime: 0,
           },
           mutations: {
             retry: false,

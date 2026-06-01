@@ -5,9 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, RefundStatus, TokenTransactionType, UserRole } from '@prisma/client';
+import { NotificationType, Prisma, RefundStatus, TokenTransactionType, UserRole } from '@prisma/client';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRefundDecisionDto } from './dto/admin-refund-decision.dto';
 import { CreateRefundRequestDto } from './dto/create-refund-request.dto';
@@ -47,7 +49,11 @@ type TokenTransactionWithPackage = Prisma.TokenTransactionGetPayload<{ include: 
 
 @Injectable()
 export class TokensService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogsService: AuditLogsService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async findActivePackages() {
     const packages = await this.prisma.tokenPackage.findMany({
@@ -58,16 +64,39 @@ export class TokensService {
     return packages.map((tokenPackage) => this.toPackage(tokenPackage));
   }
 
-  async createPackage(dto: CreateTokenPackageDto) {
+  async createPackage(user: AuthenticatedUser, dto: CreateTokenPackageDto) {
+    this.assertAdmin(user);
+
     try {
-      const tokenPackage = await this.prisma.tokenPackage.create({
-        data: {
-          title: dto.title,
-          tokenCount: dto.tokenCount,
-          price: new Prisma.Decimal(dto.price),
-          currency: dto.currency ?? 'EUR',
-          isActive: dto.isActive ?? true,
-        },
+      const tokenPackage = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.tokenPackage.create({
+          data: {
+            title: dto.title,
+            tokenCount: dto.tokenCount,
+            price: new Prisma.Decimal(dto.price),
+            currency: dto.currency ?? 'EUR',
+            isActive: dto.isActive ?? true,
+          },
+        });
+
+        await this.auditLogsService.create(
+          {
+            adminId: user.id,
+            action: 'TOKEN_PACKAGE_CREATED',
+            entityType: 'TokenPackage',
+            entityId: created.id,
+            metadata: {
+              title: created.title,
+              tokenCount: created.tokenCount,
+              price: created.price.toString(),
+              currency: created.currency,
+              isActive: created.isActive,
+            },
+          },
+          tx,
+        );
+
+        return created;
       });
 
       return this.toPackage(tokenPackage);
@@ -80,17 +109,57 @@ export class TokensService {
     }
   }
 
-  async updatePackage(id: string, dto: UpdateTokenPackageDto) {
+  async updatePackage(user: AuthenticatedUser, id: string, dto: UpdateTokenPackageDto) {
+    this.assertAdmin(user);
+
     try {
-      const tokenPackage = await this.prisma.tokenPackage.update({
-        where: { id },
-        data: {
-          title: dto.title,
-          tokenCount: dto.tokenCount,
-          price: dto.price === undefined ? undefined : new Prisma.Decimal(dto.price),
-          currency: dto.currency,
-          isActive: dto.isActive,
-        },
+      const tokenPackage = await this.prisma.$transaction(async (tx) => {
+        const previous = await tx.tokenPackage.findUnique({
+          where: { id },
+        });
+
+        if (!previous) {
+          throw new NotFoundException('Token package not found.');
+        }
+
+        const updated = await tx.tokenPackage.update({
+          where: { id },
+          data: {
+            title: dto.title,
+            tokenCount: dto.tokenCount,
+            price: dto.price === undefined ? undefined : new Prisma.Decimal(dto.price),
+            currency: dto.currency,
+            isActive: dto.isActive,
+          },
+        });
+
+        await this.auditLogsService.create(
+          {
+            adminId: user.id,
+            action: 'TOKEN_PACKAGE_UPDATED',
+            entityType: 'TokenPackage',
+            entityId: updated.id,
+            metadata: {
+              previous: {
+                title: previous.title,
+                tokenCount: previous.tokenCount,
+                price: previous.price.toString(),
+                currency: previous.currency,
+                isActive: previous.isActive,
+              },
+              next: {
+                title: updated.title,
+                tokenCount: updated.tokenCount,
+                price: updated.price.toString(),
+                currency: updated.currency,
+                isActive: updated.isActive,
+              },
+            },
+          },
+          tx,
+        );
+
+        return updated;
       });
 
       return this.toPackage(tokenPackage);
@@ -309,7 +378,7 @@ export class TokensService {
         where: { userId: refund.userId },
       });
 
-      await tx.tokenTransaction.create({
+      const refundTransaction = await tx.tokenTransaction.create({
         data: {
           userId: refund.userId,
           type: TokenTransactionType.REFUND,
@@ -320,7 +389,7 @@ export class TokensService {
         },
       });
 
-      return tx.refundRequest.update({
+      const updated = await tx.refundRequest.update({
         where: { id: refund.id },
         data: {
           status: RefundStatus.APPROVED,
@@ -330,6 +399,38 @@ export class TokensService {
         },
         include: refundInclude,
       });
+
+      await this.auditLogsService.create(
+        {
+          adminId: user.id,
+          action: 'REFUND_APPROVED',
+          entityType: 'RefundRequest',
+          entityId: refund.id,
+          metadata: {
+            userId: refund.userId,
+            amount: refund.amount,
+            adminNote: dto.adminNote,
+            refundTransactionId: refundTransaction.id,
+          },
+        },
+        tx,
+      );
+
+      await this.notificationsService.create(
+        {
+          userId: refund.userId,
+          type: NotificationType.REFUND_APPROVED,
+          title: 'Refund approved',
+          body: 'Your refund request was approved.',
+          data: {
+            refundRequestId: refund.id,
+            amount: refund.amount,
+          },
+        },
+        tx,
+      );
+
+      return updated;
     });
 
     return this.toRefund(approved);
@@ -350,15 +451,48 @@ export class TokensService {
       throw new BadRequestException('Refund request has already been processed.');
     }
 
-    const rejected = await this.prisma.refundRequest.update({
-      where: { id: refund.id },
-      data: {
-        status: RefundStatus.REJECTED,
-        adminNote: dto.adminNote,
-        reviewedByAdminId: user.id,
-        reviewedAt: new Date(),
-      },
-      include: refundInclude,
+    const rejected = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.refundRequest.update({
+        where: { id: refund.id },
+        data: {
+          status: RefundStatus.REJECTED,
+          adminNote: dto.adminNote,
+          reviewedByAdminId: user.id,
+          reviewedAt: new Date(),
+        },
+        include: refundInclude,
+      });
+
+      await this.auditLogsService.create(
+        {
+          adminId: user.id,
+          action: 'REFUND_REJECTED',
+          entityType: 'RefundRequest',
+          entityId: refund.id,
+          metadata: {
+            userId: refund.userId,
+            amount: refund.amount,
+            adminNote: dto.adminNote,
+          },
+        },
+        tx,
+      );
+
+      await this.notificationsService.create(
+        {
+          userId: refund.userId,
+          type: NotificationType.REFUND_DENIED,
+          title: 'Refund rejected',
+          body: 'Your refund request was rejected.',
+          data: {
+            refundRequestId: refund.id,
+            amount: refund.amount,
+          },
+        },
+        tx,
+      );
+
+      return updated;
     });
 
     return this.toRefund(rejected);

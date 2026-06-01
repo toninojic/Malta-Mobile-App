@@ -20,6 +20,7 @@ enum UserStatus {
 
 enum JobStatus {
   ACTIVE
+  IN_PROGRESS
   EXPIRED
   COMPLETED
   CLOSED
@@ -30,6 +31,7 @@ enum OfferStatus {
   SELECTED
   REJECTED
   WITHDRAWN
+  COMPLETED
 }
 
 enum TokenTransactionType {
@@ -62,7 +64,10 @@ enum ReviewStatus {
 }
 
 enum NotificationType {
+  ACCOUNT_SUSPENDED
+  ACCOUNT_ACTIVATED
   NEW_OFFER
+  OFFER_SELECTED
   NEW_MESSAGE
   CONTACT_UNLOCKED
   REFUND_APPROVED
@@ -108,6 +113,7 @@ model User {
   reviewsGiven      Review[]          @relation("EmployerReviews")
   reviewsReceived   Review[]          @relation("ContractorReviews")
   reviewsRemoved     Review[]          @relation("ReviewRemovals")
+  auditLogs          AuditLog[]        @relation("AdminAuditLogs")
   ratingSummary      ContractorRatingSummary? @relation("ContractorRatingSummary")
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -419,4 +425,20 @@ model Notification {
 
   @@index([userId, readAt, createdAt])
   @@index([userId, isRead, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  adminId    String   @db.Uuid
+  admin      User     @relation("AdminAuditLogs", fields: [adminId], references: [id], onDelete: Restrict)
+  action     String   @db.VarChar(80)
+  entityType String   @db.VarChar(80)
+  entityId   String   @db.VarChar(120)
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }

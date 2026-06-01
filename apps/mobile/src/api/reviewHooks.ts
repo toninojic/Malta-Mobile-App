@@ -112,6 +112,8 @@ export function useRemoveReview() {
     onSuccess: async (review) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin', 'reviews'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
         queryClient.invalidateQueries({ queryKey: ['reviews'] }),
         queryClient.invalidateQueries({ queryKey: ['contractors', review.contractorId] }),
         queryClient.invalidateQueries({ queryKey: ['notifications'] }),

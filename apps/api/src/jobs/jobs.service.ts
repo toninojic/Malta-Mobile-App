@@ -122,7 +122,18 @@ export class JobsService {
         },
       });
 
-      if (!job || job.status !== JobStatus.ACTIVE || job.expiresAt <= new Date()) {
+      if (!job) {
+        throw new NotFoundException('Job request not found.');
+      }
+
+      const hasOwnOffer = await this.prisma.offer.count({
+        where: {
+          jobRequestId: id,
+          contractorId: user.id,
+        },
+      });
+
+      if (!hasOwnOffer && (job.status !== JobStatus.ACTIVE || job.expiresAt <= new Date())) {
         throw new NotFoundException('Job request not found.');
       }
 

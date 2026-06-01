@@ -6,6 +6,7 @@ export function useNotifications(enabled = true) {
     queryKey: ['notifications', 'mine'],
     queryFn: () => api.notifications({ limit: 50 }),
     enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 
@@ -14,6 +15,7 @@ export function useAdminNotifications(enabled: boolean) {
     queryKey: ['admin', 'notifications'],
     queryFn: () => api.adminNotifications({ limit: 100 }),
     enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 
@@ -22,6 +24,7 @@ export function useUnreadNotificationCount(enabled = true) {
     queryKey: ['notifications', 'unread-count'],
     queryFn: api.unreadNotificationCount,
     enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 

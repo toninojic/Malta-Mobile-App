@@ -21,13 +21,17 @@ export class AdminTokensController {
   constructor(private readonly tokensService: TokensService) {}
 
   @Post('packages')
-  createPackage(@Body() dto: CreateTokenPackageDto) {
-    return this.tokensService.createPackage(dto);
+  createPackage(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateTokenPackageDto) {
+    return this.tokensService.createPackage(user, dto);
   }
 
   @Patch('packages/:id')
-  updatePackage(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTokenPackageDto) {
-    return this.tokensService.updatePackage(id, dto);
+  updatePackage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTokenPackageDto,
+  ) {
+    return this.tokensService.updatePackage(user, id, dto);
   }
 
   @Get('refunds')

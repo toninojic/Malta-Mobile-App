@@ -298,6 +298,41 @@ export class OffersService {
         },
       });
 
+      const contactUnlock = await tx.contactUnlock.upsert({
+        where: { offerId },
+        create: {
+          jobRequestId: offer.jobRequestId,
+          offerId,
+          employerId: offer.jobRequest.employerId,
+          contractorId: offer.contractorId,
+          status: ContactUnlockStatus.PENDING,
+        },
+        update: {
+          status: ContactUnlockStatus.PENDING,
+        },
+      });
+
+      await tx.jobRequest.update({
+        where: { id: offer.jobRequestId },
+        data: { status: JobStatus.IN_PROGRESS },
+      });
+
+      await this.notificationsService.create(
+        {
+          userId: offer.contractorId,
+          type: NotificationType.OFFER_SELECTED,
+          title: 'Offer selected',
+          body: 'Your offer was selected. Unlock contact to start conversation.',
+          data: {
+            jobId: offer.jobRequestId,
+            offerId,
+            contactUnlockId: contactUnlock.id,
+            employerId: offer.jobRequest.employerId,
+          },
+        },
+        tx,
+      );
+
       return tx.offer.update({
         where: { id: offerId },
         data: {

@@ -4,6 +4,6 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 export class OffersQueryDto extends PaginationQueryDto {
   @IsOptional()
-  @IsIn([OfferStatus.PENDING, OfferStatus.SELECTED, OfferStatus.REJECTED, OfferStatus.WITHDRAWN])
+  @IsIn([OfferStatus.PENDING, OfferStatus.SELECTED, OfferStatus.REJECTED, OfferStatus.WITHDRAWN, OfferStatus.COMPLETED])
   status?: OfferStatus;
 }

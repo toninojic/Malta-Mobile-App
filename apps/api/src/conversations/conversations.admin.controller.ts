@@ -20,6 +20,11 @@ export class AdminConversationsController {
     return this.conversationsService.findAll(query);
   }
 
+  @Get(':id/messages')
+  messages(@Param('id', ParseUUIDPipe) id: string) {
+    return this.conversationsService.findAdminMessages(id);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.conversationsService.findAdminOne(id);

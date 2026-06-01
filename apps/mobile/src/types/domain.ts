@@ -1,14 +1,17 @@
 export type UserRole = 'EMPLOYER' | 'CONTRACTOR' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'SUSPENDED';
-export type JobStatus = 'ACTIVE' | 'EXPIRED' | 'COMPLETED' | 'CLOSED';
-export type OfferStatus = 'PENDING' | 'SELECTED' | 'REJECTED' | 'WITHDRAWN';
+export type JobStatus = 'ACTIVE' | 'IN_PROGRESS' | 'EXPIRED' | 'COMPLETED' | 'CLOSED';
+export type OfferStatus = 'PENDING' | 'SELECTED' | 'REJECTED' | 'WITHDRAWN' | 'COMPLETED';
 export type TokenTransactionType = 'PURCHASE' | 'SPEND' | 'REFUND';
 export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type UnlockStatus = 'LOCKED' | 'PENDING' | 'UNLOCKED';
 export type JobCompletionStatus = 'PENDING_EMPLOYER_CONFIRMATION' | 'CONFIRMED' | 'DISPUTED' | 'CANCELLED';
 export type ReviewStatus = 'ACTIVE' | 'REMOVED';
 export type NotificationType =
+  | 'ACCOUNT_SUSPENDED'
+  | 'ACCOUNT_ACTIVATED'
   | 'NEW_OFFER'
+  | 'OFFER_SELECTED'
   | 'NEW_MESSAGE'
   | 'CONTACT_UNLOCKED'
   | 'REFUND_APPROVED'
@@ -36,6 +39,17 @@ export type AuthUser = {
   role: UserRole;
   status: UserStatus;
   profile?: UserProfile | null;
+};
+
+export type AdminUser = AuthUser & {
+  tokenBalance?: TokenBalance | null;
+  counts?: {
+    jobRequests: number;
+    offers: number;
+    notifications: number;
+  };
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type JobImage = {
@@ -107,6 +121,13 @@ export type JobFormValues = {
   subcategory: string;
   location: string;
   imageUrls: string[];
+};
+
+export type UploadedJobImage = {
+  url: string;
+  fileName: string;
+  size: number;
+  mimeType: string;
 };
 
 export type JobBrowseFilters = {
@@ -325,4 +346,64 @@ export type InAppNotification = {
   isRead: boolean;
   readAt?: string | null;
   createdAt: string;
+};
+
+export type AuditLog = {
+  id: string;
+  adminId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  admin?: AuthUser;
+};
+
+export type AdminStatistics = {
+  users: {
+    total: number;
+    employers: number;
+    contractors: number;
+    admins: number;
+    active: number;
+    suspended: number;
+  };
+  jobs: {
+    total: number;
+    active: number;
+    inProgress: number;
+    completed: number;
+    closed: number;
+    expired: number;
+  };
+  offers: {
+    total: number;
+    pending: number;
+    selected: number;
+    withdrawn: number;
+    rejected: number;
+    completed: number;
+  };
+  tokens: {
+    totalPurchased: number;
+    totalSpent: number;
+    totalRefunded: number;
+    activeTokenBalance: number;
+    mockRevenue: number;
+  };
+  reviews: {
+    total: number;
+    active: number;
+    removed: number;
+    averageRating: number;
+  };
+  conversations: {
+    total: number;
+    messages: number;
+  };
+  refunds: {
+    pending: number;
+    approved: number;
+    rejected: number;
+  };
 };
