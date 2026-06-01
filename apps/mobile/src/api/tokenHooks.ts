@@ -37,20 +37,6 @@ export function useAdminRefunds(enabled: boolean) {
   });
 }
 
-export function useMockPurchase() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: api.mockPurchase,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['tokens', 'balance'] }),
-        queryClient.invalidateQueries({ queryKey: ['tokens', 'transactions'] }),
-      ]);
-    },
-  });
-}
-
 export function useCreateRefund() {
   const queryClient = useQueryClient();
 

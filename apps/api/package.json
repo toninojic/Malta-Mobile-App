@@ -20,6 +20,7 @@
     "smoke:milestone5": "node scripts/milestone5-smoke.mjs",
     "smoke:milestone6": "node scripts/milestone6-smoke.mjs",
     "smoke:milestone7": "node scripts/milestone7-smoke.mjs",
+    "smoke:milestone8": "node scripts/milestone8-smoke.mjs",
     "smoke:qa-fixes": "node scripts/qa-fixes-smoke.mjs",
     "smoke:flow-refactor": "node scripts/flow-refactor-smoke.mjs"
   },

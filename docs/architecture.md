@@ -21,13 +21,14 @@ The API is organized by business modules:
 - `users` owns profile reads and edits.
 - `jobs` owns employer job request CRUD and renewal.
 - `offers` owns contractor offer creation, editing, withdrawal, employer masked viewing, and employer selection.
-- `tokens` owns token packages, wallet balances, transaction history, mock purchases, refund requests, and admin refund decisions.
+- `tokens` owns token packages, wallet balances, transaction history, refund requests, and admin refund decisions.
+- `payments` owns Stripe Checkout session creation, payment history, webhook signature verification, and idempotent token grants.
 - `contacts` owns contact requests, token spending for unlocks, identity visibility, and unlocked relationship reads.
 - `conversations` owns unlocked relationship conversation listing and admin conversation visibility.
 - `messages` owns text message delivery, message history, read status, and message creation rate limiting.
 - `notifications` owns database-backed in-app notifications, unread counts, read updates, and admin notification visibility.
 - `reviews` owns job completion requests, employer confirmation, reviews, contractor replies, review moderation, and rating summaries.
-- Future milestone modules will add richer admin operations, push notifications, and payment gateway integration.
+- Future milestone modules will add push notifications and richer country expansion workflows.
 
 Security rules:
 
@@ -48,7 +49,7 @@ The Expo app is structured around:
 - Zustand for session state.
 - A reusable design system with colors, typography, spacing, buttons, cards, inputs, badges, and screens.
 
-The app starts with onboarding, then supports registration/login, profile editing, employer job CRUD, contractor job browsing, contractor offers, employer masked offer review, token wallet/refund workflows, contact unlock workflows, conversation messaging, in-app notifications, completion actions, reviews, rating summaries, and admin review moderation.
+The app starts with onboarding, then supports registration/login, profile editing, employer job CRUD, contractor job browsing, contractor offers, employer masked offer review, Stripe test checkout for token purchases, token wallet/refund workflows, contact unlock workflows, conversation messaging, in-app notifications, completion actions, reviews, rating summaries, and admin review moderation.
 
 ## Storage Architecture
 
@@ -60,7 +61,7 @@ Milestone 5 stores notifications in PostgreSQL with read/unread state and mobile
 
 ## Payment Architecture
 
-Milestone 3 uses free instant mock purchases. There is no Stripe, card processing, checkout, or payment verification yet. The purchase path is isolated in the token service so a later Stripe webhook can replace the mock purchase entry point while preserving the wallet and transaction ledger.
+Milestone 8 uses Stripe Checkout in test mode. Checkout creation stores a `Payment` as `PENDING` and returns Stripe's hosted checkout URL. Tokens are never granted during checkout creation. The signed Stripe webhook is the only path that marks a payment `PAID`, increments `UserTokenBalance`, and creates a `PURCHASE` `TokenTransaction`. Duplicate checkout completion events are idempotent and do not grant tokens twice.
 
 ## Contact Unlock Architecture
 

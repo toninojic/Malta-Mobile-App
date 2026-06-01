@@ -1,19 +1,20 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Coins, ReceiptText, RefreshCw, RotateCcw } from 'lucide-react-native';
+import { Coins, CreditCard, ReceiptText, RefreshCw, RotateCcw } from 'lucide-react-native';
 import { ReactNode } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Alert, ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import {
   useAdminRefunds,
-  useMockPurchase,
   useMyRefunds,
   useTokenBalance,
   useTokenPackages,
   useTokenTransactions,
 } from '../../api/tokenHooks';
+import { useCreateCheckoutSession, usePayments } from '../../api/paymentHooks';
 import { BalanceCard } from '../../components/wallet/BalanceCard';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { PackageCard } from '../../components/wallet/PackageCard';
+import { PaymentCard } from '../../components/wallet/PaymentCard';
 import { RefundCard } from '../../components/wallet/RefundCard';
 import { Screen } from '../../components/Screen';
 import { TransactionCard } from '../../components/wallet/TransactionCard';
@@ -31,28 +32,39 @@ export function WalletScreen({ navigation }: Props) {
   const balanceQuery = useTokenBalance();
   const transactionsQuery = useTokenTransactions();
   const refundsQuery = useMyRefunds();
+  const paymentsQuery = usePayments();
   const adminRefundsQuery = useAdminRefunds(isAdmin);
-  const purchaseMutation = useMockPurchase();
+  const checkoutMutation = useCreateCheckoutSession();
 
   const handleBuy = (tokenPackageId: string) => {
-    purchaseMutation.mutate(tokenPackageId, {
-      onSuccess: (result) => {
-        Alert.alert('Package added', `Your wallet now has ${result.balance.balance} tokens.`);
+    checkoutMutation.mutate(tokenPackageId, {
+      onSuccess: async (result) => {
+        try {
+          await Linking.openURL(result.checkoutUrl);
+        } catch {
+          Alert.alert('Checkout ready', 'Stripe checkout could not be opened on this device.');
+        }
       },
       onError: (error) => {
-        Alert.alert('Could not buy package', error instanceof Error ? error.message : 'Please try again.');
+        Alert.alert('Could not open checkout', error instanceof Error ? error.message : 'Please try again.');
       },
     });
   };
 
-  const loading = packagesQuery.isLoading || balanceQuery.isLoading || transactionsQuery.isLoading || refundsQuery.isLoading;
-  const firstError = packagesQuery.error ?? balanceQuery.error ?? transactionsQuery.error ?? refundsQuery.error;
+  const loading =
+    packagesQuery.isLoading ||
+    balanceQuery.isLoading ||
+    transactionsQuery.isLoading ||
+    refundsQuery.isLoading ||
+    paymentsQuery.isLoading;
+  const firstError =
+    packagesQuery.error ?? balanceQuery.error ?? transactionsQuery.error ?? refundsQuery.error ?? paymentsQuery.error;
 
   return (
     <Screen>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Token wallet</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Mock purchases are instant and free during MVP development.</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Stripe test checkout opens in the browser. Tokens are added after the webhook confirms payment.</Text>
       </View>
 
       {loading ? (
@@ -72,6 +84,7 @@ export function WalletScreen({ navigation }: Props) {
             void balanceQuery.refetch();
             void transactionsQuery.refetch();
             void refundsQuery.refetch();
+            void paymentsQuery.refetch();
           }}
         />
       ) : null}
@@ -85,9 +98,18 @@ export function WalletScreen({ navigation }: Props) {
           <PackageCard
             key={tokenPackage.id}
             tokenPackage={tokenPackage}
-            loading={purchaseMutation.isPending}
+            loading={checkoutMutation.isPending}
             onBuy={() => handleBuy(tokenPackage.id)}
           />
+        ))}
+      </Section>
+
+      <Section title="Payment history">
+        {paymentsQuery.data?.data.length === 0 ? (
+          <EmptyState icon={CreditCard} title="No payments" message="Stripe checkout attempts will appear here." />
+        ) : null}
+        {paymentsQuery.data?.data.map((payment) => (
+          <PaymentCard key={payment.id} payment={payment} />
         ))}
       </Section>
 

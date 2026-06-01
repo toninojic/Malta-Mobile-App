@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  GoneException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NotificationType, Prisma, RefundStatus, TokenTransactionType, UserRole } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
@@ -53,6 +55,7 @@ export class TokensService {
     private readonly prisma: PrismaService,
     private readonly auditLogsService: AuditLogsService,
     private readonly notificationsService: NotificationsService,
+    private readonly config: ConfigService,
   ) {}
 
   async findActivePackages() {
@@ -205,6 +208,10 @@ export class TokensService {
   }
 
   async mockPurchase(user: AuthenticatedUser, dto: MockPurchaseDto) {
+    if (this.config.get<string>('ALLOW_MOCK_PURCHASES') !== 'true') {
+      throw new GoneException('Mock purchases have been replaced by Stripe Checkout.');
+    }
+
     const tokenPackage = await this.prisma.tokenPackage.findUnique({
       where: { id: dto.tokenPackageId },
     });

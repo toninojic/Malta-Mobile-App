@@ -19,6 +19,9 @@ export type WalletStackParamList = {
   WalletHome: undefined;
   RefundRequest: { transactionId: string };
   AdminRefundDetails: { refundId: string };
+  PaymentSuccess: { paymentId?: string } | undefined;
+  PaymentFailed: { paymentId?: string } | undefined;
+  PaymentPending: { paymentId?: string } | undefined;
 };
 
 export type ActivityStackParamList = {

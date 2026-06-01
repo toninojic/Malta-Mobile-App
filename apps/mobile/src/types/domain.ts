@@ -4,6 +4,7 @@ export type JobStatus = 'ACTIVE' | 'IN_PROGRESS' | 'EXPIRED' | 'COMPLETED' | 'CL
 export type OfferStatus = 'PENDING' | 'SELECTED' | 'REJECTED' | 'WITHDRAWN' | 'COMPLETED';
 export type TokenTransactionType = 'PURCHASE' | 'SPEND' | 'REFUND';
 export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 export type UnlockStatus = 'LOCKED' | 'PENDING' | 'UNLOCKED';
 export type JobCompletionStatus = 'PENDING_EMPLOYER_CONFIRMATION' | 'CONFIRMED' | 'DISPUTED' | 'CANCELLED';
 export type ReviewStatus = 'ACTIVE' | 'REMOVED';
@@ -193,6 +194,27 @@ export type RefundRequest = {
   reviewedBy?: Pick<AuthUser, 'id' | 'email' | 'profile'> | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type Payment = {
+  id: string;
+  userId: string;
+  tokenPackageId: string;
+  stripeCheckoutSessionId?: string | null;
+  stripePaymentIntentId?: string | null;
+  amount: string;
+  currency: string;
+  status: PaymentStatus;
+  failureReason?: string | null;
+  tokenPackage: TokenPackage;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateCheckoutSessionResponse = {
+  checkoutUrl: string;
+  paymentId: string;
+  status: PaymentStatus;
 };
 
 export type UnlockStatusResponse = {
@@ -389,6 +411,7 @@ export type AdminStatistics = {
     totalSpent: number;
     totalRefunded: number;
     activeTokenBalance: number;
+    purchaseRevenue: number;
     mockRevenue: number;
   };
   reviews: {
@@ -405,5 +428,12 @@ export type AdminStatistics = {
     pending: number;
     approved: number;
     rejected: number;
+  };
+  payments: {
+    total: number;
+    paid: number;
+    failed: number;
+    pending: number;
+    testRevenue: number;
   };
 };

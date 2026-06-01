@@ -45,7 +45,7 @@ export function AdminDashboardScreen() {
           <Metric icon={Activity} label="Completed jobs" value={query.data.jobs.completed} detail={`${query.data.jobs.closed} closed`} />
           <Metric icon={RotateCcw} label="Pending refunds" value={query.data.refunds.pending} detail={`${query.data.refunds.approved} approved`} />
           <Metric icon={Star} label="Removed reviews" value={query.data.reviews.removed} detail={`${query.data.reviews.averageRating} avg rating`} />
-          <Metric icon={WalletCards} label="Mock revenue" value={`EUR ${formatter.format(query.data.tokens.mockRevenue)}`} detail={`${query.data.tokens.totalSpent} tokens spent`} />
+          <Metric icon={WalletCards} label="Test revenue" value={`EUR ${formatter.format(query.data.payments.testRevenue)}`} detail={`${query.data.payments.paid} paid payments`} />
           <Metric icon={MessageCircle} label="Total messages" value={query.data.conversations.messages} detail={`${query.data.conversations.total} conversations`} />
         </View>
       ) : null}

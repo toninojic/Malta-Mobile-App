@@ -20,7 +20,7 @@ Profile
 
 ## Dashboard
 
-The dashboard shows MVP statistics for users, jobs, offers, tokens, reviews, conversations, messages, refunds, and mock revenue. Revenue is calculated from mock token purchases only. No real payment gateway is included.
+The dashboard shows MVP statistics for users, jobs, offers, tokens, reviews, conversations, messages, refunds, Stripe test payments, and test revenue. Payment revenue is calculated only from `PAID` test-mode payments.
 
 ## Moderation
 

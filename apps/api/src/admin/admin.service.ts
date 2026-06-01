@@ -3,6 +3,7 @@ import {
   JobStatus,
   NotificationType,
   OfferStatus,
+  PaymentStatus,
   Prisma,
   RefundStatus,
   ReviewStatus,
@@ -139,6 +140,11 @@ export class AdminService {
       pendingRefunds,
       approvedRefunds,
       rejectedRefunds,
+      totalPayments,
+      paidPayments,
+      failedPayments,
+      pendingPayments,
+      paidPaymentRevenue,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.user.count({ where: { role: UserRole.EMPLOYER } }),
@@ -187,9 +193,17 @@ export class AdminService {
       this.prisma.refundRequest.count({ where: { status: RefundStatus.PENDING } }),
       this.prisma.refundRequest.count({ where: { status: RefundStatus.APPROVED } }),
       this.prisma.refundRequest.count({ where: { status: RefundStatus.REJECTED } }),
+      this.prisma.payment.count(),
+      this.prisma.payment.count({ where: { status: PaymentStatus.PAID } }),
+      this.prisma.payment.count({ where: { status: PaymentStatus.FAILED } }),
+      this.prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
+      this.prisma.payment.aggregate({
+        where: { status: PaymentStatus.PAID },
+        _sum: { amount: true },
+      }),
     ]);
 
-    const mockRevenue = purchaseTransactions.reduce(
+    const tokenPurchaseRevenue = purchaseTransactions.reduce(
       (sum, transaction) => sum + (transaction.package ? Number(transaction.package.price) : 0),
       0,
     );
@@ -224,7 +238,8 @@ export class AdminService {
         totalSpent: Math.abs(spendSum._sum.amount ?? 0),
         totalRefunded: Math.abs(refundSum._sum.amount ?? 0),
         activeTokenBalance: tokenBalanceSum._sum.balance ?? 0,
-        mockRevenue,
+        purchaseRevenue: tokenPurchaseRevenue,
+        mockRevenue: tokenPurchaseRevenue,
       },
       reviews: {
         total: totalReviews,
@@ -240,6 +255,13 @@ export class AdminService {
         pending: pendingRefunds,
         approved: approvedRefunds,
         rejected: rejectedRefunds,
+      },
+      payments: {
+        total: totalPayments,
+        paid: paidPayments,
+        failed: failedPayments,
+        pending: pendingPayments,
+        testRevenue: Number(paidPaymentRevenue._sum.amount ?? 0),
       },
     };
   }

@@ -9,6 +9,7 @@ import {
   ContactUnlock,
   ContractorRatingSummary,
   Conversation,
+  CreateCheckoutSessionResponse,
   InAppNotification,
   JobCompletion,
   JobBrowseFilters,
@@ -18,6 +19,7 @@ import {
   OfferFormValues,
   OfferStatus,
   PaginatedResponse,
+  Payment,
   RefundRequest,
   RefundStatus,
   Review,
@@ -377,11 +379,16 @@ export const api = {
       `/tokens/transactions${queryString({ page: input.page, limit: input.limit })}`,
     );
   },
-  mockPurchase(tokenPackageId: string) {
-    return request<{ balance: TokenBalance; transaction: TokenTransaction }>('/tokens/mock-purchase', {
+  createCheckoutSession(tokenPackageId: string) {
+    return request<CreateCheckoutSessionResponse>('/payments/create-checkout-session', {
       method: 'POST',
       body: { tokenPackageId },
     });
+  },
+  payments(input: { page?: number; limit?: number } = {}) {
+    return request<PaginatedResponse<Payment>>(
+      `/payments${queryString({ page: input.page, limit: input.limit })}`,
+    );
   },
   createRefund(input: { tokenTransactionId: string; reason: string }) {
     return request<RefundRequest>('/tokens/refunds', {

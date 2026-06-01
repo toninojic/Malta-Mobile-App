@@ -1,6 +1,7 @@
 import {
   DarkTheme,
   DefaultTheme,
+  LinkingOptions,
   NavigationContainer,
   Theme,
 } from '@react-navigation/native';
@@ -27,6 +28,7 @@ import { ProfileEditScreen } from '../screens/profile/ProfileEditScreen';
 import { AdminRefundDetailsScreen } from '../screens/wallet/AdminRefundDetailsScreen';
 import { ContactDetailsScreen } from '../screens/wallet/ContactDetailsScreen';
 import { ContactsScreen } from '../screens/wallet/ContactsScreen';
+import { PaymentFailedScreen, PaymentPendingScreen, PaymentSuccessScreen } from '../screens/wallet/PaymentStatusScreen';
 import { RefundRequestScreen } from '../screens/wallet/RefundRequestScreen';
 import { WalletScreen } from '../screens/wallet/WalletScreen';
 import { ConversationThreadScreen } from '../screens/messages/ConversationThreadScreen';
@@ -56,6 +58,21 @@ const ActivityStack = createNativeStackNavigator<ActivityStackParamList>();
 const WalletStack = createNativeStackNavigator<WalletStackParamList>();
 const MessagesStack = createNativeStackNavigator<MessagesStackParamList>();
 const Tabs = createBottomTabNavigator<AppTabParamList>();
+
+const linking: LinkingOptions<AppTabParamList> = {
+  prefixes: ['maltacraftsman://'],
+  config: {
+    screens: {
+      WalletTab: {
+        screens: {
+          PaymentSuccess: 'payment-success',
+          PaymentFailed: 'payment-failed',
+          PaymentPending: 'payment-pending',
+        },
+      },
+    },
+  },
+};
 
 export function RootNavigator() {
   const theme = useTheme();
@@ -89,7 +106,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer theme={navTheme} linking={linking}>
       {user ? <AuthenticatedTabs /> : <AuthRoutes />}
     </NavigationContainer>
   );
@@ -124,6 +141,9 @@ function WalletRoutes() {
       <WalletStack.Screen name="WalletHome" component={WalletScreen} options={{ title: 'Wallet' }} />
       <WalletStack.Screen name="RefundRequest" component={RefundRequestScreen} options={{ title: 'Request Refund' }} />
       <WalletStack.Screen name="AdminRefundDetails" component={AdminRefundDetailsScreen} options={{ title: 'Refund Details' }} />
+      <WalletStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ title: 'Payment' }} />
+      <WalletStack.Screen name="PaymentFailed" component={PaymentFailedScreen} options={{ title: 'Payment' }} />
+      <WalletStack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ title: 'Payment' }} />
     </WalletStack.Navigator>
   );
 }

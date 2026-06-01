@@ -11,6 +11,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { MessagesModule } from './messages/messages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OffersModule } from './offers/offers.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { TokensModule } from './tokens/tokens.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     JobsModule,
     OffersModule,
+    PaymentsModule,
     TokensModule,
     ContactsModule,
     NotificationsModule,

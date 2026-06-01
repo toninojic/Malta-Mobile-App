@@ -25,7 +25,7 @@ export function PackageCard({
             {tokenPackage.tokenCount} tokens / {tokenPackage.price} {tokenPackage.currency}
           </Text>
         </View>
-        <Text style={[styles.badge, { color: theme.colors.primary, borderColor: theme.colors.primary }]}>FREE MVP</Text>
+        <Text style={[styles.badge, { color: theme.colors.primary, borderColor: theme.colors.primary }]}>TEST MODE</Text>
       </View>
       <Button title="Buy Package" icon={ShoppingBag} loading={loading} onPress={onBuy} />
     </Card>

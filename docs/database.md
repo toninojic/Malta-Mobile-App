@@ -11,6 +11,7 @@ erDiagram
   User ||--o{ Offer : submits
   User ||--o| UserTokenBalance : owns
   User ||--o{ TokenTransaction : receives
+  User ||--o{ Payment : pays
   User ||--o{ Notification : receives
   User ||--o{ RefundRequest : requests
   User ||--o{ Message : sends
@@ -33,6 +34,7 @@ erDiagram
   JobCompletion ||--o| Review : enables
 
   TokenPackage ||--o{ TokenTransaction : purchased_as
+  TokenPackage ||--o{ Payment : purchased_via
   TokenTransaction ||--o| RefundRequest : may_refund
   RefundRequest ||--o| TokenTransaction : creates_refund_ledger
 
@@ -202,6 +204,20 @@ erDiagram
     datetime createdAt
   }
 
+  Payment {
+    uuid id PK
+    uuid userId FK
+    uuid tokenPackageId FK
+    string stripeCheckoutSessionId
+    string stripePaymentIntentId
+    decimal amount
+    string currency
+    enum status
+    string failureReason
+    datetime createdAt
+    datetime updatedAt
+  }
+
   RefundRequest {
     uuid id PK
     uuid userId FK
@@ -296,3 +312,19 @@ Important indexes:
 - `Review.contactUnlockId` unique
 - `Review.contractorId + status + removedAt`
 - `Review.employerId`
+
+## Milestone 8 Tables Used
+
+- `Payment`
+- `TokenPackage`
+- `UserTokenBalance`
+- `TokenTransaction`
+
+Milestone 8 adds `Payment` rows for Stripe Checkout test-mode purchases. A payment starts as `PENDING`; only a valid Stripe webhook can mark it `PAID`, create a `PURCHASE` token transaction, and increase wallet balance. Failed payment intent webhooks mark payments `FAILED` and do not change token balances.
+
+Important indexes:
+
+- `Payment.stripeCheckoutSessionId` unique
+- `Payment.stripePaymentIntentId` unique
+- `Payment.userId + createdAt`
+- `Payment.status + createdAt`

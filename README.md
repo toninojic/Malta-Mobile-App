@@ -8,7 +8,7 @@ This repository is a milestone-based monorepo:
 - `apps/mobile` - Expo React Native mobile app for iOS and Android.
 - `docs` - Architecture, database model, milestone plans, and API contracts.
 
-Current implementation: **Milestone 6**
+Current implementation: **Milestone 8**
 
 - Architecture and relational database schema.
 - Authentication with access and refresh JWTs.
@@ -21,7 +21,9 @@ Current implementation: **Milestone 6**
 - Employer masked offer list and offer selection.
 - Admin offer read endpoints.
 - Token packages, wallet balance, token transaction history.
-- Free instant mock token purchases for MVP development.
+- Stripe Checkout token purchases in test mode.
+- Payment records with pending, paid, failed, and refunded states.
+- Stripe webhook token granting with idempotent wallet updates.
 - Refund request workflow with admin approval and rejection.
 - Mobile Wallet tab with packages, transactions, refunds, and admin refund review.
 - Contact unlock flow where contractors spend one token to reveal identities.
@@ -35,6 +37,7 @@ Current implementation: **Milestone 6**
 - Employer reviews, contractor one-time replies, and admin review removal.
 - Contractor rating summaries excluding removed reviews.
 - Mobile review screens, contractor profiles, and review moderation.
+- Admin dashboard statistics for Stripe test payments and test revenue.
 
 ## Quick Start
 
@@ -118,6 +121,20 @@ Run the Milestone 6 API smoke verification after the API is running:
 npm run smoke:milestone6 --workspace @malta-marketplace/api
 ```
 
+Run the Milestone 7 API smoke verification after the API is running:
+
+```bash
+npm run smoke:milestone7 --workspace @malta-marketplace/api
+```
+
+Run the Milestone 8 API smoke verification after the API is running:
+
+```bash
+npm run smoke:milestone8 --workspace @malta-marketplace/api
+```
+
+Milestone 8 disables `/tokens/mock-purchase` by default. For old historical smoke scripts that still exercise mock purchases, temporarily set `ALLOW_MOCK_PURCHASES=true` in `apps/api/.env`, restart the API, and turn it back off for Stripe testing.
+
 Run the mobile app:
 
 ```bash
@@ -145,6 +162,7 @@ npm run mobile:apk
 - [Business Flow](docs/business-flow.md)
 - [Admin Dashboard](docs/admin-dashboard.md)
 - [Android APK Testing](docs/apk-testing.md)
+- [Stripe Test Mode](docs/stripe-test-mode.md)
 - [Milestone 1](docs/milestone-1.md)
 - [Milestone 2](docs/milestone-2.md)
 - [Milestone 3](docs/milestone-3.md)
