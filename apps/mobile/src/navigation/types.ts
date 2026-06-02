@@ -12,7 +12,7 @@ export type JobsStackParamList = {
   JobForm: { jobId?: string };
   OfferForm: { jobId: string; offerId?: string };
   UnlockContact: { offerId: string };
-  MyOffers: undefined;
+  MyOffers: { view?: 'all' | 'selected' } | undefined;
 };
 
 export type WalletStackParamList = {
@@ -26,7 +26,13 @@ export type WalletStackParamList = {
 
 export type ActivityStackParamList = {
   ActivityHome: undefined;
-  Contacts: undefined;
+  Contacts:
+    | {
+        filter?: 'all' | 'in_progress' | 'completed';
+        emptyTitle?: string;
+        emptyMessage?: string;
+      }
+    | undefined;
   ContactDetails: { contactId: string; admin?: boolean };
   LeaveReview: { contactId: string };
   ReviewDetails: { reviewId: string; admin?: boolean };

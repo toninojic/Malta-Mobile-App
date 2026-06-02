@@ -1,4 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { RefreshCw, UsersRound } from 'lucide-react-native';
 import { useAdminContacts, useContacts } from '../../api/contactHooks';
@@ -13,16 +15,26 @@ import { ContactUnlock } from '../../types/domain';
 
 type Props = NativeStackScreenProps<ActivityStackParamList, 'Contacts'>;
 
-export function ContactsScreen({ navigation }: Props) {
+export function ContactsScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
   const contactsQuery = useContacts(!isAdmin);
   const adminContactsQuery = useAdminContacts(isAdmin);
   const query = isAdmin ? adminContactsQuery : contactsQuery;
+  const filter = route.params?.filter ?? 'all';
+  const contacts = filterContacts(query.data?.data ?? [], filter);
+  const emptyTitle = route.params?.emptyTitle ?? 'No contacts yet';
+  const emptyMessage = route.params?.emptyMessage ?? 'Unlocked relationships will appear here.';
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+    }, [query.refetch]),
+  );
 
   return (
-    <Screen>
+    <Screen refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>{isAdmin ? 'Contact unlocks' : 'Unlocked contacts'}</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
@@ -46,12 +58,12 @@ export function ContactsScreen({ navigation }: Props) {
         />
       ) : null}
 
-      {query.data?.data.length === 0 ? (
-        <EmptyState icon={UsersRound} title="No contacts yet" message="Unlocked relationships will appear here." />
+      {!query.isLoading && !query.error && contacts.length === 0 ? (
+        <EmptyState icon={UsersRound} title={emptyTitle} message={emptyMessage} />
       ) : null}
 
       <View style={styles.list}>
-        {query.data?.data.map((contact) => (
+        {contacts.map((contact) => (
           <ContactCard
             key={contact.id}
             contact={contact}
@@ -61,6 +73,21 @@ export function ContactsScreen({ navigation }: Props) {
       </View>
     </Screen>
   );
+}
+
+function filterContacts(
+  contacts: ContactUnlock[],
+  filter: NonNullable<ActivityStackParamList['Contacts']>['filter'],
+) {
+  if (filter === 'in_progress') {
+    return contacts.filter((contact) => contact.jobRequest.status === 'IN_PROGRESS');
+  }
+
+  if (filter === 'completed') {
+    return contacts.filter((contact) => contact.jobRequest.status === 'COMPLETED');
+  }
+
+  return contacts;
 }
 
 function ContactCard({ contact, onPress }: { contact: ContactUnlock; onPress: () => void }) {

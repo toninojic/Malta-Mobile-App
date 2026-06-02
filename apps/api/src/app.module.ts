@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ActivityModule } from './activity/activity.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
@@ -38,6 +39,7 @@ import { UsersModule } from './users/users.module';
     OffersModule,
     PaymentsModule,
     TokensModule,
+    ActivityModule,
     ContactsModule,
     NotificationsModule,
     ConversationsModule,

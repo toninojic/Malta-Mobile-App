@@ -1,5 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { CheckCircle2, ClipboardCheck, Mail, MessageCircle, Phone, RefreshCw, Star, UserRound } from 'lucide-react-native';
+import { useCallback } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useContact } from '../../api/contactHooks';
 import { useEnsureConversationForContact } from '../../api/messageHooks';
@@ -24,6 +26,13 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
   const ensureConversationMutation = useEnsureConversationForContact();
   const completeMutation = useCompleteContact();
   const confirmMutation = useConfirmCompletion();
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+      void completionQuery.refetch({ cancelRefetch: false });
+    }, [completionQuery.refetch, query.refetch]),
+  );
 
   if (query.error || !query.data) {
     return (

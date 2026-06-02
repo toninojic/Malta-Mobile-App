@@ -1,10 +1,9 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
 import { Bell, BriefcaseBusiness, CheckCircle2, ClipboardList, Star, TimerReset, UsersRound } from 'lucide-react-native';
 import { ComponentType, useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { api } from '../../api/client';
+import { useActivitySummary } from '../../api/activityHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -18,89 +17,28 @@ type Props = NativeStackScreenProps<ActivityStackParamList, 'ActivityHome'>;
 
 export function ActivityScreen({ navigation }: Props) {
   const theme = useTheme();
-  const isFocused = useIsFocused();
   const user = useAuthStore((state) => state.user);
   const isContractor = user?.role === 'CONTRACTOR';
-  const isEmployer = user?.role === 'EMPLOYER';
   const isAdmin = user?.role === 'ADMIN';
+  const isFocused = useIsFocused();
+  const summaryQuery = useActivitySummary(Boolean(user), isFocused);
 
-  const jobsQuery = useQuery({
-    queryKey: ['activity', 'jobs', user?.role],
-    queryFn: api.jobsMine,
-    enabled: isEmployer || isAdmin,
-    refetchInterval: isFocused && (isEmployer || isAdmin) ? 10_000 : false,
-  });
-  const offersQuery = useQuery({
-    queryKey: ['activity', 'offers', 'mine'],
-    queryFn: () => api.myOffers({ limit: 100 }),
-    enabled: isContractor,
-    refetchInterval: isFocused && isContractor ? 10_000 : false,
-  });
-  const contactsQuery = useQuery({
-    queryKey: ['activity', 'contacts', user?.role],
-    queryFn: () => api.contacts({ limit: 100 }),
-    enabled: isEmployer || isContractor,
-    refetchInterval: isFocused && (isEmployer || isContractor) ? 10_000 : false,
-  });
-  const reviewsQuery = useQuery({
-    queryKey: ['activity', 'reviews', 'contractor'],
-    queryFn: () => api.contractorReviews(user?.id ?? '', { limit: 50 }),
-    enabled: isContractor && Boolean(user?.id),
-    refetchInterval: isFocused && isContractor ? 10_000 : false,
-  });
-
-  const refetchActivity = useCallback(() => {
-    if (isEmployer || isAdmin) {
-      void jobsQuery.refetch();
+  const forceRefreshActivity = useCallback(() => {
+    if (!summaryQuery.isFetching) {
+      void summaryQuery.refetch();
     }
-    if (isContractor) {
-      void offersQuery.refetch();
-      void reviewsQuery.refetch();
-    }
-    if (isEmployer || isContractor) {
-      void contactsQuery.refetch();
-    }
-  }, [
-    contactsQuery.refetch,
-    isAdmin,
-    isContractor,
-    isEmployer,
-    jobsQuery.refetch,
-    offersQuery.refetch,
-    reviewsQuery.refetch,
-  ]);
+  }, [summaryQuery.isFetching, summaryQuery.refetch]);
 
   useFocusEffect(
     useCallback(() => {
-      refetchActivity();
-    }, [refetchActivity]),
+      void summaryQuery.refetch({ cancelRefetch: false });
+    }, [summaryQuery.refetch]),
   );
 
-  const jobs = jobsQuery.data ?? [];
-  const offers = offersQuery.data?.data ?? [];
-  const contacts = contactsQuery.data?.data ?? [];
-  const reviews = reviewsQuery.data?.data ?? [];
-  const selectedOffers = offers.filter((offer) => offer.status === 'SELECTED');
-  const unlockedContacts = contacts.filter((contact) => contact.status === 'UNLOCKED');
-  const inProgressContacts = unlockedContacts.filter((contact) => contact.jobRequest.status === 'IN_PROGRESS');
-  const completedContacts = unlockedContacts.filter((contact) => contact.jobRequest.status === 'COMPLETED');
-  const employerInProgress = jobs.filter((job) => job.status === 'IN_PROGRESS');
-  const employerCompleted = jobs.filter((job) => job.status === 'COMPLETED');
-  const isLoading =
-    ((isEmployer || isAdmin) && jobsQuery.isLoading) ||
-    (isContractor && offersQuery.isLoading) ||
-    ((isEmployer || isContractor) && contactsQuery.isLoading) ||
-    (isContractor && reviewsQuery.isLoading);
-  const isRefreshing =
-    ((isEmployer || isAdmin) && jobsQuery.isRefetching) ||
-    (isContractor && offersQuery.isRefetching) ||
-    ((isEmployer || isContractor) && contactsQuery.isRefetching) ||
-    (isContractor && reviewsQuery.isRefetching);
-  const firstError =
-    ((isEmployer || isAdmin) && jobsQuery.error) ||
-    (isContractor && offersQuery.error) ||
-    ((isEmployer || isContractor) && contactsQuery.error) ||
-    (isContractor && reviewsQuery.error);
+  const summary = summaryQuery.data;
+  const isLoading = summaryQuery.isLoading;
+  const isRefreshing = summaryQuery.isRefetching;
+  const firstError = summaryQuery.error;
 
   if (isLoading) {
     return (
@@ -113,7 +51,7 @@ export function ActivityScreen({ navigation }: Props) {
   }
 
   return (
-    <Screen refreshing={isRefreshing} onRefresh={refetchActivity}>
+    <Screen refreshing={isRefreshing} onRefresh={forceRefreshActivity}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Activity</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
@@ -121,35 +59,83 @@ export function ActivityScreen({ navigation }: Props) {
         </Text>
       </View>
 
-      {firstError ? (
+      {firstError && !summary ? (
         <EmptyState
           icon={TimerReset}
           title="Could not refresh activity"
           message={firstError instanceof Error ? firstError.message : 'Please try again.'}
           actionTitle="Retry"
-          onAction={refetchActivity}
+          onAction={forceRefreshActivity}
         />
       ) : null}
 
       {isContractor ? (
         <>
-          <ActivityCard title="My Offers" icon={ClipboardList} count={offers.length} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'MyOffers' })} />
-          <ActivityCard title="Selected Offers" icon={CheckCircle2} count={selectedOffers.length} badge="Unlock Contact" onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'MyOffers' })} />
-          <ActivityCard title="Unlocked Contacts" icon={UsersRound} count={unlockedContacts.length} onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="Jobs In Progress" icon={BriefcaseBusiness} count={inProgressContacts.length} badge="IN_PROGRESS" onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="Completed Jobs" icon={CheckCircle2} count={completedContacts.length} badge="COMPLETED" onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="My Reviews" icon={Star} count={reviews.length} onPress={() => navigation.navigate('MyReviews')} />
+          <ActivityCard title="My Offers" icon={ClipboardList} count={summary?.role === 'CONTRACTOR' ? summary.myOffersCount : 0} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'MyOffers', params: { view: 'all' } })} />
+          <ActivityCard title="Selected Offers" icon={CheckCircle2} count={summary?.role === 'CONTRACTOR' ? summary.selectedOffersCount : 0} badge={summary?.role === 'CONTRACTOR' && summary.selectedOffersCount ? 'Unlock Contact' : undefined} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'MyOffers', params: { view: 'selected' } })} />
+          <ActivityCard title="Unlocked Contacts" icon={UsersRound} count={summary?.role === 'CONTRACTOR' ? summary.unlockedContactsCount : 0} onPress={() => navigation.navigate('Contacts', { filter: 'all' })} />
+          <ActivityCard
+            title="Jobs In Progress"
+            icon={BriefcaseBusiness}
+            count={summary?.role === 'CONTRACTOR' ? summary.jobsInProgressCount : 0}
+            badge={summary?.role === 'CONTRACTOR' && summary.jobsInProgressCount ? 'IN_PROGRESS' : undefined}
+            onPress={() =>
+              navigation.navigate('Contacts', {
+                filter: 'in_progress',
+                emptyTitle: 'No jobs in progress yet',
+                emptyMessage: 'Unlocked and active jobs will appear here.',
+              })
+            }
+          />
+          <ActivityCard
+            title="Completed Jobs"
+            icon={CheckCircle2}
+            count={summary?.role === 'CONTRACTOR' ? summary.completedJobsCount : 0}
+            badge={summary?.role === 'CONTRACTOR' && summary.completedJobsCount ? 'COMPLETED' : undefined}
+            onPress={() =>
+              navigation.navigate('Contacts', {
+                filter: 'completed',
+                emptyTitle: 'No completed jobs yet',
+                emptyMessage: 'Completed unlocked jobs will appear here.',
+              })
+            }
+          />
+          <ActivityCard title="My Reviews" icon={Star} count={summary?.role === 'CONTRACTOR' ? summary.myReviewsCount : 0} onPress={() => navigation.navigate('MyReviews')} />
         </>
       ) : (
         <>
-          <ActivityCard title={isAdmin ? 'All Jobs' : 'My Jobs'} icon={BriefcaseBusiness} count={jobs.length} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
-          <ActivityCard title="Offers Received" icon={ClipboardList} count={jobs.reduce((total, job) => total + (job.status === 'ACTIVE' || job.status === 'IN_PROGRESS' ? 1 : 0), 0)} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
-          <ActivityCard title="Selected Offers" icon={CheckCircle2} count={employerInProgress.length} badge="LOCKED UNTIL UNLOCK" onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
-          <ActivityCard title="Unlocked Contacts" icon={UsersRound} count={unlockedContacts.length} onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="Jobs In Progress" icon={BriefcaseBusiness} count={employerInProgress.length} badge="IN_PROGRESS" onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="Jobs Waiting Confirmation" icon={TimerReset} count={inProgressContacts.length} badge="CONFIRM" onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="Reviews To Leave" icon={Star} count={employerCompleted.length} onPress={() => navigation.navigate('Contacts')} />
-          <ActivityCard title="Alerts" icon={Bell} count={0} onPress={() => navigation.navigate('NotificationsHome')} />
+          <ActivityCard title={isAdmin ? 'All Jobs' : 'My Jobs'} icon={BriefcaseBusiness} count={summary?.role !== 'CONTRACTOR' ? summary?.myJobsCount ?? 0 : 0} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
+          <ActivityCard title="Offers Received" icon={ClipboardList} count={summary?.role !== 'CONTRACTOR' ? summary?.offersReceivedCount ?? 0 : 0} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
+          <ActivityCard title="Selected Offers" icon={CheckCircle2} count={summary?.role !== 'CONTRACTOR' ? summary?.selectedOffersCount ?? 0 : 0} badge={summary?.role !== 'CONTRACTOR' && summary?.selectedOffersCount ? 'LOCKED UNTIL UNLOCK' : undefined} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
+          <ActivityCard title="Unlocked Contacts" icon={UsersRound} count={summary?.role !== 'CONTRACTOR' ? summary?.unlockedContactsCount ?? 0 : 0} onPress={() => navigation.navigate('Contacts', { filter: 'all' })} />
+          <ActivityCard
+            title="Jobs In Progress"
+            icon={BriefcaseBusiness}
+            count={summary?.role !== 'CONTRACTOR' ? summary?.jobsInProgressCount ?? 0 : 0}
+            badge={summary?.role !== 'CONTRACTOR' && summary?.jobsInProgressCount ? 'IN_PROGRESS' : undefined}
+            onPress={() =>
+              navigation.navigate('Contacts', {
+                filter: 'in_progress',
+                emptyTitle: 'No jobs in progress yet',
+                emptyMessage: 'Unlocked jobs in progress will appear here.',
+              })
+            }
+          />
+          <ActivityCard
+            title="Jobs Waiting Confirmation"
+            icon={TimerReset}
+            count={summary?.role !== 'CONTRACTOR' ? summary?.jobsWaitingConfirmationCount ?? 0 : 0}
+            badge={summary?.role !== 'CONTRACTOR' && summary?.jobsWaitingConfirmationCount ? 'CONFIRM' : undefined}
+            onPress={() =>
+              navigation.navigate('Contacts', {
+                filter: 'in_progress',
+                emptyTitle: 'No jobs waiting confirmation',
+                emptyMessage: 'Contractor completion requests will appear here.',
+              })
+            }
+          />
+          <ActivityCard title="Reviews To Leave" icon={Star} count={summary?.role !== 'CONTRACTOR' ? summary?.reviewsToLeaveCount ?? 0 : 0} onPress={() => navigation.navigate('Contacts', { filter: 'completed' })} />
+          <ActivityCard title="Alerts" icon={Bell} count={summary?.role !== 'CONTRACTOR' ? summary?.alertsCount ?? 0 : 0} onPress={() => navigation.navigate('NotificationsHome')} />
         </>
       )}
     </Screen>

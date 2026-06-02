@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, HttpCode, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -21,9 +22,18 @@ type RequestWithRawBody = Request & {
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
+  @Get('config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
+  config() {
+    return this.paymentsService.getConfig();
+  }
+
   @Post('create-checkout-session')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   createCheckoutSession(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCheckoutSessionDto) {
     return this.paymentsService.createCheckoutSession(user, dto);
   }
@@ -31,6 +41,7 @@ export class PaymentsController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   payments(@CurrentUser() user: AuthenticatedUser, @Query() query: PaginationQueryDto) {
     return this.paymentsService.findMine(user, query);
   }

@@ -29,6 +29,7 @@ Employer leaves review
 ## Step Rules
 
 1. Employer creates an ACTIVE job with title, description, category, subcategory, location, and optional images.
+   Job title must be at least 5 characters, description at least 20 characters, and category/subcategory must be a valid service combination from the shared category list.
 2. Contractors browse ACTIVE jobs and submit PENDING offers.
 3. Employers see masked offers: price, completion time, message, average rating, and total reviews. Contractor identity stays hidden.
 4. Employer selects one offer. The offer becomes SELECTED, the job becomes IN_PROGRESS, and a locked ContactUnlock is created.
@@ -38,6 +39,8 @@ Employer leaves review
 8. Contractor marks the unlocked job completed. Employer receives confirmation notification.
 9. Employer confirms completion. Job becomes COMPLETED and the selected offer becomes COMPLETED.
 10. Review becomes available only after confirmed completion.
+
+After completion, contractor offer cards become read-only for marketplace actions: edit, withdraw, and unlock controls are hidden. Chat may still be opened when the contact is already unlocked.
 
 ## CLOSED vs COMPLETED
 
@@ -50,6 +53,15 @@ Employer leaves review
 Employers never spend tokens and do not need Wallet. Their bottom navigation is Jobs, Activity, Messages, Alerts, and Profile.
 
 Contractors buy and spend tokens. Their bottom navigation is Jobs, Activity, Messages, Wallet, and Profile.
+
+Contractor Activity clears unread Activity notifications when opened. The Activity cards route into filtered lists:
+
+```text
+My Offers -> all contractor offers
+Selected Offers -> selected contractor offers only
+Jobs In Progress -> unlocked contacts whose job is IN_PROGRESS
+Completed Jobs -> unlocked contacts whose job is COMPLETED
+```
 
 Admins can view operational data but do not participate in marketplace conversations or token unlocks as a user.
 

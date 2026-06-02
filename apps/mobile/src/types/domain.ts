@@ -217,6 +217,12 @@ export type CreateCheckoutSessionResponse = {
   status: PaymentStatus;
 };
 
+export type PaymentConfig = {
+  mode: 'MOCK' | 'STRIPE';
+  mockPurchasesEnabled: boolean;
+  stripeConfigured: boolean;
+};
+
 export type UnlockStatusResponse = {
   offerId: string;
   contactId?: string | null;
@@ -369,6 +375,29 @@ export type InAppNotification = {
   readAt?: string | null;
   createdAt: string;
 };
+
+export type ActivitySummary =
+  | {
+      role: 'CONTRACTOR';
+      myOffersCount: number;
+      selectedOffersCount: number;
+      unlockedContactsCount: number;
+      jobsInProgressCount: number;
+      completedJobsCount: number;
+      myReviewsCount: number;
+    }
+  | {
+      role: 'EMPLOYER' | 'ADMIN';
+      myJobsCount: number;
+      offersReceivedCount: number;
+      selectedOffersCount: number;
+      unlockedContactsCount: number;
+      jobsInProgressCount: number;
+      jobsWaitingConfirmationCount: number;
+      reviewsToLeaveCount: number;
+      alertsCount: number;
+      completedJobsCount?: number;
+    };
 
 export type AuditLog = {
   id: string;

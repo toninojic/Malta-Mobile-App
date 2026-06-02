@@ -1,21 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
+import { appendMessage, invalidateQueryKeys } from './invalidation';
+import { ChatMessage } from '../types/domain';
 
-export function useConversations(enabled = true) {
+const CONVERSATION_LIST_POLL_INTERVAL_MS = 20_000;
+const ADMIN_CONVERSATION_LIST_POLL_INTERVAL_MS = 30_000;
+const CONVERSATION_THREAD_POLL_INTERVAL_MS = 3_000;
+
+export function useConversations(enabled = true, poll = false) {
   return useQuery({
     queryKey: ['messages', 'conversations'],
     queryFn: () => api.conversations({ limit: 50 }),
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    refetchInterval: enabled && poll ? CONVERSATION_LIST_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
-export function useAdminConversations(enabled: boolean) {
+export function useAdminConversations(enabled: boolean, poll = false) {
   return useQuery({
     queryKey: ['admin', 'messages', 'conversations'],
     queryFn: () => api.adminConversations({ limit: 100 }),
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    refetchInterval: enabled && poll ? ADMIN_CONVERSATION_LIST_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -24,7 +34,10 @@ export function useConversationMessages(conversationId?: string, poll = false) {
     queryKey: ['messages', 'conversation', conversationId],
     queryFn: () => api.conversationMessages(conversationId as string),
     enabled: Boolean(conversationId),
-    refetchInterval: poll ? 3000 : false,
+    refetchInterval: poll ? CONVERSATION_THREAD_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -34,10 +47,12 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: ({ id, content }: { id: string; content: string }) => api.sendMessage(id, content),
     onSuccess: async (result) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['messages'] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-        queryClient.invalidateQueries({ queryKey: ['messages', 'conversation', result.conversation.id] }),
+      appendMessage(queryClient, result.conversation.id, result.message);
+      await invalidateQueryKeys(queryClient, [
+        ['messages', 'conversations'],
+        ['messages', 'conversation', result.conversation.id],
+        ['notifications'],
+        ['activity', 'summary'],
       ]);
     },
   });
@@ -48,8 +63,12 @@ export function useEnsureConversationForContact() {
 
   return useMutation({
     mutationFn: api.ensureConversationForContact,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['messages'] });
+    onSuccess: async (conversation) => {
+      await invalidateQueryKeys(queryClient, [
+        ['messages', 'conversations'],
+        ['messages', 'conversation', conversation.id],
+        ['activity', 'summary'],
+      ]);
     },
   });
 }
@@ -59,8 +78,15 @@ export function useMarkMessageRead() {
 
   return useMutation({
     mutationFn: api.markMessageRead,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['messages'] });
+    onSuccess: async (message) => {
+      queryClient.setQueryData<ChatMessage[]>(['messages', 'conversation', message.conversationId], (messages) =>
+        messages?.map((currentMessage) => (currentMessage.id === message.id ? message : currentMessage)),
+      );
+      await invalidateQueryKeys(queryClient, [
+        ['messages', 'conversations'],
+        ['notifications', 'unread-count'],
+        ['activity', 'summary'],
+      ]);
     },
   });
 }

@@ -4,6 +4,7 @@ import { Save } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
+import { cacheOffer, invalidateMarketplaceState } from '../../api/invalidation';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { Screen } from '../../components/Screen';
@@ -27,6 +28,7 @@ export function OfferFormScreen({ route, navigation }: Props) {
     queryKey: ['offers', 'mine', 'form', offerId],
     queryFn: () => api.myOffers({ limit: 100 }),
     enabled: isEditing,
+    refetchOnWindowFocus: true,
   });
 
   const existingOffer = useMemo(
@@ -55,11 +57,13 @@ export function OfferFormScreen({ route, navigation }: Props) {
 
   const mutation = useMutation({
     mutationFn: () => (offerId ? api.updateOffer(offerId, values) : api.createOffer(jobId, values)),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['offers'] }),
-        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
-      ]);
+    onSuccess: async (offer) => {
+      cacheOffer(queryClient, offer);
+      await invalidateMarketplaceState(queryClient, {
+        jobId: offer.jobRequestId,
+        offerId: offer.id,
+        contractorId: offer.contractorId,
+      });
       navigation.goBack();
     },
     onError: (error) => {

@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
+import { invalidateMarketplaceState } from './invalidation';
 
 export function useCompletionStatus(contactId?: string) {
   return useQuery({
     queryKey: ['reviews', 'completion-status', contactId],
     queryFn: () => api.completionStatus(contactId as string),
     enabled: Boolean(contactId),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -14,12 +16,14 @@ export function useCompleteContact() {
 
   return useMutation({
     mutationFn: api.completeContact,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['reviews'] }),
-        queryClient.invalidateQueries({ queryKey: ['contacts'] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
+    onSuccess: async (completion) => {
+      await invalidateMarketplaceState(queryClient, {
+        contactId: completion.contactUnlockId,
+        jobId: completion.jobRequestId,
+        offerId: completion.offerId,
+        contractorId: completion.contractorId,
+        includeReviews: true,
+      });
     },
   });
 }
@@ -29,13 +33,14 @@ export function useConfirmCompletion() {
 
   return useMutation({
     mutationFn: api.confirmCompletion,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['reviews'] }),
-        queryClient.invalidateQueries({ queryKey: ['contacts'] }),
-        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
+    onSuccess: async (completion) => {
+      await invalidateMarketplaceState(queryClient, {
+        contactId: completion.contactUnlockId,
+        jobId: completion.jobRequestId,
+        offerId: completion.offerId,
+        contractorId: completion.contractorId,
+        includeReviews: true,
+      });
     },
   });
 }
@@ -47,11 +52,14 @@ export function useCreateReview() {
     mutationFn: ({ contactId, rating, comment }: { contactId: string; rating: number; comment?: string }) =>
       api.createReview(contactId, { rating, comment }),
     onSuccess: async (review) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['reviews'] }),
-        queryClient.invalidateQueries({ queryKey: ['contractors', review.contractorId] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
+      await invalidateMarketplaceState(queryClient, {
+        contactId: review.contactUnlockId,
+        jobId: review.jobRequestId,
+        offerId: review.offerId,
+        contractorId: review.contractorId,
+        reviewId: review.id,
+        includeReviews: true,
+      });
     },
   });
 }
@@ -61,6 +69,7 @@ export function useReview(reviewId?: string, admin = false) {
     queryKey: [admin ? 'admin' : 'reviews', 'details', reviewId],
     queryFn: () => (admin ? api.adminReview(reviewId as string) : api.review(reviewId as string)),
     enabled: Boolean(reviewId),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -69,6 +78,7 @@ export function useContractorReviews(contractorId?: string) {
     queryKey: ['contractors', contractorId, 'reviews'],
     queryFn: () => api.contractorReviews(contractorId as string, { limit: 50 }),
     enabled: Boolean(contractorId),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -77,6 +87,7 @@ export function useContractorRatingSummary(contractorId?: string) {
     queryKey: ['contractors', contractorId, 'rating-summary'],
     queryFn: () => api.contractorRatingSummary(contractorId as string),
     enabled: Boolean(contractorId),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -87,11 +98,14 @@ export function useReplyReview() {
     mutationFn: ({ reviewId, contractorReply }: { reviewId: string; contractorReply: string }) =>
       api.replyReview(reviewId, contractorReply),
     onSuccess: async (review) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['reviews'] }),
-        queryClient.invalidateQueries({ queryKey: ['contractors', review.contractorId] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
+      await invalidateMarketplaceState(queryClient, {
+        contactId: review.contactUnlockId,
+        jobId: review.jobRequestId,
+        offerId: review.offerId,
+        contractorId: review.contractorId,
+        reviewId: review.id,
+        includeReviews: true,
+      });
     },
   });
 }
@@ -101,6 +115,7 @@ export function useAdminReviews(enabled: boolean) {
     queryKey: ['admin', 'reviews'],
     queryFn: () => api.adminReviews({ limit: 100 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -110,14 +125,15 @@ export function useRemoveReview() {
   return useMutation({
     mutationFn: api.removeReview,
     onSuccess: async (review) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'reviews'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
-        queryClient.invalidateQueries({ queryKey: ['reviews'] }),
-        queryClient.invalidateQueries({ queryKey: ['contractors', review.contractorId] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
+      await invalidateMarketplaceState(queryClient, {
+        contactId: review.contactUnlockId,
+        jobId: review.jobRequestId,
+        offerId: review.offerId,
+        contractorId: review.contractorId,
+        reviewId: review.id,
+        includeAdmin: true,
+        includeReviews: true,
+      });
     },
   });
 }

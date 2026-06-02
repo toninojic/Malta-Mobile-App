@@ -4,12 +4,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { ImagePlus, Save, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { api } from '../../api/client';
+import { api, ApiError } from '../../api/client';
+import { cacheJob, invalidateMarketplaceState } from '../../api/invalidation';
 import { Button } from '../../components/Button';
-import { OptionSelect } from '../../components/OptionSelect';
+import { CategoryAccordion } from '../../components/CategoryAccordion';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
-import { SERVICE_CATEGORIES } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { JobFormValues } from '../../types/domain';
@@ -22,6 +22,8 @@ type SelectedImage = {
   size?: number;
   uploaded: boolean;
 };
+type JobField = 'title' | 'description' | 'category' | 'subcategory' | 'location';
+type JobFieldErrors = Partial<Record<JobField, string>>;
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -38,12 +40,14 @@ export function JobFormScreen({ route, navigation }: Props) {
   const [subcategory, setSubcategory] = useState('');
   const [location, setLocation] = useState('');
   const [images, setImages] = useState<SelectedImage[]>([]);
-  const selectedCategory = SERVICE_CATEGORIES.find((item) => item.key === category);
+  const [fieldErrors, setFieldErrors] = useState<JobFieldErrors>({});
+  const [formError, setFormError] = useState('');
 
   const query = useQuery({
     queryKey: ['jobs', jobId],
     queryFn: () => api.job(jobId as string),
     enabled: isEditing,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -91,24 +95,27 @@ export function JobFormScreen({ route, navigation }: Props) {
       return jobId ? api.updateJob(jobId, payload) : api.createJob(payload);
     },
     onSuccess: async (job) => {
-      await queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      cacheJob(queryClient, job);
+      await invalidateMarketplaceState(queryClient, { jobId: job.id });
       navigation.replace('JobDetails', { jobId: job.id });
     },
     onError: (error) => {
-      Alert.alert('Could not save job', error instanceof Error ? error.message : 'Please check the form.');
+      const backendErrors = mapBackendErrors(error);
+      setFieldErrors((current) => ({ ...current, ...backendErrors }));
+      setFormError(error instanceof Error ? error.message : 'Please check the form.');
     },
   });
 
   const submit = () => {
-    if (title.trim().length < 4 || description.trim().length < 20) {
-      Alert.alert('More detail needed', 'Add a clear title and description before saving.');
-      return;
-    }
-    if (!category || !subcategory) {
-      Alert.alert('Category needed', 'Choose a category and subcategory before saving.');
+    const nextErrors = validateJobForm({ title, description, category, subcategory, location });
+    setFieldErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length) {
+      setFormError('Please fix the highlighted fields.');
       return;
     }
 
+    setFormError('');
     mutation.mutate();
   };
 
@@ -171,25 +178,46 @@ export function JobFormScreen({ route, navigation }: Props) {
         <Text style={[styles.title, { color: theme.colors.text }]}>{isEditing ? 'Edit job request' : 'Create job request'}</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Requests stay active for 30 days.</Text>
       </View>
-      <TextField label="Title" value={title} onChangeText={setTitle} />
-      <TextField label="Description" value={description} onChangeText={setDescription} multiline />
-      <OptionSelect
-        label="Category"
-        value={category}
-        options={SERVICE_CATEGORIES}
-        onChange={(value) => {
-          setCategory(value);
-          setSubcategory('');
+      {formError ? <Text style={[styles.formError, { color: theme.colors.danger }]}>{formError}</Text> : null}
+      <TextField
+        label="Title"
+        value={title}
+        error={fieldErrors.title}
+        onChangeText={(value) => {
+          setTitle(value);
+          setFieldErrors((current) => ({ ...current, title: undefined }));
         }}
       />
-      <OptionSelect
-        label="Subcategory"
-        value={subcategory}
-        options={selectedCategory?.subcategories ?? []}
-        placeholder="Choose a category first."
-        onChange={setSubcategory}
+      <TextField
+        label="Description"
+        value={description}
+        error={fieldErrors.description}
+        onChangeText={(value) => {
+          setDescription(value);
+          setFieldErrors((current) => ({ ...current, description: undefined }));
+        }}
+        multiline
       />
-      <TextField label="Location" value={location} onChangeText={setLocation} />
+      <CategoryAccordion
+        label="Category"
+        category={category}
+        subcategory={subcategory}
+        error={fieldErrors.category ?? fieldErrors.subcategory}
+        onSelect={(nextCategory, nextSubcategory) => {
+          setCategory(nextCategory);
+          setSubcategory(nextSubcategory);
+          setFieldErrors((current) => ({ ...current, category: undefined, subcategory: undefined }));
+        }}
+      />
+      <TextField
+        label="Location"
+        value={location}
+        error={fieldErrors.location}
+        onChangeText={(value) => {
+          setLocation(value);
+          setFieldErrors((current) => ({ ...current, location: undefined }));
+        }}
+      />
       <View style={styles.imageHeader}>
         <Text style={[styles.imageLabel, { color: theme.colors.text }]}>Images</Text>
         <Button title="Add" icon={ImagePlus} variant="secondary" onPress={pickImages} style={styles.addImageButton} />
@@ -237,6 +265,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
   },
+  formError: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
   imageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,3 +309,69 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.72)',
   },
 });
+
+function validateJobForm(input: {
+  title: string;
+  description: string;
+  category: string;
+  subcategory: string;
+  location: string;
+}) {
+  const errors: JobFieldErrors = {};
+
+  if (!input.title.trim()) {
+    errors.title = 'Title is required.';
+  } else if (input.title.trim().length < 5) {
+    errors.title = 'Title must be at least 5 characters.';
+  }
+
+  if (!input.description.trim()) {
+    errors.description = 'Description is required.';
+  } else if (input.description.trim().length < 20) {
+    errors.description = 'Description must be at least 20 characters.';
+  }
+
+  if (!input.category) {
+    errors.category = 'Category is required.';
+  }
+
+  if (!input.subcategory) {
+    errors.subcategory = 'Subcategory is required.';
+  }
+
+  if (!input.location.trim()) {
+    errors.location = 'Location is required.';
+  }
+
+  return errors;
+}
+
+function mapBackendErrors(error: unknown) {
+  if (!(error instanceof ApiError)) {
+    return {};
+  }
+
+  const details = error.details as { message?: unknown } | undefined;
+  const messages = Array.isArray(details?.message)
+    ? details.message.map(String)
+    : typeof details?.message === 'string'
+      ? [details.message]
+      : [error.message];
+  const errors: JobFieldErrors = {};
+
+  messages.forEach((message) => {
+    if (message.startsWith('Title')) {
+      errors.title = message;
+    } else if (message.startsWith('Description')) {
+      errors.description = message;
+    } else if (message.startsWith('Category') || message === 'Invalid service category.') {
+      errors.category = message;
+    } else if (message.startsWith('Subcategory') || message === 'Invalid service subcategory for selected category.') {
+      errors.subcategory = message;
+    } else if (message.startsWith('Location')) {
+      errors.location = message;
+    }
+  });
+
+  return errors;
+}

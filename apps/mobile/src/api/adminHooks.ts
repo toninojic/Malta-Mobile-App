@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { JobStatus, OfferStatus, RefundStatus, UserRole, UserStatus } from '../types/domain';
 import { api } from './client';
+import { cacheJob, invalidateMarketplaceState, invalidateQueryKeys } from './invalidation';
 
 export function useAdminStatistics(enabled = true) {
   return useQuery({
@@ -8,6 +9,8 @@ export function useAdminStatistics(enabled = true) {
     queryFn: api.adminStatistics,
     enabled,
     refetchInterval: enabled ? 15_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -16,6 +19,7 @@ export function useAdminUsers(input: { role?: UserRole; status?: UserStatus; sea
     queryKey: ['admin', 'users', input],
     queryFn: () => api.adminUsers({ ...input, limit: 50 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -24,6 +28,7 @@ export function useAdminJobs(input: { status?: JobStatus; category?: string; loc
     queryKey: ['admin', 'jobs', input],
     queryFn: () => api.adminJobs({ ...input, limit: 50 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -32,6 +37,7 @@ export function useAdminOffers(input: { status?: OfferStatus } = {}, enabled = t
     queryKey: ['admin', 'offers', input],
     queryFn: () => api.adminOffers({ ...input, limit: 50 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -40,6 +46,7 @@ export function useAdminAuditLogs(enabled = true) {
     queryKey: ['admin', 'audit-logs'],
     queryFn: () => api.adminAuditLogs({ limit: 50 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -48,6 +55,7 @@ export function useAdminConversationMessages(conversationId?: string) {
     queryKey: ['admin', 'conversation', conversationId, 'messages'],
     queryFn: () => api.adminConversationMessages(conversationId as string),
     enabled: Boolean(conversationId),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -57,10 +65,10 @@ export function useSuspendUser() {
   return useMutation({
     mutationFn: api.suspendUser,
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['admin', 'users'],
+        ['admin', 'statistics'],
+        ['admin', 'audit-logs'],
       ]);
     },
   });
@@ -72,10 +80,10 @@ export function useActivateUser() {
   return useMutation({
     mutationFn: api.activateUser,
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['admin', 'users'],
+        ['admin', 'statistics'],
+        ['admin', 'audit-logs'],
       ]);
     },
   });
@@ -86,12 +94,9 @@ export function useCloseAdminJob() {
 
   return useMutation({
     mutationFn: api.closeAdminJob,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'jobs'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
-      ]);
+    onSuccess: async (job) => {
+      cacheJob(queryClient, job);
+      await invalidateMarketplaceState(queryClient, { jobId: job.id, includeAdmin: true });
     },
   });
 }
@@ -101,5 +106,6 @@ export function useAdminRefundsForModeration(enabled = true, status?: RefundStat
     queryKey: ['admin', 'tokens', 'refunds', status],
     queryFn: () => api.adminRefunds({ status, limit: 50 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }

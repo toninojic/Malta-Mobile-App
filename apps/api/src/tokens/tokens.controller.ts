@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -21,21 +22,25 @@ export class TokensController {
   constructor(private readonly tokensService: TokensService) {}
 
   @Get('packages')
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   packages() {
     return this.tokensService.findActivePackages();
   }
 
   @Get('balance')
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   balance(@CurrentUser() user: AuthenticatedUser) {
     return this.tokensService.getBalance(user);
   }
 
   @Get('transactions')
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   transactions(@CurrentUser() user: AuthenticatedUser, @Query() query: PaginationQueryDto) {
     return this.tokensService.findTransactions(user, query);
   }
 
   @Post('mock-purchase')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   mockPurchase(@CurrentUser() user: AuthenticatedUser, @Body() dto: MockPurchaseDto) {
     return this.tokensService.mockPurchase(user, dto);
   }

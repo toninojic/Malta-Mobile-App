@@ -1,5 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RefreshCw, Star } from 'lucide-react-native';
+import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useContractorRatingSummary, useContractorReviews } from '../../api/reviewHooks';
 import { EmptyState } from '../../components/EmptyState';
@@ -18,8 +20,22 @@ export function MyReviewsScreen({ navigation }: Props) {
   const reviewsQuery = useContractorReviews(user?.id);
   const summaryQuery = useContractorRatingSummary(user?.id);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) {
+        return;
+      }
+
+      void reviewsQuery.refetch({ cancelRefetch: false });
+      void summaryQuery.refetch({ cancelRefetch: false });
+    }, [reviewsQuery.refetch, summaryQuery.refetch, user?.id]),
+  );
+
   return (
-    <Screen>
+    <Screen refreshing={reviewsQuery.isRefetching || summaryQuery.isRefetching} onRefresh={() => {
+      void reviewsQuery.refetch();
+      void summaryQuery.refetch();
+    }}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>My reviews</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Ratings from confirmed completed jobs.</Text>

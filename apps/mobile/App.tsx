@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
-import { Text, useColorScheme, View } from 'react-native';
+import { AppState, Text, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from './src/api/client';
@@ -15,17 +15,18 @@ export default function App() {
       new QueryClient({
         defaultOptions: {
           queries: {
-            refetchOnMount: true,
-            refetchOnWindowFocus: true,
+            gcTime: 5 * 60_000,
+            refetchOnMount: false,
+            refetchOnWindowFocus: false,
             refetchOnReconnect: true,
             retry: (failureCount, error) => {
               if (error instanceof ApiError && error.status === 429) {
                 return false;
               }
 
-              return failureCount < 1;
+              return failureCount < 2;
             },
-            staleTime: 0,
+            staleTime: 30_000,
           },
           mutations: {
             retry: false,
@@ -38,6 +39,15 @@ export default function App() {
 
   useEffect(() => {
     logApiStartupDiagnostics();
+  }, []);
+
+  useEffect(() => {
+    focusManager.setFocused(AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', (state) => {
+      focusManager.setFocused(state === 'active');
+    });
+
+    return () => subscription.remove();
   }, []);
 
   return (

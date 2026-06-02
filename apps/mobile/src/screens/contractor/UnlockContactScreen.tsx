@@ -1,6 +1,8 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { LockOpen, RefreshCw } from 'lucide-react-native';
+import { useCallback } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useUnlockOffer, useUnlockStatus } from '../../api/contactHooks';
 import { api } from '../../api/client';
@@ -20,6 +22,7 @@ export function UnlockContactScreen({ route, navigation }: Props) {
   const balanceQuery = useQuery({
     queryKey: ['tokens', 'balance'],
     queryFn: api.tokenBalance,
+    refetchOnWindowFocus: true,
   });
   const statusQuery = useUnlockStatus(offerId);
   const unlockMutation = useUnlockOffer();
@@ -27,6 +30,13 @@ export function UnlockContactScreen({ route, navigation }: Props) {
   const cost = statusQuery.data?.cost ?? 1;
   const balance = balanceQuery.data?.balance ?? 0;
   const canUnlock = balance >= cost && statusQuery.data?.status !== 'UNLOCKED';
+
+  useFocusEffect(
+    useCallback(() => {
+      void balanceQuery.refetch({ cancelRefetch: false });
+      void statusQuery.refetch({ cancelRefetch: false });
+    }, [balanceQuery.refetch, statusQuery.refetch]),
+  );
 
   const confirmUnlock = () => {
     unlockMutation.mutate(offerId, {

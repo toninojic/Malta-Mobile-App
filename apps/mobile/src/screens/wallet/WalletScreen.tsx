@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { Coins, CreditCard, ReceiptText, RefreshCw, RotateCcw } from 'lucide-react-native';
-import { ReactNode } from 'react';
+import { ReactNode, useCallback } from 'react';
 import { Alert, ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import {
   useAdminRefunds,
@@ -9,7 +10,7 @@ import {
   useTokenPackages,
   useTokenTransactions,
 } from '../../api/tokenHooks';
-import { useCreateCheckoutSession, usePayments } from '../../api/paymentHooks';
+import { useCreateCheckoutSession, useMockPurchase, usePaymentConfig, usePayments } from '../../api/paymentHooks';
 import { BalanceCard } from '../../components/wallet/BalanceCard';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
@@ -33,10 +34,48 @@ export function WalletScreen({ navigation }: Props) {
   const transactionsQuery = useTokenTransactions();
   const refundsQuery = useMyRefunds();
   const paymentsQuery = usePayments();
+  const paymentConfigQuery = usePaymentConfig();
   const adminRefundsQuery = useAdminRefunds(isAdmin);
   const checkoutMutation = useCreateCheckoutSession();
+  const mockPurchaseMutation = useMockPurchase();
+  const isMockMode = paymentConfigQuery.data?.mode === 'MOCK';
+
+  useFocusEffect(
+    useCallback(() => {
+      void packagesQuery.refetch({ cancelRefetch: false });
+      void balanceQuery.refetch({ cancelRefetch: false });
+      void transactionsQuery.refetch({ cancelRefetch: false });
+      void refundsQuery.refetch({ cancelRefetch: false });
+      void paymentsQuery.refetch({ cancelRefetch: false });
+      void paymentConfigQuery.refetch({ cancelRefetch: false });
+      if (isAdmin) {
+        void adminRefundsQuery.refetch({ cancelRefetch: false });
+      }
+    }, [
+      adminRefundsQuery.refetch,
+      balanceQuery.refetch,
+      isAdmin,
+      packagesQuery.refetch,
+      paymentConfigQuery.refetch,
+      paymentsQuery.refetch,
+      refundsQuery.refetch,
+      transactionsQuery.refetch,
+    ]),
+  );
 
   const handleBuy = (tokenPackageId: string) => {
+    if (isMockMode) {
+      mockPurchaseMutation.mutate(tokenPackageId, {
+        onSuccess: (result) => {
+          Alert.alert('Package added', `Your wallet now has ${result.balance.balance} tokens.`);
+        },
+        onError: (error) => {
+          Alert.alert('Could not buy package', error instanceof Error ? error.message : 'Please try again.');
+        },
+      });
+      return;
+    }
+
     checkoutMutation.mutate(tokenPackageId, {
       onSuccess: async (result) => {
         try {
@@ -46,7 +85,7 @@ export function WalletScreen({ navigation }: Props) {
         }
       },
       onError: (error) => {
-        Alert.alert('Could not open checkout', error instanceof Error ? error.message : 'Please try again.');
+        Alert.alert('Could not open checkout', error instanceof Error ? error.message : 'Payments are not configured.');
       },
     });
   };
@@ -56,15 +95,25 @@ export function WalletScreen({ navigation }: Props) {
     balanceQuery.isLoading ||
     transactionsQuery.isLoading ||
     refundsQuery.isLoading ||
-    paymentsQuery.isLoading;
+    paymentsQuery.isLoading ||
+    paymentConfigQuery.isLoading;
   const firstError =
-    packagesQuery.error ?? balanceQuery.error ?? transactionsQuery.error ?? refundsQuery.error ?? paymentsQuery.error;
+    packagesQuery.error ??
+    balanceQuery.error ??
+    transactionsQuery.error ??
+    refundsQuery.error ??
+    paymentsQuery.error ??
+    paymentConfigQuery.error;
 
   return (
     <Screen>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Token wallet</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Stripe test checkout opens in the browser. Tokens are added after the webhook confirms payment.</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+          {isMockMode
+            ? 'Mock purchase mode is enabled. Packages add tokens instantly for development testing.'
+            : 'Stripe test checkout opens in the browser. Tokens are added after the webhook confirms payment.'}
+        </Text>
       </View>
 
       {loading ? (
@@ -85,6 +134,7 @@ export function WalletScreen({ navigation }: Props) {
             void transactionsQuery.refetch();
             void refundsQuery.refetch();
             void paymentsQuery.refetch();
+            void paymentConfigQuery.refetch();
           }}
         />
       ) : null}
@@ -98,7 +148,8 @@ export function WalletScreen({ navigation }: Props) {
           <PackageCard
             key={tokenPackage.id}
             tokenPackage={tokenPackage}
-            loading={checkoutMutation.isPending}
+            loading={checkoutMutation.isPending || mockPurchaseMutation.isPending}
+            modeLabel={isMockMode ? 'MOCK MODE' : 'TEST MODE'}
             onBuy={() => handleBuy(tokenPackage.id)}
           />
         ))}

@@ -1,30 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
+import { invalidateQueryKeys } from './invalidation';
 
-export function useNotifications(enabled = true) {
+const ALERTS_POLL_INTERVAL_MS = 12_000;
+
+export function useNotifications(enabled = true, poll = false) {
   return useQuery({
     queryKey: ['notifications', 'mine'],
     queryFn: () => api.notifications({ limit: 50 }),
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    refetchInterval: enabled && poll ? ALERTS_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
-export function useAdminNotifications(enabled: boolean) {
+export function useAdminNotifications(enabled: boolean, poll = false) {
   return useQuery({
     queryKey: ['admin', 'notifications'],
     queryFn: () => api.adminNotifications({ limit: 100 }),
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    refetchInterval: enabled && poll ? ALERTS_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
-export function useUnreadNotificationCount(enabled = true) {
+export function useUnreadNotificationCount(enabled = true, poll = false) {
   return useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: api.unreadNotificationCount,
     enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    refetchInterval: enabled && poll ? ALERTS_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -34,7 +43,11 @@ export function useMarkNotificationRead() {
   return useMutation({
     mutationFn: api.markNotificationRead,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await invalidateQueryKeys(queryClient, [
+        ['notifications'],
+        ['activity', 'summary'],
+        ['messages', 'conversations'],
+      ]);
     },
   });
 }
@@ -45,7 +58,11 @@ export function useMarkAllNotificationsRead() {
   return useMutation({
     mutationFn: api.markAllNotificationsRead,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await invalidateQueryKeys(queryClient, [
+        ['notifications'],
+        ['activity', 'summary'],
+        ['messages', 'conversations'],
+      ]);
     },
   });
 }

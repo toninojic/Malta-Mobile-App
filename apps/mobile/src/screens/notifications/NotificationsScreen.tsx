@@ -1,4 +1,6 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useCallback } from 'react';
 import { Bell, CheckCheck, RefreshCw } from 'lucide-react-native';
 import { useAdminNotifications, useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from '../../api/notificationHooks';
 import { Button } from '../../components/Button';
@@ -11,13 +13,20 @@ import { InAppNotification } from '../../types/domain';
 
 export function NotificationsScreen() {
   const theme = useTheme();
+  const isFocused = useIsFocused();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
-  const notificationsQuery = useNotifications(!isAdmin);
-  const adminNotificationsQuery = useAdminNotifications(isAdmin);
+  const notificationsQuery = useNotifications(!isAdmin, isFocused && !isAdmin);
+  const adminNotificationsQuery = useAdminNotifications(isAdmin, isFocused && isAdmin);
   const query = isAdmin ? adminNotificationsQuery : notificationsQuery;
   const markReadMutation = useMarkNotificationRead();
   const markAllMutation = useMarkAllNotificationsRead();
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+    }, [query.refetch]),
+  );
 
   return (
     <Screen>

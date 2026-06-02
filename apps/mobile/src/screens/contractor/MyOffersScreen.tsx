@@ -1,11 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BriefcaseBusiness, CalendarClock, Edit3, LockOpen, RefreshCw, Trash2 } from 'lucide-react-native';
-import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  BriefcaseBusiness,
+  CalendarClock,
+  Edit3,
+  Eye,
+  LockOpen,
+  MessageCircle,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react-native';
+import { ComponentType, useCallback } from 'react';
+import { Alert, ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
+import { cacheOffer, invalidateMarketplaceState } from '../../api/invalidation';
 import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { Badge } from '../../components/Badge';
-import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { Screen } from '../../components/Screen';
@@ -16,20 +27,33 @@ import { Offer } from '../../types/domain';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'MyOffers'>;
 
-export function MyOffersScreen({ navigation }: Props) {
+export function MyOffersScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const ensureConversationMutation = useEnsureConversationForContact();
+  const view = route.params?.view ?? 'all';
 
   const query = useQuery({
     queryKey: ['offers', 'mine'],
     queryFn: () => api.myOffers({ limit: 50 }),
+    refetchOnWindowFocus: true,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+    }, [query.refetch]),
+  );
 
   const withdrawMutation = useMutation({
     mutationFn: api.withdrawOffer,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['offers'] });
+    onSuccess: async (offer) => {
+      cacheOffer(queryClient, offer);
+      await invalidateMarketplaceState(queryClient, {
+        jobId: offer.jobRequestId,
+        offerId: offer.id,
+        contractorId: offer.contractorId,
+      });
     },
     onError: (error) => {
       Alert.alert('Could not withdraw offer', error instanceof Error ? error.message : 'Please try again.');
@@ -42,14 +66,19 @@ export function MyOffersScreen({ navigation }: Props) {
       { text: 'Withdraw', style: 'destructive', onPress: () => withdrawMutation.mutate(offerId) },
     ]);
   };
-  const activeOfferCount = query.data?.data.filter((offer) => offer.status === 'PENDING' || offer.status === 'SELECTED').length ?? 0;
+  const allOffers = query.data?.data ?? [];
+  const offers = view === 'selected' ? allOffers.filter((offer) => offer.status === 'SELECTED') : allOffers;
+  const activeOfferCount = offers.filter((offer) => offer.status === 'PENDING' || offer.status === 'SELECTED').length;
+  const isSelectedView = view === 'selected';
 
   return (
     <Screen refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.text }]}>My offers</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>{isSelectedView ? 'Selected offers' : 'My offers'}</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-          {activeOfferCount} active {activeOfferCount === 1 ? 'offer' : 'offers'} in progress.
+          {isSelectedView
+            ? `${offers.length} selected ${offers.length === 1 ? 'offer' : 'offers'} ready for contact unlock.`
+            : `${activeOfferCount} active ${activeOfferCount === 1 ? 'offer' : 'offers'} in progress.`}
         </Text>
       </View>
 
@@ -69,12 +98,20 @@ export function MyOffersScreen({ navigation }: Props) {
         />
       ) : null}
 
-      {query.data?.data.length === 0 ? (
-        <EmptyState icon={BriefcaseBusiness} title="No offers yet" message="Browse active jobs and submit your first estimate." />
+      {!query.isLoading && !query.error && offers.length === 0 ? (
+        <EmptyState
+          icon={BriefcaseBusiness}
+          title={isSelectedView ? 'No selected offers yet' : 'No offers yet'}
+          message={
+            isSelectedView
+              ? 'When an employer selects your offer, it will appear here.'
+              : 'Browse active jobs and submit your first estimate.'
+          }
+        />
       ) : null}
 
       <View style={styles.list}>
-        {query.data?.data.map((offer) => (
+        {offers.map((offer) => (
           <OfferCard
             key={offer.id}
             offer={offer}
@@ -124,11 +161,13 @@ function OfferCard({
 }) {
   const theme = useTheme();
   const isWithdrawn = offer.status === 'WITHDRAWN';
+  const isCompleted = offer.status === 'COMPLETED';
   const isUnlocked = offer.unlockStatus === 'UNLOCKED';
-  const canUnlock = offer.status === 'SELECTED' && !isUnlocked;
+  const canManage = !isWithdrawn && !isCompleted;
+  const canUnlock = canManage && offer.status === 'SELECTED' && !isUnlocked;
 
   return (
-    <Card onPress={onOpenJob}>
+    <Card>
       <View style={styles.cardTop}>
         <View style={styles.cardTitleWrap}>
           <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{offer.jobRequest?.title ?? 'Job request'}</Text>
@@ -152,26 +191,90 @@ function OfferCard({
         </Text>
       ) : null}
       <View style={styles.actions}>
-        <Button title="Edit Offer" icon={Edit3} variant="secondary" disabled={isWithdrawn} onPress={onEdit} style={styles.actionButton} />
-        <Button
-          title={isUnlocked ? 'Message' : 'Unlock Contact - 1 token'}
-          icon={LockOpen}
-          variant={isUnlocked ? 'primary' : 'secondary'}
-          disabled={isWithdrawn || (!isUnlocked && !canUnlock)}
-          onPress={isUnlocked && onOpenChat ? onOpenChat : onUnlock}
-          style={styles.actionButton}
-        />
-        <Button
-          title="Withdraw"
-          icon={Trash2}
-          variant="danger"
-          disabled={isWithdrawn}
-          loading={withdrawing}
-          onPress={onWithdraw}
-          style={styles.actionButton}
-        />
+        <IconActionButton label="View job" icon={Eye} onPress={onOpenJob} />
+        {canManage ? (
+          <IconActionButton label="Edit offer" icon={Edit3} onPress={onEdit} disabled={isWithdrawn} />
+        ) : null}
+        {isUnlocked && onOpenChat ? (
+          <IconActionButton label="Message" icon={MessageCircle} variant="primary" onPress={onOpenChat} />
+        ) : null}
+        {!isUnlocked && canManage ? (
+          <IconActionButton
+            label="Unlock contact"
+            icon={LockOpen}
+            onPress={onUnlock}
+            disabled={!canUnlock}
+          />
+        ) : null}
+        {canManage ? (
+          <IconActionButton
+            label="Withdraw offer"
+            icon={Trash2}
+            variant="danger"
+            loading={withdrawing}
+            onPress={onWithdraw}
+          />
+        ) : null}
       </View>
     </Card>
+  );
+}
+
+function IconActionButton({
+  label,
+  icon: Icon,
+  onPress,
+  variant = 'secondary',
+  disabled,
+  loading,
+}: {
+  label: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'danger';
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const theme = useTheme();
+  const colors = {
+    primary: {
+      background: theme.colors.primary,
+      border: theme.colors.primary,
+      icon: '#FFFFFF',
+    },
+    secondary: {
+      background: theme.colors.surfaceMuted,
+      border: theme.colors.border,
+      icon: theme.colors.text,
+    },
+    danger: {
+      background: theme.colors.danger,
+      border: theme.colors.danger,
+      icon: '#FFFFFF',
+    },
+  }[variant];
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled || loading}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.iconButton,
+        {
+          backgroundColor: colors.background,
+          borderColor: colors.border,
+          opacity: disabled ? 0.45 : pressed ? 0.78 : 1,
+        },
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.icon} />
+      ) : (
+        <Icon color={colors.icon} size={20} />
+      )}
+    </Pressable>
   );
 }
 
@@ -224,10 +327,14 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
-  actionButton: {
-    flex: 1,
-    minWidth: 104,
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

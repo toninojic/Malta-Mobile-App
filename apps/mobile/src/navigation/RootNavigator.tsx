@@ -10,6 +10,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle, ShieldCheck, UserRound, UsersRound, WalletCards } from 'lucide-react-native';
 import { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { useActivitySummary } from '../api/activityHooks';
 import { useConversations } from '../api/messageHooks';
 import { useUnreadNotificationCount } from '../api/notificationHooks';
 import { useTheme } from '../design/theme';
@@ -187,10 +188,15 @@ function UserTabs() {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const conversationsQuery = useConversations();
-  const notificationsCountQuery = useUnreadNotificationCount();
+  const notificationsCountQuery = useUnreadNotificationCount(user?.role === 'EMPLOYER', true);
+  const activitySummaryQuery = useActivitySummary(user?.role === 'CONTRACTOR', true);
   const unreadMessages =
     conversationsQuery.data?.data.reduce((total, conversation) => total + conversation.unreadCount, 0) ?? 0;
   const unreadNotifications = notificationsCountQuery.data?.count ?? 0;
+  const contractorActivityBadge =
+    activitySummaryQuery.data?.role === 'CONTRACTOR'
+      ? activitySummaryQuery.data.selectedOffersCount + activitySummaryQuery.data.jobsInProgressCount
+      : 0;
 
   return (
     <Tabs.Navigator
@@ -217,7 +223,7 @@ function UserTabs() {
         component={ActivityRoutes}
         options={{
           title: 'Activity',
-          tabBarBadge: user?.role === 'EMPLOYER' ? undefined : unreadNotifications || undefined,
+          tabBarBadge: user?.role === 'CONTRACTOR' ? contractorActivityBadge || undefined : undefined,
           tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />,
         }}
       />

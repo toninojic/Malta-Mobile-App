@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -29,6 +30,7 @@ export class OffersController {
 
   @Post('jobs/:jobId/offers')
   @Roles(UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   create(
     @CurrentUser() user: AuthenticatedUser,
     @Param('jobId', ParseUUIDPipe) jobId: string,
@@ -39,6 +41,7 @@ export class OffersController {
 
   @Get('jobs/:jobId/offers')
   @Roles(UserRole.EMPLOYER)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   findForJob(
     @CurrentUser() user: AuthenticatedUser,
     @Param('jobId', ParseUUIDPipe) jobId: string,
@@ -49,12 +52,14 @@ export class OffersController {
 
   @Get('offers')
   @Roles(UserRole.ADMIN)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: OffersQueryDto) {
     return this.offersService.findAll(user, query);
   }
 
   @Get('offers/mine')
   @Roles(UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   mine(@CurrentUser() user: AuthenticatedUser, @Query() query: OffersQueryDto) {
     return this.offersService.findMine(user, query);
   }

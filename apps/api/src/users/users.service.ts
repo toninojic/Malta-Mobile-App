@@ -69,4 +69,33 @@ export class UsersService {
 
     return profile;
   }
+
+  async updateAvatar(userId: string, avatarUrl: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        email: true,
+        profile: {
+          select: {
+            displayName: true,
+          },
+        },
+      },
+    });
+
+    const displayName = user.profile?.displayName || user.email.split('@')[0] || user.email;
+
+    return this.prisma.userProfile.upsert({
+      where: { userId },
+      create: {
+        userId,
+        displayName,
+        avatarUrl,
+        tradeCategories: [],
+      },
+      update: {
+        avatarUrl,
+      },
+    });
+  }
 }

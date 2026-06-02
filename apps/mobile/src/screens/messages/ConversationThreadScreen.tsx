@@ -2,7 +2,16 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { SendHorizontal } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '../../api/client';
 import { useConversationMessages, useMarkMessageRead, useSendMessage } from '../../api/messageHooks';
 import { Button } from '../../components/Button';
@@ -26,13 +35,14 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   const sendMutation = useSendMessage();
   const markReadMutation = useMarkMessageRead();
   const markedReadIdsRef = useRef(new Set<string>());
+  const listRef = useRef<FlatList<ChatMessage>>(null);
   const isNewContactConversation =
     messagesQuery.error instanceof ApiError && messagesQuery.error.status === 404;
   const messages = isNewContactConversation ? [] : messagesQuery.data ?? [];
 
   useEffect(() => {
     if (isFocused) {
-      void messagesQuery.refetch();
+      void messagesQuery.refetch({ cancelRefetch: false });
     }
   }, [isFocused, messagesQuery.refetch]);
 
@@ -62,6 +72,12 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
       }
     })();
   }, [markReadMutation, messages, user?.id]);
+
+  useEffect(() => {
+    if (messages.length) {
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    }
+  }, [messages.length]);
 
   const send = () => {
     const trimmed = content.trim();
@@ -100,9 +116,31 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen
-      footer={
-        <View style={styles.composer}>
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        style={styles.root}
+      >
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(message) => message.id}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.listContent, { padding: theme.spacing.lg }]}
+          ListEmptyComponent={
+            <EmptyState
+              icon={SendHorizontal}
+              title="No messages yet"
+              message="Start the conversation with a short message."
+            />
+          }
+          renderItem={({ item }) => (
+            <MessageBubble key={item.id} message={item} mine={item.senderId === user?.id} />
+          )}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        />
+        <View style={[styles.composer, { borderColor: theme.colors.border }]}>
           <TextField
             label="Message"
             value={content}
@@ -113,17 +151,8 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
           />
           <Button title="Send" icon={SendHorizontal} loading={sendMutation.isPending} onPress={send} />
         </View>
-      }
-    >
-      {messages.length === 0 ? (
-        <EmptyState icon={SendHorizontal} title="No messages yet" message="Start the conversation with a short message." />
-      ) : null}
-      <View style={styles.list}>
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} mine={message.senderId === user?.id} />
-        ))}
-      </View>
-    </Screen>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -145,8 +174,13 @@ function MessageBubble({ message, mine }: { message: ChatMessage; mine: boolean 
 }
 
 const styles = StyleSheet.create({
-  list: {
+  root: {
+    flex: 1,
+  },
+  listContent: {
     gap: 10,
+    flexGrow: 1,
+    justifyContent: 'flex-end',
   },
   bubble: {
     maxWidth: '88%',
@@ -170,6 +204,8 @@ const styles = StyleSheet.create({
   },
   composer: {
     gap: 10,
+    padding: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   input: {
     maxHeight: 96,

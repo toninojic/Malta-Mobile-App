@@ -1,6 +1,7 @@
 import {
   AuthResponse,
   AuthUser,
+  ActivitySummary,
   AdminStatistics,
   AdminUser,
   AuditLog,
@@ -20,6 +21,7 @@ import {
   OfferStatus,
   PaginatedResponse,
   Payment,
+  PaymentConfig,
   RefundRequest,
   RefundStatus,
   Review,
@@ -139,6 +141,10 @@ function validateApiConfig() {
 
 function extractErrorMessage(status: number, payload: unknown) {
   const message = getPayloadMessage(payload);
+
+  if (status === 429) {
+    return 'Too many refreshes. Please wait a moment.';
+  }
 
   if (status === 401 && message === 'Invalid credentials.') {
     return 'Invalid email or password.';
@@ -296,6 +302,15 @@ export const api = {
       body: input,
     });
   },
+  uploadAvatar(image: { uri: string; name: string; type: string }) {
+    const formData = new FormData();
+    formData.append('avatar', image as unknown as Blob);
+
+    return request<UserProfile>('/users/me/avatar', {
+      method: 'POST',
+      formData,
+    });
+  },
   jobsMine() {
     return request<JobRequest[]>('/jobs/mine');
   },
@@ -378,6 +393,15 @@ export const api = {
     return request<PaginatedResponse<TokenTransaction>>(
       `/tokens/transactions${queryString({ page: input.page, limit: input.limit })}`,
     );
+  },
+  mockPurchase(tokenPackageId: string) {
+    return request<{ balance: TokenBalance; transaction: TokenTransaction }>('/tokens/mock-purchase', {
+      method: 'POST',
+      body: { tokenPackageId },
+    });
+  },
+  paymentConfig() {
+    return request<PaymentConfig>('/payments/config');
   },
   createCheckoutSession(tokenPackageId: string) {
     return request<CreateCheckoutSessionResponse>('/payments/create-checkout-session', {
@@ -580,6 +604,9 @@ export const api = {
     return request<PaginatedResponse<InAppNotification>>(
       `/admin/notifications${queryString({ page: input.page, limit: input.limit })}`,
     );
+  },
+  activitySummary() {
+    return request<ActivitySummary>('/activity/summary');
   },
   adminStatistics() {
     return request<AdminStatistics>('/admin/statistics');

@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -31,24 +32,28 @@ export class JobsController {
 
   @Get()
   @Roles(UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   browse(@CurrentUser() user: AuthenticatedUser, @Query() query: BrowseJobsQueryDto) {
     return this.jobsService.browse(user, query);
   }
 
   @Post()
   @Roles(UserRole.EMPLOYER)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateJobDto) {
     return this.jobsService.create(user, dto);
   }
 
   @Get('mine')
   @Roles(UserRole.EMPLOYER)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   mine(@CurrentUser() user: AuthenticatedUser) {
     return this.jobsService.findMine(user);
   }
 
   @Get(':id')
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.findOne(user, id);
   }

@@ -60,6 +60,17 @@ export class PaymentsService {
     private readonly config: ConfigService,
   ) {}
 
+  getConfig() {
+    const mockPurchasesEnabled = this.isMockPurchasesEnabled();
+    const stripeConfigured = this.isStripeConfigured();
+
+    return {
+      mode: mockPurchasesEnabled ? 'MOCK' : 'STRIPE',
+      mockPurchasesEnabled,
+      stripeConfigured,
+    };
+  }
+
   async createCheckoutSession(user: AuthenticatedUser, dto: CreateCheckoutSessionDto) {
     if (user.role !== UserRole.CONTRACTOR) {
       throw new ForbiddenException('Only contractors can purchase token packages.');
@@ -392,10 +403,19 @@ export class PaymentsService {
     const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
 
     if (!secretKey || !secretKey.startsWith('sk_test_')) {
-      throw new ServiceUnavailableException('Stripe test secret key is not configured.');
+      throw new ServiceUnavailableException('Payments are not configured.');
     }
 
     return secretKey;
+  }
+
+  private isStripeConfigured() {
+    const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
+    return Boolean(secretKey?.startsWith('sk_test_'));
+  }
+
+  private isMockPurchasesEnabled() {
+    return this.config.get<string>('ALLOW_MOCK_PURCHASES') === 'true';
   }
 
   private getStripeWebhookSecret() {

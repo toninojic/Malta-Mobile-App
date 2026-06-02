@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
+import { invalidateQueryKeys } from './invalidation';
 
 export function useTokenPackages() {
   return useQuery({
     queryKey: ['tokens', 'packages'],
     queryFn: api.tokenPackages,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -12,6 +14,7 @@ export function useTokenBalance() {
   return useQuery({
     queryKey: ['tokens', 'balance'],
     queryFn: api.tokenBalance,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -19,6 +22,7 @@ export function useTokenTransactions() {
   return useQuery({
     queryKey: ['tokens', 'transactions'],
     queryFn: () => api.tokenTransactions({ limit: 50 }),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -26,6 +30,7 @@ export function useMyRefunds() {
   return useQuery({
     queryKey: ['tokens', 'refunds', 'mine'],
     queryFn: () => api.myRefunds({ limit: 50 }),
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -34,6 +39,7 @@ export function useAdminRefunds(enabled: boolean) {
     queryKey: ['admin', 'tokens', 'refunds'],
     queryFn: () => api.adminRefunds({ limit: 100 }),
     enabled,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -43,9 +49,10 @@ export function useCreateRefund() {
   return useMutation({
     mutationFn: api.createRefund,
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['tokens', 'refunds'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'tokens', 'refunds'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['tokens', 'refunds'],
+        ['admin', 'tokens', 'refunds'],
+        ['notifications'],
       ]);
     },
   });
@@ -58,11 +65,12 @@ export function useApproveRefund() {
     mutationFn: ({ refundRequestId, adminNote }: { refundRequestId: string; adminNote?: string }) =>
       api.approveRefund(refundRequestId, adminNote),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['tokens'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'tokens', 'refunds'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['tokens'],
+        ['admin', 'tokens', 'refunds'],
+        ['admin', 'statistics'],
+        ['admin', 'audit-logs'],
+        ['notifications'],
       ]);
     },
   });
@@ -75,11 +83,12 @@ export function useRejectRefund() {
     mutationFn: ({ refundRequestId, adminNote }: { refundRequestId: string; adminNote?: string }) =>
       api.rejectRefund(refundRequestId, adminNote),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['tokens', 'refunds'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'tokens', 'refunds'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'statistics'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'audit-logs'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['tokens', 'refunds'],
+        ['admin', 'tokens', 'refunds'],
+        ['admin', 'statistics'],
+        ['admin', 'audit-logs'],
+        ['notifications'],
       ]);
     },
   });

@@ -18,6 +18,7 @@ export class MessagesController {
 
   @Get('conversations/:id/messages')
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
   findConversationMessages(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.messagesService.findConversationMessages(user, id);
   }
@@ -35,6 +36,7 @@ export class MessagesController {
 
   @Patch('messages/:id/read')
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   markRead(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.messagesService.markRead(user, id);
   }

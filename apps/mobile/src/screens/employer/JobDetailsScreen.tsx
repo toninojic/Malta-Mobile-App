@@ -1,20 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { CalendarClock, CheckCircle2, Edit3, LockOpen, MapPin, MessageCircle, RefreshCw, SendHorizontal, Star, Trash2 } from 'lucide-react-native';
-import { useMemo } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
+import { cacheJob, cacheOffer, invalidateMarketplaceState } from '../../api/invalidation';
 import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { Screen } from '../../components/Screen';
 import { serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
-import { Offer } from '../../types/domain';
+import { JobRequest, Offer } from '../../types/domain';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'JobDetails'>;
 
@@ -26,22 +29,27 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   const isContractor = user?.role === 'CONTRACTOR';
   const canManage = user?.role === 'EMPLOYER' || user?.role === 'ADMIN';
   const canSelectOffers = user?.role === 'EMPLOYER';
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   const query = useQuery({
     queryKey: ['jobs', jobId],
     queryFn: () => api.job(jobId),
+    refetchOnWindowFocus: true,
   });
 
   const offersQuery = useQuery({
     queryKey: ['offers', 'job', jobId],
     queryFn: () => api.offersForJob(jobId, { limit: 50 }),
     enabled: canManage,
+    refetchOnWindowFocus: true,
   });
 
   const myOffersQuery = useQuery({
     queryKey: ['offers', 'mine', jobId],
     queryFn: () => api.myOffers({ limit: 100 }),
     enabled: isContractor,
+    refetchOnWindowFocus: true,
   });
 
   const myOffer = useMemo(
@@ -49,29 +57,51 @@ export function JobDetailsScreen({ route, navigation }: Props) {
     [jobId, myOffersQuery.data?.data],
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+      if (canManage) {
+        void offersQuery.refetch({ cancelRefetch: false });
+      }
+      if (isContractor) {
+        void myOffersQuery.refetch({ cancelRefetch: false });
+      }
+    }, [
+      canManage,
+      isContractor,
+      myOffersQuery.refetch,
+      offersQuery.refetch,
+      query.refetch,
+    ]),
+  );
+
   const renewMutation = useMutation({
     mutationFn: () => api.renewJob(jobId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    onSuccess: async (job) => {
+      cacheJob(queryClient, job);
+      await invalidateMarketplaceState(queryClient, { jobId: job.id });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteJob(jobId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    onSuccess: async (result) => {
+      cacheJob(queryClient, result.job);
+      await invalidateMarketplaceState(queryClient, { jobId: result.job.id });
       navigation.goBack();
     },
   });
 
   const selectOfferMutation = useMutation({
     mutationFn: api.selectOffer,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['offers', 'job', jobId] }),
-        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
-        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
+    onSuccess: async (offer) => {
+      cacheOffer(queryClient, offer);
+      queryClient.setQueryData<JobRequest>(['jobs', jobId], (job) => (job ? { ...job, status: 'IN_PROGRESS' } : job));
+      await invalidateMarketplaceState(queryClient, {
+        jobId,
+        offerId: offer.id,
+        contractorId: offer.contractorId,
+      });
     },
     onError: (error) => {
       Alert.alert('Could not select offer', error instanceof Error ? error.message : 'Please try again.');
@@ -82,9 +112,13 @@ export function JobDetailsScreen({ route, navigation }: Props) {
 
   const withdrawOfferMutation = useMutation({
     mutationFn: api.withdrawOffer,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['offers'] });
-      await queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    onSuccess: async (offer) => {
+      cacheOffer(queryClient, offer);
+      await invalidateMarketplaceState(queryClient, {
+        jobId: offer.jobRequestId,
+        offerId: offer.id,
+        contractorId: offer.contractorId,
+      });
     },
     onError: (error) => {
       Alert.alert('Could not withdraw offer', error instanceof Error ? error.message : 'Please try again.');
@@ -134,11 +168,27 @@ export function JobDetailsScreen({ route, navigation }: Props) {
     <Screen>
       {job.images.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.images}>
-          {job.images.map((image) => (
-            <Image key={image.id} source={{ uri: image.url }} style={styles.image} />
+          {job.images.map((image, index) => (
+            <Pressable
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Open job image ${index + 1}`}
+              key={image.id}
+              onPress={() => {
+                setViewerIndex(index);
+                setViewerOpen(true);
+              }}
+            >
+              <Image source={{ uri: image.url }} style={styles.image} />
+            </Pressable>
           ))}
         </ScrollView>
       ) : null}
+      <ImageViewerModal
+        images={job.images.map((image) => ({ id: image.id, url: image.url }))}
+        initialIndex={viewerIndex}
+        visible={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+      />
 
       <Card>
         <View style={styles.titleRow}>
@@ -197,30 +247,50 @@ export function JobDetailsScreen({ route, navigation }: Props) {
                   {myOffer.message}
                 </Text>
               ) : null}
-              <View style={styles.actions}>
+              {myOffer.status !== 'COMPLETED' ? (
+                <View style={styles.actions}>
                   <Button
-                  title="Edit Offer"
-                  icon={Edit3}
-                  variant="secondary"
-                  disabled={myOffer.status === 'WITHDRAWN'}
-                  onPress={() => navigation.navigate('OfferForm', { jobId, offerId: myOffer.id })}
-                />
+                    title="Edit Offer"
+                    icon={Edit3}
+                    variant="secondary"
+                    disabled={myOffer.status === 'WITHDRAWN'}
+                    onPress={() => navigation.navigate('OfferForm', { jobId, offerId: myOffer.id })}
+                  />
+                  <Button
+                    title={myOffer.unlockStatus === 'UNLOCKED' ? 'Unlocked' : 'Unlock Contact - 1 token'}
+                    icon={LockOpen}
+                    variant="secondary"
+                    disabled={myOffer.status !== 'SELECTED' || myOffer.unlockStatus === 'UNLOCKED'}
+                    onPress={() => navigation.navigate('UnlockContact', { offerId: myOffer.id })}
+                  />
+                  <Button
+                    title="Withdraw"
+                    icon={Trash2}
+                    variant="danger"
+                    disabled={myOffer.status === 'WITHDRAWN'}
+                    loading={withdrawOfferMutation.isPending}
+                    onPress={() => confirmWithdraw(myOffer.id)}
+                  />
+                </View>
+              ) : null}
+              {myOffer.unlockStatus === 'UNLOCKED' && myOffer.contactId ? (
                 <Button
-                  title={myOffer.unlockStatus === 'UNLOCKED' ? 'Unlocked' : 'Unlock Contact - 1 token'}
-                  icon={LockOpen}
-                  variant="secondary"
-                  disabled={myOffer.status !== 'SELECTED' || myOffer.unlockStatus === 'UNLOCKED'}
-                  onPress={() => navigation.navigate('UnlockContact', { offerId: myOffer.id })}
+                  title="Open Chat"
+                  icon={MessageCircle}
+                  onPress={() =>
+                    ensureConversationMutation.mutate(myOffer.contactId as string, {
+                      onSuccess: (conversation) => {
+                        navigation
+                          .getParent()
+                          ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
+                      },
+                      onError: (error) => {
+                        Alert.alert('Could not open chat', error instanceof Error ? error.message : 'Please try again.');
+                      },
+                    })
+                  }
                 />
-                <Button
-                  title="Withdraw"
-                  icon={Trash2}
-                  variant="danger"
-                  disabled={myOffer.status === 'WITHDRAWN'}
-                  loading={withdrawOfferMutation.isPending}
-                  onPress={() => confirmWithdraw(myOffer.id)}
-                />
-              </View>
+              ) : null}
               {myOffer.employer ? (
                 <View style={[styles.unframedContact, { borderColor: theme.colors.border }]}>
                   <Text style={[styles.offerTitle, { color: theme.colors.text }]}>

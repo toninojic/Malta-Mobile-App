@@ -8,10 +8,12 @@ import { Card } from '../Card';
 export function PackageCard({
   tokenPackage,
   loading,
+  modeLabel = 'TEST MODE',
   onBuy,
 }: {
   tokenPackage: TokenPackage;
   loading?: boolean;
+  modeLabel?: string;
   onBuy: () => void;
 }) {
   const theme = useTheme();
@@ -25,7 +27,7 @@ export function PackageCard({
             {tokenPackage.tokenCount} tokens / {tokenPackage.price} {tokenPackage.currency}
           </Text>
         </View>
-        <Text style={[styles.badge, { color: theme.colors.primary, borderColor: theme.colors.primary }]}>TEST MODE</Text>
+        <Text style={[styles.badge, { color: theme.colors.primary, borderColor: theme.colors.primary }]}>{modeLabel}</Text>
       </View>
       <Button title="Buy Package" icon={ShoppingBag} loading={loading} onPress={onBuy} />
     </Card>

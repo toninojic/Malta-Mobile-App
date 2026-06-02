@@ -1,4 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { MessageCircle, RefreshCw } from 'lucide-react-native';
 import { useAdminConversations, useConversations } from '../../api/messageHooks';
@@ -15,11 +17,18 @@ type Props = NativeStackScreenProps<MessagesStackParamList, 'Conversations'>;
 
 export function ConversationsScreen({ navigation }: Props) {
   const theme = useTheme();
+  const isFocused = useIsFocused();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
-  const userConversations = useConversations(!isAdmin);
-  const adminConversations = useAdminConversations(isAdmin);
+  const userConversations = useConversations(!isAdmin, isFocused && !isAdmin);
+  const adminConversations = useAdminConversations(isAdmin, isFocused && isAdmin);
   const query = isAdmin ? adminConversations : userConversations;
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+    }, [query.refetch]),
+  );
 
   return (
     <Screen>
@@ -53,6 +62,8 @@ export function ConversationsScreen({ navigation }: Props) {
           <ConversationCard
             key={conversation.id}
             conversation={conversation}
+            viewerId={user?.id}
+            admin={isAdmin}
             onPress={() => navigation.navigate('ConversationThread', { conversationId: conversation.id })}
           />
         ))}
@@ -61,25 +72,49 @@ export function ConversationsScreen({ navigation }: Props) {
   );
 }
 
-function ConversationCard({ conversation, onPress }: { conversation: Conversation; onPress: () => void }) {
+function ConversationCard({
+  conversation,
+  viewerId,
+  admin,
+  onPress,
+}: {
+  conversation: Conversation;
+  viewerId?: string;
+  admin: boolean;
+  onPress: () => void;
+}) {
   const theme = useTheme();
   const title = conversation.contactUnlock.jobRequest.title;
   const lastMessage = conversation.lastMessage?.content ?? 'No messages yet';
+  const otherParticipant =
+    viewerId === conversation.employerId ? conversation.contractor : conversation.employer;
+  const participantLabel = admin
+    ? `${displayName(conversation.employer)} / ${displayName(conversation.contractor)}`
+    : displayName(otherParticipant);
+  const lastActivityAt = conversation.lastMessage?.createdAt ?? conversation.lastMessageAt ?? conversation.createdAt;
 
   return (
     <Card onPress={onPress}>
       <View style={styles.cardTop}>
         <View style={styles.cardCopy}>
           <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{title}</Text>
+          <Text numberOfLines={1} style={[styles.participant, { color: theme.colors.text }]}>
+            {participantLabel}
+          </Text>
           <Text numberOfLines={2} style={[styles.preview, { color: theme.colors.textMuted }]}>{lastMessage}</Text>
         </View>
         {conversation.unreadCount ? <Badge status={String(conversation.unreadCount)} /> : null}
       </View>
-      <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
-        {conversation.employer.profile?.displayName ?? conversation.employer.email} / {conversation.contractor.profile?.displayName ?? conversation.contractor.email}
-      </Text>
+      <View style={styles.cardFooter}>
+        <Badge status={conversation.contactUnlock.status} />
+        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{new Date(lastActivityAt).toLocaleString()}</Text>
+      </View>
     </Card>
   );
+}
+
+function displayName(user: Conversation['employer']) {
+  return user.profile?.displayName ?? user.email;
 }
 
 const styles = StyleSheet.create({
@@ -113,11 +148,23 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
   },
+  participant: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
   preview: {
     fontSize: 14,
     lineHeight: 20,
   },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   meta: {
+    flex: 1,
     fontSize: 13,
+    textAlign: 'right',
   },
 });

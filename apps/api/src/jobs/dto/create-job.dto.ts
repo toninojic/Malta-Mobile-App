@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
@@ -10,34 +11,36 @@ import {
 } from 'class-validator';
 
 export class CreateJobDto {
-  @IsString()
-  @MinLength(4)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Title is required.' })
+  @IsNotEmpty({ message: 'Title is required.' })
+  @MinLength(5, { message: 'Title must be at least 5 characters.' })
   @MaxLength(160)
-  @Transform(({ value }) => String(value).trim())
   title!: string;
 
-  @IsString()
-  @MinLength(20)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Description is required.' })
+  @IsNotEmpty({ message: 'Description is required.' })
+  @MinLength(20, { message: 'Description must be at least 20 characters.' })
   @MaxLength(4000)
-  @Transform(({ value }) => String(value).trim())
   description!: string;
 
-  @IsString()
-  @MinLength(2)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Category is required.' })
+  @IsNotEmpty({ message: 'Category is required.' })
   @MaxLength(100)
-  @Transform(({ value }) => String(value).trim())
   category!: string;
 
-  @IsString()
-  @MinLength(2)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Subcategory is required.' })
+  @IsNotEmpty({ message: 'Subcategory is required.' })
   @MaxLength(100)
-  @Transform(({ value }) => String(value).trim())
   subcategory!: string;
 
-  @IsString()
-  @MinLength(2)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Location is required.' })
+  @IsNotEmpty({ message: 'Location is required.' })
   @MaxLength(160)
-  @Transform(({ value }) => String(value).trim())
   location!: string;
 
   @IsOptional()

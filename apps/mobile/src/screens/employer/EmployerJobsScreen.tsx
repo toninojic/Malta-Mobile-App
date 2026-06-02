@@ -1,17 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BriefcaseBusiness, CalendarClock, MapPin, Plus, RefreshCw, Search, SendHorizontal } from 'lucide-react-native';
-import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { BriefcaseBusiness, CalendarClock, Filter, MapPin, Plus, RefreshCw, Search, SendHorizontal, X } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { CategoryAccordion } from '../../components/CategoryAccordion';
 import { EmptyState } from '../../components/EmptyState';
-import { OptionSelect } from '../../components/OptionSelect';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
-import { SERVICE_CATEGORIES, serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
+import { serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
@@ -33,7 +34,14 @@ export function EmployerJobsScreen({ navigation }: Props) {
     queryKey: ['jobs', 'mine'],
     queryFn: api.jobsMine,
     enabled: canViewJobs,
+    refetchOnWindowFocus: true,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+    }, [query.refetch]),
+  );
 
   if (!canViewJobs) {
     return (
@@ -100,19 +108,22 @@ export function EmployerJobsScreen({ navigation }: Props) {
 
 function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
   const theme = useTheme();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [draftCategory, setDraftCategory] = useState('');
   const [draftSubcategory, setDraftSubcategory] = useState('');
   const [draftLocation, setDraftLocation] = useState('');
+  const [draftSortBy, setDraftSortBy] = useState<'newest' | 'oldest'>('newest');
   const [filters, setFilters] = useState<JobBrowseFilters>({ limit: 50, sortBy: 'newest' });
-  const selectedCategory = SERVICE_CATEGORIES.find((item) => item.key === draftCategory);
 
   const query = useQuery({
     queryKey: ['jobs', 'browse', filters],
     queryFn: () => api.browseJobs(filters),
+    refetchOnWindowFocus: true,
   });
   const offersQuery = useQuery({
     queryKey: ['offers', 'mine', 'activity-count'],
     queryFn: () => api.myOffers({ limit: 100 }),
+    refetchOnWindowFocus: true,
   });
   const activeOfferCount =
     offersQuery.data?.data.filter((offer) => offer.status === 'PENDING' || offer.status === 'SELECTED').length ?? 0;
@@ -123,9 +134,28 @@ function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
       subcategory: draftSubcategory || undefined,
       location: draftLocation,
       limit: 50,
-      sortBy: 'newest',
+      sortBy: draftSortBy,
     });
+    setFiltersOpen(false);
   };
+
+  const clearFilters = () => {
+    setDraftCategory('');
+    setDraftSubcategory('');
+    setDraftLocation('');
+    setDraftSortBy('newest');
+    setFilters({ limit: 50, sortBy: 'newest' });
+    setFiltersOpen(false);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+      void offersQuery.refetch({ cancelRefetch: false });
+    }, [offersQuery.refetch, query.refetch]),
+  );
+
+  const filterChips = activeFilterChips(filters);
 
   return (
     <Screen refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
@@ -142,39 +172,79 @@ function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
         />
       </View>
 
-      <Card>
-        <Text style={[styles.filterTitle, { color: theme.colors.text }]}>Filters</Text>
-        <OptionSelect
-          label="Category"
-          value={draftCategory}
-          options={SERVICE_CATEGORIES}
-          onChange={(value) => {
-            setDraftCategory(value);
-            setDraftSubcategory('');
-          }}
-        />
-        <OptionSelect
-          label="Subcategory"
-          value={draftSubcategory}
-          options={selectedCategory?.subcategories ?? []}
-          placeholder="Choose a category first."
-          onChange={setDraftSubcategory}
-        />
-        <TextField label="Location" value={draftLocation} onChangeText={setDraftLocation} placeholder="Sliema" />
-        <View style={styles.filterActions}>
-          <Button title="Apply" icon={Search} onPress={applyFilters} style={styles.filterAction} />
+      <Card style={styles.filterCard}>
+        <View style={styles.filterHeader}>
+          <View style={styles.filterHeaderCopy}>
+            <Text style={[styles.filterTitle, { color: theme.colors.text }]}>Filters</Text>
+            <Text style={[styles.filterSummary, { color: theme.colors.textMuted }]}>
+              {filterChips.length ? filterChips.join(' / ') : 'Category: Any / Location: Any / Sort: Newest'}
+            </Text>
+          </View>
           <Button
-            title="Clear"
+            title={filtersOpen ? 'Close' : 'Filters'}
+            icon={filtersOpen ? X : Filter}
             variant="secondary"
-            onPress={() => {
-              setDraftCategory('');
-              setDraftSubcategory('');
-              setDraftLocation('');
-              setFilters({ limit: 50, sortBy: 'newest' });
-            }}
-            style={styles.filterAction}
+            onPress={() => setFiltersOpen((current) => !current)}
+            style={styles.filterToggle}
           />
         </View>
+
+        {filterChips.length ? (
+          <View style={styles.chips}>
+            {filterChips.map((chip) => (
+              <View key={chip} style={[styles.chip, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+                <Text style={[styles.chipText, { color: theme.colors.text }]}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {filtersOpen ? (
+          <View style={styles.filterPanel}>
+            <CategoryAccordion
+              label="Category"
+              category={draftCategory}
+              subcategory={draftSubcategory}
+              onSelect={(nextCategory, nextSubcategory) => {
+                setDraftCategory(nextCategory);
+                setDraftSubcategory(nextSubcategory);
+              }}
+            />
+            <TextField label="Location" value={draftLocation} onChangeText={setDraftLocation} placeholder="Sliema" />
+            <View style={styles.sortRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setDraftSortBy('newest')}
+                style={[
+                  styles.sortOption,
+                  {
+                    backgroundColor: draftSortBy === 'newest' ? theme.colors.primary : theme.colors.surfaceMuted,
+                    borderColor: draftSortBy === 'newest' ? theme.colors.primary : theme.colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.sortText, { color: draftSortBy === 'newest' ? '#FFFFFF' : theme.colors.text }]}>Newest</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setDraftSortBy('oldest')}
+                style={[
+                  styles.sortOption,
+                  {
+                    backgroundColor: draftSortBy === 'oldest' ? theme.colors.primary : theme.colors.surfaceMuted,
+                    borderColor: draftSortBy === 'oldest' ? theme.colors.primary : theme.colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.sortText, { color: draftSortBy === 'oldest' ? '#FFFFFF' : theme.colors.text }]}>Oldest</Text>
+              </Pressable>
+            </View>
+            <View style={styles.filterActions}>
+              <Button title="Apply" icon={Search} onPress={applyFilters} style={styles.filterAction} />
+              <Button title="Clear" variant="secondary" onPress={clearFilters} style={styles.filterAction} />
+            </View>
+          </View>
+        ) : null}
       </Card>
 
       {query.isLoading ? (
@@ -240,6 +310,28 @@ function JobCard({ job, onPress }: { job: JobRequest; onPress: () => void }) {
   );
 }
 
+function activeFilterChips(filters: JobBrowseFilters) {
+  const chips: string[] = [];
+
+  if (filters.category) {
+    chips.push(serviceCategoryLabel(filters.category));
+  }
+
+  if (filters.subcategory && filters.category) {
+    chips.push(serviceSubcategoryLabel(filters.category, filters.subcategory));
+  }
+
+  if (filters.location?.trim()) {
+    chips.push(filters.location.trim());
+  }
+
+  if (filters.sortBy === 'oldest') {
+    chips.push('Oldest');
+  }
+
+  return chips;
+}
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -273,6 +365,59 @@ const styles = StyleSheet.create({
   },
   filterTitle: {
     fontSize: 16,
+    fontWeight: '800',
+  },
+  filterCard: {
+    gap: 10,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  filterHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  filterSummary: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  filterToggle: {
+    width: 104,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterPanel: {
+    gap: 12,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sortOption: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  sortText: {
+    fontSize: 14,
     fontWeight: '800',
   },
   center: {

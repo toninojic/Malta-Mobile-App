@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { MessageSquareReply, RefreshCw, Trash2 } from 'lucide-react-native';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useRemoveReview, useReplyReview, useReview } from '../../api/reviewHooks';
 import { Badge } from '../../components/Badge';
@@ -23,6 +24,12 @@ export function ReviewDetailsScreen({ route }: Props) {
   const replyMutation = useReplyReview();
   const removeMutation = useRemoveReview();
   const [reply, setReply] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      void query.refetch({ cancelRefetch: false });
+    }, [query.refetch]),
+  );
 
   if (query.error || !query.data) {
     return (
