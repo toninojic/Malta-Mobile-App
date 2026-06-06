@@ -8,7 +8,9 @@ import {
   ChatMessage,
   CompletionStatusResponse,
   ContactUnlock,
+  ContractorPortfolioImage,
   ContractorRatingSummary,
+  ContractorVerification,
   Conversation,
   CreateCheckoutSessionResponse,
   InAppNotification,
@@ -18,6 +20,7 @@ import {
   JobRequest,
   Offer,
   OfferFormValues,
+  OfferWorkDetails,
   OfferStatus,
   PaginatedResponse,
   Payment,
@@ -319,6 +322,7 @@ export const api = {
       `/jobs${queryString({
         category: filters.category?.trim(),
         subcategory: filters.subcategory?.trim(),
+        search: filters.search?.trim(),
         location: filters.location?.trim(),
         sortBy: filters.sortBy,
         page: filters.page,
@@ -372,6 +376,9 @@ export const api = {
       method: 'PATCH',
       body: input,
     });
+  },
+  offerWorkDetails(offerId: string) {
+    return request<OfferWorkDetails>(`/offers/${offerId}/work-details`);
   },
   selectOffer(offerId: string) {
     return request<Offer>(`/offers/${offerId}/select`, {
@@ -679,6 +686,56 @@ export const api = {
   },
   adminConversationMessages(id: string) {
     return request<ChatMessage[]>(`/admin/conversations/${id}/messages`);
+  },
+  portfolioImages() {
+    return request<ContractorPortfolioImage[]>('/users/me/portfolio-images');
+  },
+  uploadPortfolioImages(images: Array<{ uri: string; name: string; type: string }>) {
+    const formData = new FormData();
+    images.forEach((image) => {
+      formData.append('images', image as unknown as Blob);
+    });
+
+    return request<ContractorPortfolioImage[]>('/users/me/portfolio-images', {
+      method: 'POST',
+      formData,
+    });
+  },
+  removePortfolioImage(imageId: string) {
+    return request<{ success: true }>(`/users/me/portfolio-images/${imageId}`, {
+      method: 'DELETE',
+    });
+  },
+  contractorVerification() {
+    return request<ContractorVerification>('/users/me/contractor-verification');
+  },
+  uploadContractorVerification(document: { uri: string; name: string; type: string }) {
+    const formData = new FormData();
+    formData.append('document', document as unknown as Blob);
+
+    return request<ContractorVerification>('/users/me/contractor-verification', {
+      method: 'POST',
+      formData,
+    });
+  },
+  adminContractorVerifications(input: { page?: number; limit?: number } = {}) {
+    return request<PaginatedResponse<ContractorVerification>>(
+      `/admin/contractor-verifications${queryString({ page: input.page, limit: input.limit })}`,
+    );
+  },
+  adminContractorVerification(id: string) {
+    return request<ContractorVerification>(`/admin/contractor-verifications/${id}`);
+  },
+  approveContractorVerification(id: string) {
+    return request<ContractorVerification>(`/admin/contractor-verifications/${id}/approve`, {
+      method: 'POST',
+    });
+  },
+  rejectContractorVerification(id: string, adminNote?: string) {
+    return request<ContractorVerification>(`/admin/contractor-verifications/${id}/reject`, {
+      method: 'POST',
+      body: { adminNote },
+    });
   },
   uploadJobImages(images: Array<{ uri: string; name: string; type: string }>) {
     const formData = new FormData();

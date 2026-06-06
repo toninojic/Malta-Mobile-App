@@ -23,6 +23,7 @@ import { useTheme } from '../../design/theme';
 import { MessagesStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
 import { ChatMessage } from '../../types/domain';
+import { formatChatTimestamp } from '../../utils/date';
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'ConversationThread'>;
 
@@ -140,7 +141,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
           )}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
-        <View style={[styles.composer, { borderColor: theme.colors.border }]}>
+        <View style={[styles.composer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <TextField
             label="Message"
             value={content}
@@ -166,7 +167,7 @@ function MessageBubble({ message, mine }: { message: ChatMessage; mine: boolean 
       </Text>
       <Text style={[styles.message, { color: theme.colors.text }]}>{message.content}</Text>
       <Text style={[styles.status, { color: theme.colors.textMuted }]}>
-        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {formatChatTimestamp(message.createdAt)}
         {mine ? ` / ${message.isRead ? 'read' : 'unread'}` : ''}
       </Text>
     </Card>
@@ -208,6 +209,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   input: {
+    minHeight: 44,
     maxHeight: 96,
   },
 });

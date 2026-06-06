@@ -8,6 +8,15 @@ export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 export type UnlockStatus = 'LOCKED' | 'PENDING' | 'UNLOCKED';
 export type JobCompletionStatus = 'PENDING_EMPLOYER_CONFIRMATION' | 'CONFIRMED' | 'DISPUTED' | 'CANCELLED';
 export type ReviewStatus = 'ACTIVE' | 'REMOVED';
+export type ContractorVerificationStatus = 'UNVERIFIED' | 'PENDING_REVIEW' | 'VERIFIED' | 'REJECTED';
+export type WorkDetailsAction =
+  | 'EDIT_OFFER'
+  | 'WITHDRAW_OFFER'
+  | 'UNLOCK_CONTACT'
+  | 'OPEN_CHAT'
+  | 'MARK_COMPLETED'
+  | 'VIEW_REVIEW'
+  | 'VIEW_DETAILS';
 export type NotificationType =
   | 'ACCOUNT_SUSPENDED'
   | 'ACCOUNT_ACTIVATED'
@@ -20,7 +29,9 @@ export type NotificationType =
   | 'JOB_COMPLETED'
   | 'REVIEW_RECEIVED'
   | 'REVIEW_REPLIED'
-  | 'REVIEW_REMOVED';
+  | 'REVIEW_REMOVED'
+  | 'CONTRACTOR_VERIFICATION_APPROVED'
+  | 'CONTRACTOR_VERIFICATION_REJECTED';
 
 export type UserProfile = {
   id: string;
@@ -93,15 +104,19 @@ export type Offer = {
   jobRequestId: string;
   contractorId?: string;
   estimatedPrice: string;
+  startDate: string;
   estimatedCompletionDays: number;
   message?: string | null;
   status: OfferStatus;
   selectedByEmployer: boolean;
   unlockStatus?: UnlockStatus;
   contactId?: string | null;
+  completionStatus?: JobCompletionStatus | null;
   deletedAt?: string | null;
   rating?: number | null;
   totalReviews?: number;
+  portfolioImages?: ContractorPortfolioImage[];
+  verificationStatus?: ContractorVerificationStatus;
   createdAt: string;
   updatedAt: string;
   jobRequest?: JobRequest;
@@ -134,6 +149,7 @@ export type UploadedJobImage = {
 export type JobBrowseFilters = {
   category?: string;
   subcategory?: string;
+  search?: string;
   location?: string;
   sortBy?: 'newest' | 'oldest';
   page?: number;
@@ -142,8 +158,32 @@ export type JobBrowseFilters = {
 
 export type OfferFormValues = {
   estimatedPrice: number;
+  startDate: string;
   estimatedCompletionDays: number;
   message?: string;
+};
+
+export type ContractorPortfolioImage = {
+  id: string;
+  contractorId: string;
+  url: string;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type ContractorVerification = {
+  id?: string;
+  contractorId?: string;
+  documentUrl?: string;
+  documentMimeType?: string;
+  status: ContractorVerificationStatus;
+  adminNote?: string | null;
+  reviewedByAdminId?: string | null;
+  reviewedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  contractor?: AuthUser;
+  reviewedByAdmin?: Pick<AuthUser, 'id' | 'email' | 'profile'> | null;
 };
 
 export type TokenPackage = {
@@ -245,7 +285,15 @@ export type ContactUnlock = {
   jobRequest: JobRequest;
   offer: Pick<
     Offer,
-    'id' | 'estimatedPrice' | 'estimatedCompletionDays' | 'message' | 'status' | 'selectedByEmployer' | 'createdAt' | 'updatedAt'
+    | 'id'
+    | 'estimatedPrice'
+    | 'startDate'
+    | 'estimatedCompletionDays'
+    | 'message'
+    | 'status'
+    | 'selectedByEmployer'
+    | 'createdAt'
+    | 'updatedAt'
   >;
   employer: AuthUser;
   contractor: AuthUser;
@@ -274,7 +322,15 @@ export type JobCompletion = {
   jobRequest?: JobRequest;
   offer?: Pick<
     Offer,
-    'id' | 'estimatedPrice' | 'estimatedCompletionDays' | 'message' | 'status' | 'selectedByEmployer' | 'createdAt' | 'updatedAt'
+    | 'id'
+    | 'estimatedPrice'
+    | 'startDate'
+    | 'estimatedCompletionDays'
+    | 'message'
+    | 'status'
+    | 'selectedByEmployer'
+    | 'createdAt'
+    | 'updatedAt'
   >;
   employer?: AuthUser;
   contractor?: AuthUser;
@@ -299,7 +355,15 @@ export type Review = {
   jobRequest?: JobRequest;
   offer?: Pick<
     Offer,
-    'id' | 'estimatedPrice' | 'estimatedCompletionDays' | 'message' | 'status' | 'selectedByEmployer' | 'createdAt' | 'updatedAt'
+    | 'id'
+    | 'estimatedPrice'
+    | 'startDate'
+    | 'estimatedCompletionDays'
+    | 'message'
+    | 'status'
+    | 'selectedByEmployer'
+    | 'createdAt'
+    | 'updatedAt'
   >;
   employer?: AuthUser;
   contractor?: AuthUser;
@@ -350,11 +414,12 @@ export type Conversation = {
     offerId: string;
     status: Exclude<UnlockStatus, 'LOCKED'>;
     jobRequest: JobRequest;
-    offer: {
-      id: string;
-      estimatedPrice: string;
-      estimatedCompletionDays: number;
-      message?: string | null;
+      offer: {
+        id: string;
+        estimatedPrice: string;
+        startDate?: string;
+        estimatedCompletionDays: number;
+        message?: string | null;
     };
   };
   employer: Pick<AuthUser, 'id' | 'email' | 'profile'>;
@@ -374,6 +439,29 @@ export type InAppNotification = {
   isRead: boolean;
   readAt?: string | null;
   createdAt: string;
+};
+
+export type OfferWorkDetails = {
+  offer: Offer & {
+    unlockStatus: UnlockStatus;
+    reviewId?: string | null;
+  };
+  job: JobRequest;
+  contactUnlock?: Pick<
+    ContactUnlock,
+    'id' | 'jobRequestId' | 'offerId' | 'employerId' | 'contractorId' | 'status' | 'createdAt' | 'updatedAt'
+  > | null;
+  completion?: JobCompletion | null;
+  review?: Review | null;
+  conversation?: Pick<Conversation, 'id' | 'contactUnlockId' | 'lastMessageAt' | 'createdAt' | 'updatedAt'> | null;
+  employer?: AuthUser | null;
+  contractor?: Pick<AuthUser, 'id' | 'email' | 'status'> & {
+    profile?: Partial<UserProfile> | null;
+    ratingSummary?: Pick<ContractorRatingSummary, 'averageRating' | 'totalReviews'> | null;
+    portfolioImages: ContractorPortfolioImage[];
+    verificationStatus: ContractorVerificationStatus;
+  };
+  availableActions: WorkDetailsAction[];
 };
 
 export type ActivitySummary =

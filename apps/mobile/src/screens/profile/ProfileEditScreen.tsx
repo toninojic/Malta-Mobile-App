@@ -1,9 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { ImagePlus, LogOut, Save, UserRound } from 'lucide-react-native';
+import { ImagePlus, LogOut, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
+import {
+  useContractorVerification,
+  usePortfolioImages,
+  useRemovePortfolioImage,
+  useUploadContractorVerification,
+  useUploadPortfolioImages,
+} from '../../api/offerWorkHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -43,6 +50,11 @@ export function ProfileEditScreen() {
     queryKey: ['users', 'me'],
     queryFn: api.profile,
   });
+  const portfolioQuery = usePortfolioImages(currentUser?.role === 'CONTRACTOR');
+  const verificationQuery = useContractorVerification(currentUser?.role === 'CONTRACTOR');
+  const uploadPortfolioMutation = useUploadPortfolioImages();
+  const removePortfolioMutation = useRemovePortfolioImage();
+  const uploadVerificationMutation = useUploadContractorVerification();
 
   useEffect(() => {
     const profile = query.data?.profile;
@@ -109,6 +121,7 @@ export function ProfileEditScreen() {
   const role = query.data?.role ?? currentUser?.role;
   const canUploadAvatar = role === 'EMPLOYER' || role === 'CONTRACTOR';
   const avatarPreviewUri = avatarImage?.uri ?? avatarUrl;
+  const isContractor = role === 'CONTRACTOR';
 
   const pickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -152,6 +165,93 @@ export function ProfileEditScreen() {
     });
   };
 
+  const pickPortfolioImages = async () => {
+    const existingCount = portfolioQuery.data?.length ?? 0;
+    const remaining = 10 - existingCount;
+    if (remaining <= 0) {
+      Alert.alert('Portfolio full', 'You can add up to 10 portfolio images.');
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow photo library access to choose portfolio images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+      quality: 0.85,
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const images = result.assets.slice(0, remaining).map((asset, index) => {
+      const type = asset.mimeType ?? mimeTypeFromUri(asset.uri);
+      return {
+        uri: asset.uri,
+        name: asset.fileName ?? `portfolio-${Date.now()}-${index}.${extensionFromMimeType(type)}`,
+        type,
+        size: asset.fileSize,
+        uploaded: false,
+      };
+    });
+
+    const invalid = images.find((image) => !ALLOWED_AVATAR_TYPES.includes(image.type) || (image.size && image.size > MAX_AVATAR_SIZE));
+    if (invalid) {
+      Alert.alert('Unsupported image', 'Portfolio images must be jpg, jpeg, png, or webp and 5MB or smaller.');
+      return;
+    }
+
+    uploadPortfolioMutation.mutate(images, {
+      onError: (error) => Alert.alert('Could not upload portfolio', error instanceof Error ? error.message : 'Please try again.'),
+    });
+  };
+
+  const pickVerificationDocument = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow photo library access to choose a verification document image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: false,
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const type = asset.mimeType ?? mimeTypeFromUri(asset.uri);
+    if (!ALLOWED_AVATAR_TYPES.includes(type)) {
+      Alert.alert('Unsupported document', 'Use jpg, jpeg, png, or webp from the app. PDF is accepted by the API for admin imports.');
+      return;
+    }
+    if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+      Alert.alert('Document too large', 'Verification document must be 10MB or smaller.');
+      return;
+    }
+
+    uploadVerificationMutation.mutate(
+      {
+        uri: asset.uri,
+        name: asset.fileName ?? `verification-${Date.now()}.${extensionFromMimeType(type)}`,
+        type,
+      },
+      {
+        onError: (error) => Alert.alert('Could not upload verification', error instanceof Error ? error.message : 'Please try again.'),
+      },
+    );
+  };
+
   return (
     <Screen>
       <Card>
@@ -180,6 +280,64 @@ export function ProfileEditScreen() {
       ) : null}
       <TextField label="Company name" value={companyName} onChangeText={setCompanyName} />
       <TextField label="Trade categories" value={tradeCategories} onChangeText={setTradeCategories} />
+
+      {isContractor ? (
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Portfolio</Text>
+            <Badge status={`${portfolioQuery.data?.length ?? 0}/10`} />
+          </View>
+          <View style={styles.portfolioGrid}>
+            {portfolioQuery.data?.map((image) => (
+              <View key={image.id} style={styles.portfolioItem}>
+                <Image source={{ uri: image.url }} style={styles.portfolioImage} />
+                <Button
+                  title="Remove"
+                  icon={Trash2}
+                  variant="secondary"
+                  loading={removePortfolioMutation.isPending}
+                  onPress={() => removePortfolioMutation.mutate(image.id)}
+                />
+              </View>
+            ))}
+          </View>
+          <Button
+            title="Add Portfolio Images"
+            icon={ImagePlus}
+            variant="secondary"
+            loading={uploadPortfolioMutation.isPending}
+            onPress={pickPortfolioImages}
+          />
+        </Card>
+      ) : null}
+
+      {isContractor ? (
+        <Card>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Verification</Text>
+            <Badge status={verificationQuery.data?.status ?? 'UNVERIFIED'} />
+          </View>
+          {verificationQuery.data?.adminNote ? (
+            <Text style={[styles.email, { color: theme.colors.textMuted }]}>{verificationQuery.data.adminNote}</Text>
+          ) : null}
+          {verificationQuery.data?.status === 'VERIFIED' ? (
+            <View style={styles.verifiedRow}>
+              <ShieldCheck color={theme.colors.success} size={18} />
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>Your contractor account is verified.</Text>
+            </View>
+          ) : null}
+          {verificationQuery.data?.status === 'UNVERIFIED' || verificationQuery.data?.status === 'REJECTED' ? (
+            <Button
+              title="Upload Verification Document"
+              icon={ShieldCheck}
+              variant="secondary"
+              loading={uploadVerificationMutation.isPending}
+              onPress={pickVerificationDocument}
+            />
+          ) : null}
+        </Card>
+      ) : null}
+
       <Button title="Save Profile" icon={Save} loading={updateMutation.isPending} onPress={() => updateMutation.mutate()} />
       <Button title="Log Out" icon={LogOut} variant="secondary" loading={logoutMutation.isPending} onPress={() => logoutMutation.mutate()} />
     </Screen>
@@ -215,6 +373,35 @@ const styles = StyleSheet.create({
   },
   email: {
     fontSize: 13,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  portfolioGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  portfolioItem: {
+    width: 112,
+    gap: 6,
+  },
+  portfolioImage: {
+    width: 112,
+    height: 92,
+    borderRadius: 8,
+  },
+  verifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });
 

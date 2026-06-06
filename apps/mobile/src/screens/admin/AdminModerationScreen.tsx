@@ -4,6 +4,11 @@ import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { useAdminAuditLogs, useAdminConversationMessages, useAdminRefundsForModeration } from '../../api/adminHooks';
 import { useAdminContacts } from '../../api/contactHooks';
 import { useAdminConversations } from '../../api/messageHooks';
+import {
+  useAdminContractorVerifications,
+  useApproveContractorVerification,
+  useRejectContractorVerification,
+} from '../../api/offerWorkHooks';
 import { useAdminReviews, useRemoveReview } from '../../api/reviewHooks';
 import { useApproveRefund, useRejectRefund } from '../../api/tokenHooks';
 import { Badge } from '../../components/Badge';
@@ -16,16 +21,18 @@ import { RefundCard } from '../../components/wallet/RefundCard';
 import { Screen } from '../../components/Screen';
 import { useTheme } from '../../design/theme';
 import { Conversation, Review } from '../../types/domain';
+import { formatDate } from '../../utils/date';
 
 const SECTION_OPTIONS = [
   { key: 'REFUNDS', label: 'Refunds' },
   { key: 'REVIEWS', label: 'Reviews' },
   { key: 'CONVERSATIONS', label: 'Chats' },
   { key: 'CONTACTS', label: 'Contacts' },
+  { key: 'VERIFICATIONS', label: 'Verifications' },
   { key: 'AUDIT', label: 'Audit' },
 ];
 
-type Section = 'REFUNDS' | 'REVIEWS' | 'CONVERSATIONS' | 'CONTACTS' | 'AUDIT';
+type Section = 'REFUNDS' | 'REVIEWS' | 'CONVERSATIONS' | 'CONTACTS' | 'VERIFICATIONS' | 'AUDIT';
 
 export function AdminModerationScreen() {
   const theme = useTheme();
@@ -44,8 +51,68 @@ export function AdminModerationScreen() {
       {section === 'REVIEWS' ? <ReviewsSection /> : null}
       {section === 'CONVERSATIONS' ? <ConversationsSection /> : null}
       {section === 'CONTACTS' ? <ContactsSection /> : null}
+      {section === 'VERIFICATIONS' ? <VerificationsSection /> : null}
       {section === 'AUDIT' ? <AuditSection /> : null}
     </Screen>
+  );
+}
+
+function VerificationsSection() {
+  const theme = useTheme();
+  const query = useAdminContractorVerifications(true);
+  const approveMutation = useApproveContractorVerification();
+  const rejectMutation = useRejectContractorVerification();
+
+  const approve = (verificationId: string) => {
+    Alert.alert('Approve verification', 'Approve this contractor verification?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Approve', onPress: () => approveMutation.mutate(verificationId) },
+    ]);
+  };
+
+  const reject = (verificationId: string) => {
+    Alert.alert('Reject verification', 'Reject this verification request?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reject', style: 'destructive', onPress: () => rejectMutation.mutate({ id: verificationId }) },
+    ]);
+  };
+
+  return (
+    <SectionFrame
+      loading={query.isLoading}
+      error={query.error}
+      empty={!query.isLoading && query.data?.data.length === 0}
+      emptyIcon={CheckCircle2}
+      emptyTitle="No verification requests"
+      onRetry={() => void query.refetch()}
+    >
+      {query.data?.data.map((verification) => (
+        <Card key={verification.id}>
+          <View style={styles.row}>
+            <View style={styles.flex}>
+              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+                {verification.contractor?.profile?.displayName ?? verification.contractor?.email ?? 'Contractor'}
+              </Text>
+              <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
+                {verification.documentMimeType ?? 'Document'} / {formatDate(verification.createdAt)}
+              </Text>
+            </View>
+            <Badge status={verification.status} />
+          </View>
+          {verification.documentUrl ? (
+            <Text style={[styles.metadata, { color: theme.colors.textMuted }]} numberOfLines={2}>
+              {verification.documentUrl}
+            </Text>
+          ) : null}
+          {verification.status === 'PENDING_REVIEW' && verification.id ? (
+            <View style={styles.actions}>
+              <Button title="Approve" icon={CheckCircle2} loading={approveMutation.isPending} onPress={() => approve(verification.id as string)} style={styles.action} />
+              <Button title="Reject" icon={XCircle} variant="danger" loading={rejectMutation.isPending} onPress={() => reject(verification.id as string)} style={styles.action} />
+            </View>
+          ) : null}
+        </Card>
+      ))}
+    </SectionFrame>
   );
 }
 
@@ -240,7 +307,7 @@ function AuditSection() {
                 {auditLog.entityType} / {auditLog.entityId}
               </Text>
             </View>
-            <Badge status={new Date(auditLog.createdAt).toLocaleDateString()} />
+            <Badge status={formatDate(auditLog.createdAt)} />
           </View>
           <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
             Admin: {auditLog.admin?.email ?? auditLog.adminId}

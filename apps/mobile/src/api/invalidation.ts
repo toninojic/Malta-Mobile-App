@@ -41,6 +41,7 @@ export async function invalidateMarketplaceState(queryClient: QueryClient, scope
     scope.jobId ? ['jobs', scope.jobId] : null,
     scope.jobId ? ['offers', 'job', scope.jobId] : null,
     ['offers', 'mine'],
+    scope.offerId ? ['offers', 'work-details', scope.offerId] : null,
     scope.offerId ? ['contacts', 'unlock-status', scope.offerId] : null,
     scope.contactId ? ['contacts', 'details', scope.contactId] : null,
     scope.contactId ? ['reviews', 'completion-status', scope.contactId] : null,

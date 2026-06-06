@@ -2,6 +2,7 @@ import { Star } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../design/theme';
 import { Review } from '../../types/domain';
+import { formatDate } from '../../utils/date';
 import { Badge } from '../Badge';
 import { Card } from '../Card';
 
@@ -37,7 +38,7 @@ export function ReviewCard({ review, onPress }: ReviewCardProps) {
         </View>
       ) : null}
       <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
-        {new Date(review.createdAt).toLocaleDateString()}
+        {formatDate(review.createdAt)}
       </Text>
     </Card>
   );

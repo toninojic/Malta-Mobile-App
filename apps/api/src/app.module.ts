@@ -6,6 +6,7 @@ import { ActivityModule } from './activity/activity.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
+import { ContractorVerificationsModule } from './contractor-verifications/contractor-verifications.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { HealthModule } from './health/health.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -41,6 +42,7 @@ import { UsersModule } from './users/users.module';
     TokensModule,
     ActivityModule,
     ContactsModule,
+    ContractorVerificationsModule,
     NotificationsModule,
     ConversationsModule,
     MessagesModule,

@@ -11,8 +11,9 @@ export type JobsStackParamList = {
   JobDetails: { jobId: string };
   JobForm: { jobId?: string };
   OfferForm: { jobId: string; offerId?: string };
+  OfferWorkDetails: { offerId: string };
   UnlockContact: { offerId: string };
-  MyOffers: { view?: 'all' | 'selected' } | undefined;
+  MyOffers: { mode?: 'activity' | 'active'; initialFilter?: string } | undefined;
 };
 
 export type WalletStackParamList = {

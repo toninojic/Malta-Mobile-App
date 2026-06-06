@@ -49,6 +49,14 @@ export class JobsService {
       ...(query.category ? { category: { equals: query.category, mode: 'insensitive' } } : {}),
       ...(query.subcategory ? { subcategory: { equals: query.subcategory, mode: 'insensitive' } } : {}),
       ...(query.location ? { location: { contains: query.location, mode: 'insensitive' } } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { title: { contains: query.search, mode: 'insensitive' } },
+              { description: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
 
     const [data, total] = await this.prisma.$transaction([

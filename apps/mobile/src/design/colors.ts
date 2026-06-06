@@ -29,6 +29,7 @@ export const lightColors = {
   primaryPressed: palette.emerald700,
   accent: palette.sky600,
   warning: palette.amber500,
+  success: palette.emerald600,
   danger: palette.rose600,
 };
 
@@ -43,5 +44,6 @@ export const darkColors = {
   primaryPressed: palette.emerald600,
   accent: '#38BDF8',
   warning: palette.amber500,
+  success: palette.emerald500,
   danger: '#FB7185',
 };

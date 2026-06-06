@@ -1,11 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsDateString, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateOfferDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   estimatedPrice!: number;
+
+  @IsDateString()
+  startDate!: string;
 
   @Type(() => Number)
   @IsInt()

@@ -2,12 +2,13 @@ import { CreditCard } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../design/theme';
 import { Payment } from '../../types/domain';
+import { formatDate } from '../../utils/date';
 import { Badge } from '../Badge';
 import { Card } from '../Card';
 
 export function PaymentCard({ payment }: { payment: Payment }) {
   const theme = useTheme();
-  const createdAt = new Date(payment.createdAt).toLocaleDateString();
+  const createdAt = formatDate(payment.createdAt);
 
   return (
     <Card>

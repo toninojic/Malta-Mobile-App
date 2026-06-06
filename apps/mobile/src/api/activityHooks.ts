@@ -10,7 +10,7 @@ export function useActivitySummary(enabled = true, poll = false) {
     enabled,
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: enabled && poll ? ACTIVITY_POLL_INTERVAL_MS : false,
     refetchIntervalInBackground: false,

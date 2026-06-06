@@ -57,7 +57,9 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
 
   const markComplete = () => {
     completeMutation.mutate(contact.id, {
-      onSuccess: () => {
+      onSuccess: async () => {
+        await completionQuery.refetch({ cancelRefetch: false });
+        await query.refetch({ cancelRefetch: false });
         Alert.alert('Completion requested', 'The employer has been notified.');
       },
       onError: (error) => {
@@ -68,7 +70,9 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
 
   const confirmCompletion = () => {
     confirmMutation.mutate(contact.id, {
-      onSuccess: () => {
+      onSuccess: async () => {
+        await completionQuery.refetch({ cancelRefetch: false });
+        await query.refetch({ cancelRefetch: false });
         Alert.alert('Completion confirmed', 'Review is now available.');
       },
       onError: (error) => {

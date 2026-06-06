@@ -423,6 +423,7 @@ export class ContactsService {
       offer: {
         id: contact.offer.id,
         estimatedPrice: contact.offer.estimatedPrice.toString(),
+        startDate: contact.offer.startDate,
         estimatedCompletionDays: contact.offer.estimatedCompletionDays,
         message: contact.offer.message,
         status: contact.offer.status,

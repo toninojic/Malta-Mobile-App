@@ -2,6 +2,16 @@
 
 This QA sprint fixes mobile UX regressions without adding a new milestone or new product scope.
 
+## Targeted QA fixes after UX consolidation
+
+- Employer completion recovery: Job Details now checks unlocked selected offers for completion status and shows `Confirm Completion`, `Leave Review`, or `View Review` directly on the relevant offer card. Contact Details and Offer / Work Details refetch completion, job, offer, Activity, and review state after completion actions so the review CTA appears without manual refresh.
+- Notification deep links are type-aware. `NEW_OFFER` for employers opens Job Details so the offer can be selected from the normal offers section. `JOB_COMPLETED` for employers opens Contact Details when a contact id exists so `Confirm Completion` is available. Review notifications open Review Details, message notifications open the exact conversation, and refund notifications open Wallet.
+- Messages tab route behavior is reset on manual tab press. Opening chat from Offer Details, Activity, or an alert still opens the exact conversation thread, but tapping the Messages tab later always returns to the conversation list.
+- Contractor Activity badge is local viewed-state based. The badge shows new actionable contractor Activity items since the last Activity view and clears when the contractor opens Activity. This does not call `/notifications/read-all`, does not affect employer Alerts, and avoids 429 loops.
+- Chat keyboard layout uses a dedicated flex message screen with `KeyboardAvoidingView`, a compact multiline composer input, visible Send button, and Android `softwareKeyboardLayoutMode: resize` in Expo config.
+- Contractor My Offers filters are fixed-height horizontal chips. Empty states render below the filter bar and cannot stretch the filter buttons.
+- The build launcher icon is configured from `apps/mobile/assets/icon.png`; Android adaptive icon uses `apps/mobile/assets/adaptive-icon.png`. The logo is not displayed inside application screens.
+
 ## What Changed
 
 - Chat uses a keyboard-aware message thread layout. The composer stays above the keyboard and the list scrolls to the latest message.
@@ -14,6 +24,12 @@ This QA sprint fixes mobile UX regressions without adding a new milestone or new
 - My Offers uses compact icon actions for view, edit, message, unlock, and withdraw.
 - Category/subcategory selection uses a shared expanded service list and validates combinations on the backend.
 - Wallet reads `/payments/config` and uses mock purchase only when `ALLOW_MOCK_PURCHASES=true`.
+- Contractor Activity now shows only My Offers and My Reviews.
+- Contractor My Offers is the central work center with status filters in Activity mode and active-only mode from Jobs.
+- Offer / Work Details always fetches fresh server state and renders backend-calculated `availableActions`.
+- Alerts deep link to conversation, offer work details, job details, review details, contacts, or wallet when metadata is present.
+- Contractor profile supports portfolio images and verification upload/status.
+- Admin moderation includes contractor verification approve/reject.
 
 ## Backend QA
 
@@ -84,11 +100,24 @@ The Messages tab always opens the conversation list. It never auto-opens the lat
 
 Conversation list cards show the job title, participant names, contact status, last message preview, unread count, and last activity time. Conversation threads keep existing messages visible during background refetches, poll every 3 seconds only while focused, append sent messages locally without duplicates, and then refetch the active thread/list for server-confirmed state.
 
+Offer / Work Details refresh rules:
+
+- opening the screen refetches `GET /offers/:offerId/work-details`
+- unlock, withdraw, chat creation, and mark-completed actions invalidate work details, My Offers, Activity, jobs, notifications, contacts, conversations, and wallet/review state when relevant
+- selected locked offers show `Unlock Contact - 1 token` as the primary CTA
+- completed offers do not show edit, withdraw, or unlock actions
+
+Contractor My Offers rules:
+
+- Activity -> My Offers shows all offers with filters: All, Pending, Selected, Unlocked, In Progress, Pending Confirmation, Completed, Withdrawn, Rejected
+- Jobs -> My Offers shows active offers only
+- each offer card opens Offer / Work Details
+
 ## Manual Mobile QA
 
-1. Login as contractor and open Activity. The Activity badge should match selected/in-progress counts and should not call `/notifications/read-all`.
-2. Open Selected Offers with no selected offers. It should show an empty state, not the full offers list.
-3. Open Jobs In Progress with no active unlocked jobs. It should show an in-progress empty state.
+1. Login as contractor and open Activity. The contractor Activity badge should clear after the screen is viewed and should not call `/notifications/read-all`.
+2. Open Activity as contractor. It should show only My Offers and My Reviews.
+3. Open Jobs -> My Offers. It should show active offers only and no completed/withdrawn/rejected cards by default.
 4. Open a chat and type while the keyboard is visible. The composer should remain visible.
 5. Edit profile and choose an avatar image. The image should preview before save and persist after save.
 6. Try creating a job with a short title or description. Field errors should appear on the form.

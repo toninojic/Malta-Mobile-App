@@ -3,6 +3,7 @@ import { Badge } from '../Badge';
 import { Card } from '../Card';
 import { useTheme } from '../../design/theme';
 import { RefundRequest } from '../../types/domain';
+import { formatDate } from '../../utils/date';
 
 export function RefundCard({
   refund,
@@ -12,7 +13,7 @@ export function RefundCard({
   onPress?: () => void;
 }) {
   const theme = useTheme();
-  const createdAt = new Date(refund.createdAt).toLocaleDateString();
+  const createdAt = formatDate(refund.createdAt);
 
   return (
     <Card onPress={onPress}>

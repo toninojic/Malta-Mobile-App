@@ -16,6 +16,8 @@ import { UpdateOfferDto } from './dto/update-offer.dto';
 
 const offerInclude = {
   contactUnlock: true,
+  completion: true,
+  review: true,
   contractor: {
     select: {
       id: true,
@@ -23,6 +25,17 @@ const offerInclude = {
       status: true,
       profile: true,
       ratingSummary: true,
+      portfolioImages: {
+        orderBy: { sortOrder: 'asc' as const },
+        take: 10,
+      },
+      verificationRequests: {
+        orderBy: { createdAt: 'desc' as const },
+        take: 1,
+        select: {
+          status: true,
+        },
+      },
     },
   },
   jobRequest: {
@@ -43,6 +56,14 @@ const offerInclude = {
 };
 
 type OfferWithRelations = Prisma.OfferGetPayload<{ include: typeof offerInclude }>;
+type WorkDetailsAction =
+  | 'EDIT_OFFER'
+  | 'WITHDRAW_OFFER'
+  | 'UNLOCK_CONTACT'
+  | 'OPEN_CHAT'
+  | 'MARK_COMPLETED'
+  | 'VIEW_REVIEW'
+  | 'VIEW_DETAILS';
 
 @Injectable()
 export class OffersService {
@@ -98,6 +119,7 @@ export class OffersService {
             jobRequestId: jobId,
             contractorId: user.id,
             estimatedPrice: new Prisma.Decimal(dto.estimatedPrice),
+            startDate: this.parseStartDate(dto.startDate),
             estimatedCompletionDays: dto.estimatedCompletionDays,
             message: dto.message,
           },
@@ -142,6 +164,7 @@ export class OffersService {
       where: { id: offerId },
       data: {
         estimatedPrice: dto.estimatedPrice === undefined ? undefined : new Prisma.Decimal(dto.estimatedPrice),
+        startDate: dto.startDate === undefined ? undefined : this.parseStartDate(dto.startDate),
         estimatedCompletionDays: dto.estimatedCompletionDays,
         message: dto.message,
       },
@@ -261,6 +284,126 @@ export class OffersService {
     }
 
     return this.toAdminOffer(offer);
+  }
+
+  async findWorkDetails(user: AuthenticatedUser, offerId: string) {
+    const offer = await this.prisma.offer.findUnique({
+      where: { id: offerId },
+      include: {
+        ...offerInclude,
+        contactUnlock: {
+          include: {
+            conversation: true,
+          },
+        },
+      },
+    });
+
+    if (!offer) {
+      throw new NotFoundException('Offer not found.');
+    }
+
+    this.assertCanViewWorkDetails(user, offer);
+
+    const isUnlocked = offer.contactUnlock?.status === ContactUnlockStatus.UNLOCKED;
+    const canSeeEmployer = user.role === UserRole.ADMIN || user.id === offer.jobRequest.employerId || (user.id === offer.contractorId && isUnlocked);
+    const canSeeContractorPrivate = user.role === UserRole.ADMIN || user.id === offer.contractorId || (user.id === offer.jobRequest.employerId && isUnlocked);
+
+    return {
+      offer: this.toWorkOffer(offer),
+      job: {
+        id: offer.jobRequest.id,
+        title: offer.jobRequest.title,
+        description: offer.jobRequest.description,
+        category: offer.jobRequest.category,
+        subcategory: offer.jobRequest.subcategory,
+        location: offer.jobRequest.location,
+        status: offer.jobRequest.status,
+        expiresAt: offer.jobRequest.expiresAt,
+        images: offer.jobRequest.images,
+        createdAt: offer.jobRequest.createdAt,
+        updatedAt: offer.jobRequest.updatedAt,
+      },
+      contactUnlock: offer.contactUnlock
+        ? {
+            id: offer.contactUnlock.id,
+            jobRequestId: offer.contactUnlock.jobRequestId,
+            offerId: offer.contactUnlock.offerId,
+            employerId: offer.contactUnlock.employerId,
+            contractorId: offer.contactUnlock.contractorId,
+            status: offer.contactUnlock.status,
+            createdAt: offer.contactUnlock.createdAt,
+            updatedAt: offer.contactUnlock.updatedAt,
+          }
+        : null,
+      completion: offer.completion
+        ? {
+            id: offer.completion.id,
+            jobRequestId: offer.completion.jobRequestId,
+            offerId: offer.completion.offerId,
+            contactUnlockId: offer.completion.contactUnlockId,
+            employerId: offer.completion.employerId,
+            contractorId: offer.completion.contractorId,
+            status: offer.completion.status,
+            contractorMarkedAt: offer.completion.contractorMarkedAt,
+            employerConfirmedAt: offer.completion.employerConfirmedAt,
+            createdAt: offer.completion.createdAt,
+            updatedAt: offer.completion.updatedAt,
+          }
+        : null,
+      review: offer.review
+        ? {
+            id: offer.review.id,
+            jobRequestId: offer.review.jobRequestId,
+            offerId: offer.review.offerId,
+            contactUnlockId: offer.review.contactUnlockId,
+            employerId: offer.review.employerId,
+            contractorId: offer.review.contractorId,
+            rating: offer.review.rating,
+            comment: offer.review.comment,
+            contractorReply: offer.review.contractorReply,
+            contractorReplyAt: offer.review.contractorReplyAt,
+            status: offer.review.status,
+            createdAt: offer.review.createdAt,
+            updatedAt: offer.review.updatedAt,
+          }
+        : null,
+      conversation: offer.contactUnlock?.conversation
+        ? {
+            id: offer.contactUnlock.conversation.id,
+            contactUnlockId: offer.contactUnlock.conversation.contactUnlockId,
+            lastMessageAt: offer.contactUnlock.conversation.lastMessageAt,
+            createdAt: offer.contactUnlock.conversation.createdAt,
+            updatedAt: offer.contactUnlock.conversation.updatedAt,
+          }
+        : null,
+      employer: canSeeEmployer ? offer.jobRequest.employer : null,
+      contractor: {
+        id: offer.contractor.id,
+        email: canSeeContractorPrivate ? offer.contractor.email : undefined,
+        status: canSeeContractorPrivate ? offer.contractor.status : undefined,
+        profile: {
+          id: offer.contractor.profile?.id,
+          userId: offer.contractor.profile?.userId,
+          displayName: offer.contractor.profile?.displayName,
+          location: offer.contractor.profile?.location,
+          bio: offer.contractor.profile?.bio,
+          avatarUrl: offer.contractor.profile?.avatarUrl,
+          companyName: offer.contractor.profile?.companyName,
+          tradeCategories: offer.contractor.profile?.tradeCategories ?? [],
+          phone: canSeeContractorPrivate ? offer.contractor.profile?.phone : undefined,
+        },
+        ratingSummary: offer.contractor.ratingSummary
+          ? {
+              averageRating: offer.contractor.ratingSummary.averageRating.toString(),
+              totalReviews: offer.contractor.ratingSummary.totalReviews,
+            }
+          : null,
+        portfolioImages: offer.contractor.portfolioImages,
+        verificationStatus: offer.contractor.verificationRequests[0]?.status ?? 'UNVERIFIED',
+      },
+      availableActions: this.availableActions(user, offer),
+    };
   }
 
   async select(user: AuthenticatedUser, offerId: string) {
@@ -386,10 +529,87 @@ export class OffersService {
     }
   }
 
+  private assertCanViewWorkDetails(user: AuthenticatedUser, offer: OfferWithRelations) {
+    if (
+      user.role === UserRole.ADMIN ||
+      offer.contractorId === user.id ||
+      offer.jobRequest.employerId === user.id
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException('You cannot access this offer work details.');
+  }
+
   private assertMutableOffer(offer: Offer) {
     if (offer.status === OfferStatus.WITHDRAWN || offer.deletedAt) {
       throw new BadRequestException('Withdrawn offers cannot be edited.');
     }
+  }
+
+  private parseStartDate(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Start date must be a valid date.');
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDate = new Date(date);
+    startDate.setHours(0, 0, 0, 0);
+    if (startDate < today) {
+      throw new BadRequestException('Start date cannot be in the past.');
+    }
+
+    return date;
+  }
+
+  private availableActions(user: AuthenticatedUser, offer: OfferWithRelations): WorkDetailsAction[] {
+    if (user.role !== UserRole.CONTRACTOR || offer.contractorId !== user.id) {
+      return ['VIEW_DETAILS'];
+    }
+
+    const actions: WorkDetailsAction[] = ['VIEW_DETAILS'];
+    const isCompleted = offer.status === OfferStatus.COMPLETED;
+    const isTerminal = isCompleted || offer.status === OfferStatus.WITHDRAWN || offer.status === OfferStatus.REJECTED || Boolean(offer.deletedAt);
+    const isUnlocked = offer.contactUnlock?.status === ContactUnlockStatus.UNLOCKED;
+    const completionStatus = offer.completion?.status;
+
+    if (isCompleted) {
+      if (isUnlocked) {
+        actions.push('OPEN_CHAT');
+      }
+      if (offer.review) {
+        actions.push('VIEW_REVIEW');
+      }
+      return actions;
+    }
+
+    if (isTerminal) {
+      return actions;
+    }
+
+    if (offer.status === OfferStatus.PENDING) {
+      actions.push('EDIT_OFFER', 'WITHDRAW_OFFER');
+      return actions;
+    }
+
+    if (offer.status === OfferStatus.SELECTED && !isUnlocked) {
+      actions.push('UNLOCK_CONTACT');
+      return actions;
+    }
+
+    if (isUnlocked) {
+      actions.push('OPEN_CHAT');
+      if (!completionStatus) {
+        actions.push('MARK_COMPLETED');
+      }
+      if (offer.review) {
+        actions.push('VIEW_REVIEW');
+      }
+    }
+
+    return actions;
   }
 
   private assertContractor(user: AuthenticatedUser) {
@@ -433,6 +653,7 @@ export class OffersService {
       id: offer.id,
       jobRequestId: offer.jobRequestId,
       estimatedPrice: offer.estimatedPrice.toString(),
+      startDate: offer.startDate,
       estimatedCompletionDays: offer.estimatedCompletionDays,
       message: offer.message,
       status: offer.status,
@@ -441,6 +662,9 @@ export class OffersService {
       contactId: offer.contactUnlock?.id ?? null,
       rating: offer.contractor.ratingSummary ? Number(offer.contractor.ratingSummary.averageRating) : null,
       totalReviews: offer.contractor.ratingSummary?.totalReviews ?? 0,
+      portfolioImages: offer.contractor.portfolioImages,
+      verificationStatus: offer.contractor.verificationRequests[0]?.status ?? 'UNVERIFIED',
+      completionStatus: offer.completion?.status ?? null,
       contractor: isUnlocked ? offer.contractor : undefined,
       createdAt: offer.createdAt,
       updatedAt: offer.updatedAt,
@@ -454,6 +678,7 @@ export class OffersService {
       id: offer.id,
       jobRequestId: offer.jobRequestId,
       estimatedPrice: offer.estimatedPrice.toString(),
+      startDate: offer.startDate,
       estimatedCompletionDays: offer.estimatedCompletionDays,
       message: offer.message,
       status: offer.status,
@@ -461,6 +686,7 @@ export class OffersService {
       unlockStatus: offer.contactUnlock?.status ?? 'LOCKED',
       contactId: offer.contactUnlock?.id ?? null,
       deletedAt: offer.deletedAt,
+      completionStatus: offer.completion?.status ?? null,
       createdAt: offer.createdAt,
       updatedAt: offer.updatedAt,
       jobRequest: {
@@ -486,6 +712,7 @@ export class OffersService {
       jobRequestId: offer.jobRequestId,
       contractorId: offer.contractorId,
       estimatedPrice: offer.estimatedPrice.toString(),
+      startDate: offer.startDate,
       estimatedCompletionDays: offer.estimatedCompletionDays,
       message: offer.message,
       status: offer.status,
@@ -494,7 +721,29 @@ export class OffersService {
       contactId: offer.contactUnlock?.id ?? null,
       deletedAt: offer.deletedAt,
       contractor: offer.contractor,
+      completionStatus: offer.completion?.status ?? null,
       jobRequest: offer.jobRequest,
+      createdAt: offer.createdAt,
+      updatedAt: offer.updatedAt,
+    };
+  }
+
+  private toWorkOffer(offer: OfferWithRelations) {
+    return {
+      id: offer.id,
+      jobRequestId: offer.jobRequestId,
+      contractorId: offer.contractorId,
+      estimatedPrice: offer.estimatedPrice.toString(),
+      startDate: offer.startDate,
+      estimatedCompletionDays: offer.estimatedCompletionDays,
+      message: offer.message,
+      status: offer.status,
+      selectedByEmployer: offer.selectedByEmployer,
+      unlockStatus: offer.contactUnlock?.status ?? 'LOCKED',
+      contactId: offer.contactUnlock?.id ?? null,
+      completionStatus: offer.completion?.status ?? null,
+      reviewId: offer.review?.id ?? null,
+      deletedAt: offer.deletedAt,
       createdAt: offer.createdAt,
       updatedAt: offer.updatedAt,
     };

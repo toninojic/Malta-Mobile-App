@@ -64,6 +64,13 @@ export class OffersController {
     return this.offersService.findMine(user, query);
   }
 
+  @Get('offers/:offerId/work-details')
+  @Roles(UserRole.CONTRACTOR, UserRole.EMPLOYER, UserRole.ADMIN)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
+  workDetails(@CurrentUser() user: AuthenticatedUser, @Param('offerId', ParseUUIDPipe) offerId: string) {
+    return this.offersService.findWorkDetails(user, offerId);
+  }
+
   @Get('offers/:offerId')
   @Roles(UserRole.ADMIN)
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('offerId', ParseUUIDPipe) offerId: string) {

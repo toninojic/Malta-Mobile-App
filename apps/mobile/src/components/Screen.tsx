@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../design/theme';
 
@@ -9,9 +9,10 @@ type ScreenProps = {
   footer?: ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
+  keyboardAware?: boolean;
 };
 
-export function Screen({ children, scroll = true, footer, refreshing = false, onRefresh }: ScreenProps) {
+export function Screen({ children, scroll = true, footer, refreshing = false, onRefresh, keyboardAware = true }: ScreenProps) {
   const theme = useTheme();
   const content = (
     <View style={[styles.content, { padding: theme.spacing.lg }]}>{children}</View>
@@ -19,22 +20,29 @@ export function Screen({ children, scroll = true, footer, refreshing = false, on
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      {scroll ? (
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.scroll}
-          refreshControl={
-            onRefresh ? (
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
-            ) : undefined
-          }
-        >
-          {content}
-        </ScrollView>
-      ) : (
-        content
-      )}
-      {footer ? <View style={[styles.footer, { borderColor: theme.colors.border }]}>{footer}</View> : null}
+      <KeyboardAvoidingView
+        enabled={keyboardAware}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        style={styles.root}
+      >
+        {scroll ? (
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scroll}
+            refreshControl={
+              onRefresh ? (
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
+              ) : undefined
+            }
+          >
+            {content}
+          </ScrollView>
+        ) : (
+          content
+        )}
+        {footer ? <View style={[styles.footer, { borderColor: theme.colors.border }]}>{footer}</View> : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

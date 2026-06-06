@@ -280,6 +280,7 @@ export class MessagesService {
         offer: {
           id: conversation.contactUnlock.offer.id,
           estimatedPrice: conversation.contactUnlock.offer.estimatedPrice.toString(),
+          startDate: conversation.contactUnlock.offer.startDate,
           estimatedCompletionDays: conversation.contactUnlock.offer.estimatedCompletionDays,
           message: conversation.contactUnlock.offer.message,
         },

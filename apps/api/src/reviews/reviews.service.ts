@@ -715,6 +715,7 @@ export class ReviewsService {
       offer: {
         id: completion.offer.id,
         estimatedPrice: completion.offer.estimatedPrice.toString(),
+        startDate: completion.offer.startDate,
         estimatedCompletionDays: completion.offer.estimatedCompletionDays,
         message: completion.offer.message,
         status: completion.offer.status,
@@ -765,6 +766,7 @@ export class ReviewsService {
         ? {
             id: related.offer.id,
             estimatedPrice: related.offer.estimatedPrice.toString(),
+            startDate: related.offer.startDate,
             estimatedCompletionDays: related.offer.estimatedCompletionDays,
             message: related.offer.message,
             status: related.offer.status,

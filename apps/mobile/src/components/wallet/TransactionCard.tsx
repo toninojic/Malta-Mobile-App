@@ -5,6 +5,7 @@ import { Button } from '../Button';
 import { Card } from '../Card';
 import { useTheme } from '../../design/theme';
 import { TokenTransaction } from '../../types/domain';
+import { formatDate } from '../../utils/date';
 
 export function TransactionCard({
   transaction,
@@ -14,7 +15,7 @@ export function TransactionCard({
   onRefund?: () => void;
 }) {
   const theme = useTheme();
-  const createdAt = new Date(transaction.createdAt).toLocaleDateString();
+  const createdAt = formatDate(transaction.createdAt);
   const canRefund = transaction.type === 'PURCHASE' && transaction.amount > 0 && onRefund;
 
   return (

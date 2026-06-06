@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { BriefcaseBusiness, CalendarClock, Filter, MapPin, Plus, RefreshCw, Search, SendHorizontal, X } from 'lucide-react-native';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Badge } from '../../components/Badge';
@@ -17,6 +17,8 @@ import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
 import { JobBrowseFilters, JobRequest } from '../../types/domain';
+import { formatDate } from '../../utils/date';
+import { isActiveOffer } from '../../utils/offerWork';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'EmployerJobs'>;
 
@@ -113,11 +115,18 @@ function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
   const [draftSubcategory, setDraftSubcategory] = useState('');
   const [draftLocation, setDraftLocation] = useState('');
   const [draftSortBy, setDraftSortBy] = useState<'newest' | 'oldest'>('newest');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filters, setFilters] = useState<JobBrowseFilters>({ limit: 50, sortBy: 'newest' });
 
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search.trim()), 450);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
   const query = useQuery({
-    queryKey: ['jobs', 'browse', filters],
-    queryFn: () => api.browseJobs(filters),
+    queryKey: ['jobs', 'browse', filters, debouncedSearch],
+    queryFn: () => api.browseJobs({ ...filters, search: debouncedSearch || undefined }),
     refetchOnWindowFocus: true,
   });
   const offersQuery = useQuery({
@@ -126,7 +135,7 @@ function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
     refetchOnWindowFocus: true,
   });
   const activeOfferCount =
-    offersQuery.data?.data.filter((offer) => offer.status === 'PENDING' || offer.status === 'SELECTED').length ?? 0;
+    offersQuery.data?.data.filter(isActiveOffer).length ?? 0;
 
   const applyFilters = () => {
     setFilters({
@@ -167,10 +176,12 @@ function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
         <Button
           title={activeOfferCount ? `My Offers (${activeOfferCount})` : 'My Offers'}
           icon={SendHorizontal}
-          onPress={() => navigation.navigate('MyOffers')}
+          onPress={() => navigation.navigate('MyOffers', { mode: 'active' })}
           style={styles.offersButton}
         />
       </View>
+
+      <TextField label="Search jobs" value={search} onChangeText={setSearch} placeholder="Search by title or description" icon={Search} />
 
       <Card style={styles.filterCard}>
         <View style={styles.filterHeader}>
@@ -282,7 +293,6 @@ function ContractorJobsScreen({ navigation }: Pick<Props, 'navigation'>) {
 
 function JobCard({ job, onPress }: { job: JobRequest; onPress: () => void }) {
   const theme = useTheme();
-  const expiresAt = new Date(job.expiresAt).toLocaleDateString();
 
   return (
     <Card onPress={onPress}>
@@ -304,7 +314,7 @@ function JobCard({ job, onPress }: { job: JobRequest; onPress: () => void }) {
       </View>
       <View style={styles.metaRow}>
         <CalendarClock color={theme.colors.textMuted} size={16} />
-        <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>Expires {expiresAt}</Text>
+        <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>Expires {formatDate(job.expiresAt)}</Text>
       </View>
     </Card>
   );

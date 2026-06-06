@@ -12,6 +12,7 @@ import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { OfferFormValues } from '../../types/domain';
+import { formatDate, parseDateInput, toDateInputValue, toIsoDate } from '../../utils/date';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'OfferForm'>;
 
@@ -21,6 +22,7 @@ export function OfferFormScreen({ route, navigation }: Props) {
   const { jobId, offerId } = route.params;
   const isEditing = Boolean(offerId);
   const [estimatedPrice, setEstimatedPrice] = useState('');
+  const [startDate, setStartDate] = useState(toDateInputValue(new Date()));
   const [estimatedCompletionDays, setEstimatedCompletionDays] = useState('');
   const [message, setMessage] = useState('');
 
@@ -42,6 +44,7 @@ export function OfferFormScreen({ route, navigation }: Props) {
     }
 
     setEstimatedPrice(existingOffer.estimatedPrice);
+    setStartDate(toDateInputValue(existingOffer.startDate));
     setEstimatedCompletionDays(String(existingOffer.estimatedCompletionDays));
     setMessage(existingOffer.message ?? '');
   }, [existingOffer]);
@@ -49,10 +52,11 @@ export function OfferFormScreen({ route, navigation }: Props) {
   const values = useMemo<OfferFormValues>(
     () => ({
       estimatedPrice: Number(estimatedPrice),
+      startDate: parsedStartDateToIso(startDate) ?? '',
       estimatedCompletionDays: Number(estimatedCompletionDays),
       message: message.trim() ? message.trim() : undefined,
     }),
-    [estimatedCompletionDays, estimatedPrice, message],
+    [estimatedCompletionDays, estimatedPrice, message, startDate],
   );
 
   const mutation = useMutation({
@@ -74,6 +78,19 @@ export function OfferFormScreen({ route, navigation }: Props) {
   const submit = () => {
     if (!Number.isFinite(values.estimatedPrice) || values.estimatedPrice <= 0) {
       Alert.alert('Price needed', 'Add a valid estimated price.');
+      return;
+    }
+
+    const parsedStartDate = parseDateInput(startDate);
+    if (!parsedStartDate) {
+      Alert.alert('Start date needed', 'Use DD/MM/YYYY for the start date.');
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (parsedStartDate < today) {
+      Alert.alert('Start date needed', 'Start date cannot be in the past.');
       return;
     }
 
@@ -132,7 +149,14 @@ export function OfferFormScreen({ route, navigation }: Props) {
         placeholder="120"
       />
       <TextField
-        label="Estimated completion days"
+        label="When can you start?"
+        value={startDate}
+        onChangeText={setStartDate}
+        keyboardType="number-pad"
+        placeholder={formatDate(new Date())}
+      />
+      <TextField
+        label="How many days will it take?"
         value={estimatedCompletionDays}
         onChangeText={setEstimatedCompletionDays}
         keyboardType="number-pad"
@@ -163,3 +187,8 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
 });
+
+function parsedStartDateToIso(value: string) {
+  const parsed = parseDateInput(value);
+  return parsed ? toIsoDate(parsed) : null;
+}

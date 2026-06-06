@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarClock, CheckCircle2, Edit3, LockOpen, MapPin, MessageCircle, RefreshCw, SendHorizontal, Star, Trash2 } from 'lucide-react-native';
+import { CalendarClock, CheckCircle2, Edit3, MapPin, MessageCircle, RefreshCw, SendHorizontal, ShieldCheck, Star, Trash2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { cacheJob, cacheOffer, invalidateMarketplaceState } from '../../api/invalidation';
 import { useEnsureConversationForContact } from '../../api/messageHooks';
+import { useCompletionStatus, useConfirmCompletion } from '../../api/reviewHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -18,6 +19,7 @@ import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
 import { JobRequest, Offer } from '../../types/domain';
+import { formatDate } from '../../utils/date';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'JobDetails'>;
 
@@ -110,32 +112,10 @@ export function JobDetailsScreen({ route, navigation }: Props) {
 
   const ensureConversationMutation = useEnsureConversationForContact();
 
-  const withdrawOfferMutation = useMutation({
-    mutationFn: api.withdrawOffer,
-    onSuccess: async (offer) => {
-      cacheOffer(queryClient, offer);
-      await invalidateMarketplaceState(queryClient, {
-        jobId: offer.jobRequestId,
-        offerId: offer.id,
-        contractorId: offer.contractorId,
-      });
-    },
-    onError: (error) => {
-      Alert.alert('Could not withdraw offer', error instanceof Error ? error.message : 'Please try again.');
-    },
-  });
-
   const confirmDelete = () => {
     Alert.alert('Close job request', 'This will close the request and remove it from contractor browsing.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Close', style: 'destructive', onPress: () => deleteMutation.mutate() },
-    ]);
-  };
-
-  const confirmWithdraw = (offerId: string) => {
-    Alert.alert('Withdraw offer', 'This offer will no longer appear to the employer.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Withdraw', style: 'destructive', onPress: () => withdrawOfferMutation.mutate(offerId) },
     ]);
   };
 
@@ -162,7 +142,7 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   }
 
   const job = query.data;
-  const expiresAt = new Date(job.expiresAt).toLocaleDateString();
+  const expiresAt = formatDate(job.expiresAt);
 
   return (
     <Screen>
@@ -247,50 +227,11 @@ export function JobDetailsScreen({ route, navigation }: Props) {
                   {myOffer.message}
                 </Text>
               ) : null}
-              {myOffer.status !== 'COMPLETED' ? (
-                <View style={styles.actions}>
-                  <Button
-                    title="Edit Offer"
-                    icon={Edit3}
-                    variant="secondary"
-                    disabled={myOffer.status === 'WITHDRAWN'}
-                    onPress={() => navigation.navigate('OfferForm', { jobId, offerId: myOffer.id })}
-                  />
-                  <Button
-                    title={myOffer.unlockStatus === 'UNLOCKED' ? 'Unlocked' : 'Unlock Contact - 1 token'}
-                    icon={LockOpen}
-                    variant="secondary"
-                    disabled={myOffer.status !== 'SELECTED' || myOffer.unlockStatus === 'UNLOCKED'}
-                    onPress={() => navigation.navigate('UnlockContact', { offerId: myOffer.id })}
-                  />
-                  <Button
-                    title="Withdraw"
-                    icon={Trash2}
-                    variant="danger"
-                    disabled={myOffer.status === 'WITHDRAWN'}
-                    loading={withdrawOfferMutation.isPending}
-                    onPress={() => confirmWithdraw(myOffer.id)}
-                  />
-                </View>
-              ) : null}
-              {myOffer.unlockStatus === 'UNLOCKED' && myOffer.contactId ? (
-                <Button
-                  title="Open Chat"
-                  icon={MessageCircle}
-                  onPress={() =>
-                    ensureConversationMutation.mutate(myOffer.contactId as string, {
-                      onSuccess: (conversation) => {
-                        navigation
-                          .getParent()
-                          ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
-                      },
-                      onError: (error) => {
-                        Alert.alert('Could not open chat', error instanceof Error ? error.message : 'Please try again.');
-                      },
-                    })
-                  }
-                />
-              ) : null}
+              <Button
+                title={myOffer.status === 'SELECTED' && myOffer.unlockStatus !== 'UNLOCKED' ? 'Open Work Details / Unlock Contact' : 'Open Work Details'}
+                icon={MessageCircle}
+                onPress={() => navigation.navigate('OfferWorkDetails', { offerId: myOffer.id })}
+              />
               {myOffer.employer ? (
                 <View style={[styles.unframedContact, { borderColor: theme.colors.border }]}>
                   <Text style={[styles.offerTitle, { color: theme.colors.text }]}>
@@ -336,6 +277,16 @@ export function JobDetailsScreen({ route, navigation }: Props) {
               canSelect={canSelectOffers}
               selecting={selectOfferMutation.isPending}
               onSelect={() => selectOfferMutation.mutate(offer.id)}
+              onStatusChange={() => {
+                void query.refetch({ cancelRefetch: false });
+                void offersQuery.refetch({ cancelRefetch: false });
+              }}
+              onLeaveReview={(contactId) =>
+                navigation.getParent()?.navigate('ActivityTab', { screen: 'LeaveReview', params: { contactId } })
+              }
+              onViewReview={(reviewId) =>
+                navigation.getParent()?.navigate('ActivityTab', { screen: 'ReviewDetails', params: { reviewId } })
+              }
               onOpenChat={
                 offer.contactId
                   ? () =>
@@ -364,12 +315,18 @@ function EmployerOfferCard({
   canSelect,
   selecting,
   onSelect,
+  onStatusChange,
+  onLeaveReview,
+  onViewReview,
   onOpenChat,
 }: {
   offer: Offer;
   canSelect: boolean;
   selecting: boolean;
   onSelect: () => void;
+  onStatusChange: () => void;
+  onLeaveReview: (contactId: string) => void;
+  onViewReview: (reviewId: string) => void;
   onOpenChat?: () => void;
 }) {
   const theme = useTheme();
@@ -389,6 +346,7 @@ function EmployerOfferCard({
             <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>
               {offer.rating ? offer.rating.toFixed(1) : 'New'} ({offer.totalReviews ?? 0})
             </Text>
+            {offer.verificationStatus === 'VERIFIED' ? <ShieldCheck color={theme.colors.success} size={16} /> : null}
           </View>
         </View>
         <Badge status={offer.status} />
@@ -400,6 +358,13 @@ function EmployerOfferCard({
         <Text numberOfLines={3} style={[styles.description, { color: theme.colors.textMuted }]}>
           {offer.message}
         </Text>
+      ) : null}
+      {offer.portfolioImages?.length ? (
+        <View style={styles.portfolioPreview}>
+          {offer.portfolioImages.slice(0, 3).map((image) => (
+            <Image key={image.id} source={{ uri: image.url }} style={styles.portfolioThumb} />
+          ))}
+        </View>
       ) : null}
       {isUnlocked && offer.contractor ? (
         <View style={styles.contactInfo}>
@@ -423,10 +388,73 @@ function EmployerOfferCard({
         />
       ) : null}
       {canSelect && isPending && !isUnlocked ? <Badge status="LOCKED" /> : null}
+      <EmployerOfferCompletionActions
+        offer={offer}
+        onStatusChange={onStatusChange}
+        onLeaveReview={onLeaveReview}
+        onViewReview={onViewReview}
+      />
       {isUnlocked && onOpenChat ? (
         <Button title="Open Chat" icon={MessageCircle} onPress={onOpenChat} />
       ) : null}
     </Card>
+  );
+}
+
+function EmployerOfferCompletionActions({
+  offer,
+  onStatusChange,
+  onLeaveReview,
+  onViewReview,
+}: {
+  offer: Offer;
+  onStatusChange: () => void;
+  onLeaveReview: (contactId: string) => void;
+  onViewReview: (reviewId: string) => void;
+}) {
+  const contactId = offer.unlockStatus === 'UNLOCKED' ? offer.contactId ?? undefined : undefined;
+  const completionQuery = useCompletionStatus(contactId);
+  const confirmMutation = useConfirmCompletion();
+  const completion = completionQuery.data;
+  const status = completion?.status ?? offer.completionStatus ?? null;
+  const canReview = Boolean(completion?.canReview && !completion.review);
+  const reviewId = completion?.review?.id;
+
+  if (!contactId) {
+    return null;
+  }
+
+  const confirmCompletion = () => {
+    confirmMutation.mutate(contactId, {
+      onSuccess: async () => {
+        await completionQuery.refetch({ cancelRefetch: false });
+        onStatusChange();
+        Alert.alert('Completion confirmed', 'Review is now available.');
+      },
+      onError: (error) => {
+        Alert.alert('Could not confirm completion', error instanceof Error ? error.message : 'Please try again.');
+      },
+    });
+  };
+
+  return (
+    <View style={styles.completionActions}>
+      {status ? <Badge status={status} /> : null}
+      {status === 'PENDING_EMPLOYER_CONFIRMATION' ? (
+        <Button
+          title="Confirm Completion"
+          icon={CheckCircle2}
+          loading={confirmMutation.isPending}
+          onPress={confirmCompletion}
+        />
+      ) : null}
+      {canReview ? (
+        <Button title="Leave Review" icon={Star} variant="secondary" onPress={() => onLeaveReview(contactId)} />
+      ) : null}
+      {reviewId ? (
+        <Button title="View Review" icon={Star} variant="secondary" onPress={() => onViewReview(reviewId)} />
+      ) : null}
+    </View>
   );
 }
 
@@ -512,6 +540,18 @@ const styles = StyleSheet.create({
   },
   contactInfo: {
     gap: 4,
+  },
+  completionActions: {
+    gap: 8,
+  },
+  portfolioPreview: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  portfolioThumb: {
+    width: 72,
+    height: 58,
+    borderRadius: 8,
   },
   unframedContact: {
     borderTopWidth: StyleSheet.hairlineWidth,

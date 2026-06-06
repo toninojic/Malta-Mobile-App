@@ -17,6 +17,12 @@ export class BrowseJobsQueryDto extends PaginationQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
+  @Transform(({ value }) => (value ? String(value).trim() : value))
+  search?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(160)
   @Transform(({ value }) => (value ? String(value).trim() : value))
   location?: string;

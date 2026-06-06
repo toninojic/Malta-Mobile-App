@@ -12,6 +12,7 @@ import { useTheme } from '../../design/theme';
 import { MessagesStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
 import { Conversation } from '../../types/domain';
+import { formatDateTime } from '../../utils/date';
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'Conversations'>;
 
@@ -107,7 +108,7 @@ function ConversationCard({
       </View>
       <View style={styles.cardFooter}>
         <Badge status={conversation.contactUnlock.status} />
-        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{new Date(lastActivityAt).toLocaleString()}</Text>
+        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{formatDateTime(lastActivityAt)}</Text>
       </View>
     </Card>
   );
