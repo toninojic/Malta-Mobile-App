@@ -58,7 +58,7 @@ export function RegisterScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <Screen safeAreaTop>
       <Button title="Back" variant="ghost" icon={ArrowLeft} onPress={() => navigation.goBack()} style={styles.back} />
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Create account</Text>

@@ -10,16 +10,26 @@ type ScreenProps = {
   refreshing?: boolean;
   onRefresh?: () => void;
   keyboardAware?: boolean;
+  safeAreaTop?: boolean;
 };
 
-export function Screen({ children, scroll = true, footer, refreshing = false, onRefresh, keyboardAware = true }: ScreenProps) {
+export function Screen({
+  children,
+  scroll = true,
+  footer,
+  refreshing = false,
+  onRefresh,
+  keyboardAware = true,
+  safeAreaTop = false,
+}: ScreenProps) {
   const theme = useTheme();
+  const safeAreaEdges = safeAreaTop ? (['top', 'left', 'right', 'bottom'] as const) : (['left', 'right', 'bottom'] as const);
   const content = (
     <View style={[styles.content, { padding: theme.spacing.lg }]}>{children}</View>
   );
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView edges={safeAreaEdges} style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <KeyboardAvoidingView
         enabled={keyboardAware}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

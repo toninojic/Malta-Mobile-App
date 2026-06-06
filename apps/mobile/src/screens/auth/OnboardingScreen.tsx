@@ -12,7 +12,7 @@ export function OnboardingScreen({ navigation }: Props) {
   const theme = useTheme();
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} safeAreaTop>
       <View style={styles.wrap}>
         <View style={[styles.mark, { backgroundColor: theme.colors.primary }]}>
           <Hammer color="#FFFFFF" size={34} />

@@ -1,14 +1,16 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
-import { SendHorizontal } from 'lucide-react-native';
+import { SendHorizontal, ThumbsUp } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +20,6 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
 import { Screen } from '../../components/Screen';
-import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { MessagesStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
@@ -32,11 +33,14 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   const isFocused = useIsFocused();
   const user = useAuthStore((state) => state.user);
   const [content, setContent] = useState('');
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(72);
   const messagesQuery = useConversationMessages(route.params.conversationId, isFocused);
   const sendMutation = useSendMessage();
   const markReadMutation = useMarkMessageRead();
   const markedReadIdsRef = useRef(new Set<string>());
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const rootRef = useRef<View>(null);
   const isNewContactConversation =
     messagesQuery.error instanceof ApiError && messagesQuery.error.status === 404;
   const messages = isNewContactConversation ? [] : messagesQuery.data ?? [];
@@ -80,8 +84,40 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
     }
   }, [messages.length]);
 
-  const send = () => {
-    const trimmed = content.trim();
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      const keyboardTop = event.endCoordinates.screenY;
+      const setMeasuredOffset = (rootBottom: number) => {
+        const overlap = Math.max(0, rootBottom - keyboardTop);
+        const clearance = overlap > 0 && overlap <= composerHeight ? composerHeight + 12 : 12;
+        setKeyboardOffset(overlap > 0 ? overlap + clearance : 0);
+        requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      };
+
+      if (rootRef.current) {
+        rootRef.current.measureInWindow((_x, y, _width, height) => {
+          setMeasuredOffset(y + height);
+        });
+        return;
+      }
+
+      setKeyboardOffset(event.endCoordinates.height);
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardOffset(0));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [composerHeight]);
+
+  const send = (overrideContent?: string) => {
+    const nextContent = overrideContent ?? content;
+    const trimmed = nextContent.trim();
     if (!trimmed) {
       return;
     }
@@ -116,19 +152,24 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
     );
   }
 
+  const hasMessage = content.trim().length > 0;
+  const ComposerIcon = hasMessage ? SendHorizontal : ThumbsUp;
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
-        style={styles.root}
-      >
+      <View ref={rootRef} style={styles.root}>
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={(message) => message.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.listContent, { padding: theme.spacing.lg }]}
+          contentContainerStyle={[
+            styles.listContent,
+            {
+              padding: theme.spacing.lg,
+              paddingBottom: composerHeight + keyboardOffset + theme.spacing.lg,
+            },
+          ]}
           ListEmptyComponent={
             <EmptyState
               icon={SendHorizontal}
@@ -141,18 +182,45 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
           )}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
-        <View style={[styles.composer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <TextField
-            label="Message"
-            value={content}
-            onChangeText={setContent}
-            placeholder="Type a message"
-            multiline
-            style={styles.input}
-          />
-          <Button title="Send" icon={SendHorizontal} loading={sendMutation.isPending} onPress={send} />
+        <View
+          onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
+          style={[
+            styles.composer,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+              bottom: keyboardOffset,
+            },
+          ]}
+        >
+          <View style={[styles.inputWrap, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+            <TextInput
+              value={content}
+              onChangeText={setContent}
+              placeholder="Message"
+              placeholderTextColor={theme.colors.textMuted}
+              multiline
+              style={[styles.input, { color: theme.colors.text }]}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={hasMessage ? 'Send message' : 'Send like'}
+            disabled={sendMutation.isPending}
+            onPress={() => send(hasMessage ? undefined : '\u{1F44D}')}
+            style={({ pressed }) => [
+              styles.sendButton,
+              {
+                backgroundColor: theme.colors.primary,
+                opacity: sendMutation.isPending ? 0.55 : pressed ? 0.82 : 1,
+              },
+            ]}
+          >
+            <ComposerIcon color="#FFFFFF" size={21} />
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -204,12 +272,39 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   composer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  input: {
+  inputWrap: {
+    flex: 1,
     minHeight: 44,
+    maxHeight: 104,
+    borderRadius: 22,
+    borderWidth: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  input: {
+    minHeight: 40,
     maxHeight: 96,
+    fontSize: 16,
+    lineHeight: 21,
+    paddingVertical: 9,
+    textAlignVertical: 'center',
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
