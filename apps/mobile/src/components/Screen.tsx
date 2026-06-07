@@ -23,7 +23,7 @@ export function Screen({
   safeAreaTop = false,
 }: ScreenProps) {
   const theme = useTheme();
-  const safeAreaEdges = safeAreaTop ? (['top', 'left', 'right', 'bottom'] as const) : (['left', 'right', 'bottom'] as const);
+  const safeAreaEdges = safeAreaTop ? (['top', 'left', 'right'] as const) : (['left', 'right'] as const);
   const content = (
     <View style={[styles.content, { padding: theme.spacing.lg }]}>{children}</View>
   );

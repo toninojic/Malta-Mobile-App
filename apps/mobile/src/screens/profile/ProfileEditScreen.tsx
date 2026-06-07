@@ -254,7 +254,8 @@ export function ProfileEditScreen() {
 
   return (
     <Screen>
-      <Card>
+      <View style={styles.profileTopSpacer} />
+      <Card style={styles.profileTopCard}>
         <View style={styles.headerRow}>
           <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
             {avatarPreviewUri ? (
@@ -345,6 +346,12 @@ export function ProfileEditScreen() {
 }
 
 const styles = StyleSheet.create({
+  profileTopSpacer: {
+    height: 12,
+  },
+  profileTopCard: {
+    marginTop: 0,
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

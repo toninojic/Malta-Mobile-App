@@ -27,6 +27,8 @@ import { ChatMessage } from '../../types/domain';
 import { formatChatTimestamp } from '../../utils/date';
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'ConversationThread'>;
+const KEYBOARD_CLEARANCE = 6;
+const CHAT_BOTTOM_GAP = 6;
 
 export function ConversationThreadScreen({ route, navigation }: Props) {
   const theme = useTheme();
@@ -92,8 +94,8 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
       const keyboardTop = event.endCoordinates.screenY;
       const setMeasuredOffset = (rootBottom: number) => {
         const overlap = Math.max(0, rootBottom - keyboardTop);
-        const clearance = overlap > 0 && overlap <= composerHeight ? composerHeight + 12 : 12;
-        setKeyboardOffset(overlap > 0 ? overlap + clearance : 0);
+        const nextOffset = overlap > 0 ? overlap + KEYBOARD_CLEARANCE : 0;
+        setKeyboardOffset(nextOffset);
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
       };
 
@@ -104,7 +106,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
         return;
       }
 
-      setKeyboardOffset(event.endCoordinates.height);
+      setKeyboardOffset(event.endCoordinates.height + KEYBOARD_CLEARANCE);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     });
     const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardOffset(0));
@@ -113,7 +115,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [composerHeight]);
+  }, []);
 
   const send = (overrideContent?: string) => {
     const nextContent = overrideContent ?? content;
@@ -156,7 +158,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   const ComposerIcon = hasMessage ? SendHorizontal : ThumbsUp;
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['left', 'right']}>
       <View ref={rootRef} style={styles.root}>
         <FlatList
           ref={listRef}
@@ -167,7 +169,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
             styles.listContent,
             {
               padding: theme.spacing.lg,
-              paddingBottom: composerHeight + keyboardOffset + theme.spacing.lg,
+              paddingBottom: composerHeight + (keyboardOffset > 0 ? keyboardOffset + CHAT_BOTTOM_GAP : CHAT_BOTTOM_GAP),
             },
           ]}
           ListEmptyComponent={

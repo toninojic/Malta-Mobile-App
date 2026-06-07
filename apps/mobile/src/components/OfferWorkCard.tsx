@@ -5,11 +5,12 @@ import { Card } from './Card';
 import { useTheme } from '../design/theme';
 import { Offer } from '../types/domain';
 import { formatDate } from '../utils/date';
-import { completionStatusLabel, primaryOfferActionLabel } from '../utils/offerWork';
+import { completionStatusLabel, isCompletedOffer, primaryOfferActionLabel } from '../utils/offerWork';
 
 export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () => void }) {
   const theme = useTheme();
   const job = offer.jobRequest;
+  const badgeStatuses = getOfferBadgeStatuses(offer);
 
   return (
     <Card onPress={onPress}>
@@ -24,10 +25,9 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
       </View>
 
       <View style={styles.badges}>
-        <Badge status={offer.status} />
-        {job?.status ? <Badge status={job.status} /> : null}
-        {offer.unlockStatus && offer.unlockStatus !== 'LOCKED' ? <Badge status={offer.unlockStatus} /> : null}
-        {offer.completionStatus ? <Badge status={completionStatusLabel(offer.completionStatus)} /> : null}
+        {badgeStatuses.map((status) => (
+          <Badge key={status} status={status} />
+        ))}
       </View>
 
       <View style={styles.row}>
@@ -41,6 +41,21 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
       </View>
     </Card>
   );
+}
+
+function getOfferBadgeStatuses(offer: Offer) {
+  if (isCompletedOffer(offer)) {
+    return ['COMPLETED'];
+  }
+
+  const statuses = [
+    offer.status,
+    offer.jobRequest?.status,
+    offer.unlockStatus && offer.unlockStatus !== 'LOCKED' ? offer.unlockStatus : null,
+    offer.completionStatus ? completionStatusLabel(offer.completionStatus) : null,
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(statuses));
 }
 
 const styles = StyleSheet.create({

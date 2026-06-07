@@ -35,7 +35,8 @@ export function MyOffersScreen({ navigation, route }: Props) {
   const offers = useMemo(() => {
     const allOffers = query.data?.data ?? [];
     const visible = activeOnly ? allOffers.filter(isActiveOffer) : allOffers.filter((offer) => offerMatchesFilter(offer, filter));
-    return visible.sort(sortOffers);
+    const uniqueOffers = Array.from(new Map(visible.map((offer) => [offer.id, offer])).values());
+    return uniqueOffers.sort(sortOffers);
   }, [activeOnly, filter, query.data?.data]);
 
   return (
