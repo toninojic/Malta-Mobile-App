@@ -8,6 +8,7 @@ import {
   ChatMessage,
   CompletionStatusResponse,
   ContactUnlock,
+  ContractorProfile,
   ContractorPortfolioImage,
   ContractorRatingSummary,
   ContractorVerification,
@@ -385,6 +386,16 @@ export const api = {
       method: 'POST',
     });
   },
+  rejectOffer(offerId: string) {
+    return request<Offer>(`/offers/${offerId}/reject`, {
+      method: 'POST',
+    });
+  },
+  cancelOfferSelection(offerId: string) {
+    return request<Offer>(`/offers/${offerId}/cancel-selection`, {
+      method: 'POST',
+    });
+  },
   withdrawOffer(offerId: string) {
     return request<Offer>(`/offers/${offerId}/withdraw`, {
       method: 'POST',
@@ -534,6 +545,9 @@ export const api = {
   },
   contractorRatingSummary(contractorId: string) {
     return request<ContractorRatingSummary>(`/contractors/${contractorId}/rating-summary`);
+  },
+  contractorProfile(contractorId: string) {
+    return request<ContractorProfile>(`/contractors/${contractorId}/profile`);
   },
   replyReview(reviewId: string, contractorReply: string) {
     return request<Review>(`/reviews/${reviewId}/reply`, {

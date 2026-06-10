@@ -18,7 +18,7 @@ export function OnboardingScreen({ navigation }: Props) {
           <Hammer color="#FFFFFF" size={34} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.kicker, { color: theme.colors.primary }]}>Malta Craftsman</Text>
+          <Text style={[styles.kicker, { color: theme.colors.primary }]}>MaltaPro</Text>
           <Text style={[styles.title, { color: theme.colors.text }]}>
             Trusted trade work, matched faster.
           </Text>

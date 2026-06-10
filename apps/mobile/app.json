@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Malta Craftsman",
+    "name": "MaltaPro",
     "slug": "malta-craftsman-marketplace",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -14,6 +14,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "infoPlist": {
+        "CFBundleDisplayName": "MaltaPro"
+      },
       "bundleIdentifier": "mt.marketplace.craftsman"
     },
     "android": {

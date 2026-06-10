@@ -47,15 +47,17 @@ The shared `invalidateMarketplaceState` helper centralizes marketplace invalidat
 ## Mutation Update Rules
 
 - Create or update job: cache the job detail, invalidate jobs, activity, notifications, offers, contacts, and conversations as needed.
-- Create, update, withdraw, or select offer: cache the changed offer, invalidate job details, job offers, my offers, work details, activity, contacts, messages, and notifications.
-- Select offer: immediately updates the visible job detail status to `IN_PROGRESS` before refetching server state.
+- Create, update, withdraw, reject, cancel selection, or select offer: cache the changed offer, invalidate job details, job offers, my offers, work details, activity, contacts, messages, and notifications.
+- Select offer: immediately updates the visible job detail status to `IN_PROGRESS` before refetching server state. The backend rejects all other pending offers for the same job, so offer lists and My Offers must be invalidated together.
+- Cancel selection: updates the visible job detail status back to `ACTIVE`, invalidates browse jobs, job details, job offers, My Offers, Activity, contacts, and notifications.
 - Unlock contact or request contact: invalidate contact details, unlock status, offers, jobs, activity, notifications, messages, and token state when tokens changed.
 - Mark completed or confirm completion: invalidate contact details, completion status, reviews, jobs, offers, activity, notifications, and messages.
 - Create or reply to review: invalidate review details, contractor review summary, contact completion status, activity, notifications, jobs, and offers.
 - Send message: append the returned message locally, then invalidate the conversation thread, conversation list, notifications, and activity.
 - Create conversation: invalidate the conversation list, conversation thread, and activity.
 - Mark message read: update the thread message locally, then invalidate conversation list, unread alert count, and activity.
-- Purchases/refunds: invalidate only token, payment, refund, notification, admin statistics, and audit-log keys needed by the action.
+- Purchases/refunds: invalidate only token, payment, refund, notification, admin statistics, and audit-log keys needed by the action. Wallet purchase mode is driven by `/payments/config`; mock mode uses `/tokens/mock-purchase` and refreshes wallet balance immediately, while Stripe mode uses checkout only when Stripe is configured.
+- Contractor profile access: after contact unlock, profile queries under `['contractors', contractorId, 'profile']` are invalidated with contractor review/rating keys so employers can see newly available contact details without app restart.
 
 ## Diagnostics
 
@@ -75,11 +77,15 @@ Diagnostics are gated by the existing API diagnostics config and are not verbose
 - Employer creates a job, returns to the jobs list, and sees it without manual reload.
 - Contractor submits an offer, returns to offers/activity, and sees updated counts.
 - Employer selects an offer and the job detail status changes to `IN_PROGRESS` immediately.
+- Other pending offers on that job refresh to `REJECTED` after one offer is selected.
+- Employer cancels selection before unlock and the job detail status changes back to `ACTIVE`; contractor browse can find the job again.
 - Contractor sees selected offers in My Offers/Work Details on focus without manual refresh.
 - Contractor unlocks contact and contact/activity/token state refreshes.
+- Employer opens the contractor profile after unlock and sees full contact/profile details; before unlock, private contact details stay hidden.
 - Contractor marks completed and employer contact details/activity reflect pending confirmation.
 - Employer confirms completion and completed/review states refresh.
 - Employer leaves a review and contractor review screens/activity refresh.
+- Employer My Reviews badge counts jobs waiting for review plus unread review-related notifications, then clears after review submission/read state refresh.
 - Conversation thread receives new messages through 3 second polling.
 - Conversation list updates while focused through 20-30 second polling.
 - Alerts and unread counts update through 12 second polling.

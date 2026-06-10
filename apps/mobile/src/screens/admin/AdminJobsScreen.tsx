@@ -49,7 +49,7 @@ export function AdminJobsScreen() {
   };
 
   return (
-    <Screen>
+    <Screen contentTopPadding={28}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Jobs</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Inspect requests, filter by status, and close unsafe or cancelled jobs.</Text>

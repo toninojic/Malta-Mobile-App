@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarClock, CheckCircle2, Edit3, MapPin, MessageCircle, RefreshCw, SendHorizontal, ShieldCheck, Star, Trash2 } from 'lucide-react-native';
+import { CalendarClock, CheckCircle2, Edit3, MapPin, MessageCircle, RefreshCw, SendHorizontal, ShieldCheck, Star, Trash2, UserRound, XCircle } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -109,6 +109,37 @@ export function JobDetailsScreen({ route, navigation }: Props) {
       Alert.alert('Could not select offer', error instanceof Error ? error.message : 'Please try again.');
     },
   });
+  const rejectOfferMutation = useMutation({
+    mutationFn: api.rejectOffer,
+    onSuccess: async (offer) => {
+      cacheOffer(queryClient, offer);
+      await invalidateMarketplaceState(queryClient, {
+        jobId,
+        offerId: offer.id,
+        contractorId: offer.contractorId,
+      });
+    },
+    onError: (error) => {
+      Alert.alert('Could not reject offer', error instanceof Error ? error.message : 'Please try again.');
+    },
+  });
+  const cancelSelectionMutation = useMutation({
+    mutationFn: api.cancelOfferSelection,
+    onSuccess: async (offer) => {
+      cacheOffer(queryClient, offer);
+      queryClient.setQueryData<JobRequest>(['jobs', jobId], (currentJob) =>
+        currentJob ? { ...currentJob, status: 'ACTIVE' } : currentJob,
+      );
+      await invalidateMarketplaceState(queryClient, {
+        jobId,
+        offerId: offer.id,
+        contractorId: offer.contractorId,
+      });
+    },
+    onError: (error) => {
+      Alert.alert('Could not cancel selection', error instanceof Error ? error.message : 'Please try again.');
+    },
+  });
 
   const ensureConversationMutation = useEnsureConversationForContact();
 
@@ -116,6 +147,42 @@ export function JobDetailsScreen({ route, navigation }: Props) {
     Alert.alert('Close job request', 'This will close the request and remove it from contractor browsing.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Close', style: 'destructive', onPress: () => deleteMutation.mutate() },
+    ]);
+  };
+
+  const confirmSelectOffer = (offer: Offer) => {
+    Alert.alert(
+      'Selecting an offer',
+      'When you select an offer, this job will no longer be visible to other contractors. The selected contractor will be notified and can unlock contact by spending 1 token.\n\nIf the selected contractor does not respond, you can cancel the selection and make the job available again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Select Offer',
+          onPress: () => selectOfferMutation.mutate(offer.id),
+        },
+      ],
+    );
+  };
+
+  const confirmRejectOffer = (offer: Offer) => {
+    Alert.alert('Reject offer', 'Reject this contractor offer?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reject',
+        style: 'destructive',
+        onPress: () => rejectOfferMutation.mutate(offer.id),
+      },
+    ]);
+  };
+
+  const confirmCancelSelection = (offer: Offer) => {
+    Alert.alert('Cancel selection', 'This will reject the selected offer and make the job available to contractors again.', [
+      { text: 'Keep selected', style: 'cancel' },
+      {
+        text: 'Cancel Selection',
+        style: 'destructive',
+        onPress: () => cancelSelectionMutation.mutate(offer.id),
+      },
     ]);
   };
 
@@ -275,8 +342,12 @@ export function JobDetailsScreen({ route, navigation }: Props) {
               key={offer.id}
               offer={offer}
               canSelect={canSelectOffers}
-              selecting={selectOfferMutation.isPending}
-              onSelect={() => selectOfferMutation.mutate(offer.id)}
+              selecting={selectOfferMutation.isPending && offer.status === 'PENDING'}
+              rejecting={rejectOfferMutation.isPending}
+              cancellingSelection={cancelSelectionMutation.isPending}
+              onSelect={() => confirmSelectOffer(offer)}
+              onReject={() => confirmRejectOffer(offer)}
+              onCancelSelection={() => confirmCancelSelection(offer)}
               onStatusChange={() => {
                 void query.refetch({ cancelRefetch: false });
                 void offersQuery.refetch({ cancelRefetch: false });
@@ -302,6 +373,14 @@ export function JobDetailsScreen({ route, navigation }: Props) {
                       })
                   : undefined
               }
+              onOpenProfile={
+                offer.unlockStatus === 'UNLOCKED' && offer.contractor?.id
+                  ? () =>
+                      navigation
+                        .getParent()
+                        ?.navigate('ActivityTab', { screen: 'ContractorProfile', params: { contractorId: offer.contractor?.id as string } })
+                  : undefined
+              }
             />
           ))}
         </View>
@@ -314,25 +393,40 @@ function EmployerOfferCard({
   offer,
   canSelect,
   selecting,
+  rejecting,
+  cancellingSelection,
   onSelect,
+  onReject,
+  onCancelSelection,
   onStatusChange,
   onLeaveReview,
   onViewReview,
   onOpenChat,
+  onOpenProfile,
 }: {
   offer: Offer;
   canSelect: boolean;
   selecting: boolean;
+  rejecting: boolean;
+  cancellingSelection: boolean;
   onSelect: () => void;
+  onReject: () => void;
+  onCancelSelection: () => void;
   onStatusChange: () => void;
   onLeaveReview: (contactId: string) => void;
   onViewReview: (reviewId: string) => void;
   onOpenChat?: () => void;
+  onOpenProfile?: () => void;
 }) {
   const theme = useTheme();
-  const isSelected = offer.status === 'SELECTED' || offer.selectedByEmployer;
+  const isSelected = offer.status === 'SELECTED' && offer.selectedByEmployer;
   const isUnlocked = offer.unlockStatus === 'UNLOCKED';
-  const isPending = offer.unlockStatus === 'PENDING';
+  const hasPendingUnlock = offer.unlockStatus === 'PENDING';
+  const canRejectOffer = canSelect && offer.status === 'PENDING';
+  const canCancelSelection = canSelect && offer.status === 'SELECTED' && !isUnlocked;
+  const [portfolioViewerIndex, setPortfolioViewerIndex] = useState(0);
+  const [portfolioViewerOpen, setPortfolioViewerOpen] = useState(false);
+  const portfolioImages = offer.portfolioImages ?? [];
 
   return (
     <Card>
@@ -346,7 +440,16 @@ function EmployerOfferCard({
             <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>
               {offer.rating ? offer.rating.toFixed(1) : 'New'} ({offer.totalReviews ?? 0})
             </Text>
-            {offer.verificationStatus === 'VERIFIED' ? <ShieldCheck color={theme.colors.success} size={16} /> : null}
+            {offer.verificationStatus === 'VERIFIED' ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Verified contractor information"
+                onPress={showVerifiedContractorInfo}
+                hitSlop={8}
+              >
+                <ShieldCheck color={theme.colors.success} size={16} />
+              </Pressable>
+            ) : null}
           </View>
         </View>
         <Badge status={offer.status} />
@@ -359,13 +462,29 @@ function EmployerOfferCard({
           {offer.message}
         </Text>
       ) : null}
-      {offer.portfolioImages?.length ? (
+      {portfolioImages.length ? (
         <View style={styles.portfolioPreview}>
-          {offer.portfolioImages.slice(0, 3).map((image) => (
-            <Image key={image.id} source={{ uri: image.url }} style={styles.portfolioThumb} />
+          {portfolioImages.slice(0, 3).map((image, index) => (
+            <Pressable
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Open portfolio image ${index + 1}`}
+              key={image.id}
+              onPress={() => {
+                setPortfolioViewerIndex(index);
+                setPortfolioViewerOpen(true);
+              }}
+            >
+              <Image source={{ uri: image.url }} style={styles.portfolioThumb} />
+            </Pressable>
           ))}
         </View>
       ) : null}
+      <ImageViewerModal
+        images={portfolioImages.map((image) => ({ id: image.id, url: image.url }))}
+        initialIndex={portfolioViewerIndex}
+        visible={portfolioViewerOpen}
+        onClose={() => setPortfolioViewerOpen(false)}
+      />
       {isUnlocked && offer.contractor ? (
         <View style={styles.contactInfo}>
           <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>{offer.contractor.email}</Text>
@@ -377,17 +496,41 @@ function EmployerOfferCard({
           ) : null}
         </View>
       ) : null}
-      {canSelect ? (
+      {canSelect && offer.status === 'PENDING' ? (
         <Button
-          title={isSelected ? 'Selected' : 'Select Offer'}
+          title="Select Offer"
           icon={CheckCircle2}
-          variant={isSelected ? 'secondary' : 'primary'}
-          disabled={isSelected}
-          loading={selecting && !isSelected}
+          loading={selecting}
           onPress={onSelect}
         />
       ) : null}
-      {canSelect && isPending && !isUnlocked ? <Badge status="LOCKED" /> : null}
+      {canSelect && isSelected ? (
+        <Button
+          title="Selected"
+          icon={CheckCircle2}
+          variant="secondary"
+          disabled
+          onPress={onSelect}
+        />
+      ) : null}
+      {canRejectOffer ? (
+        <Button title="Reject Offer" icon={XCircle} variant="secondary" loading={rejecting} onPress={onReject} />
+      ) : null}
+      {canCancelSelection ? (
+        <View style={[styles.selectionInfo, { borderColor: theme.colors.border }]}>
+          <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>
+            If the selected contractor does not respond, you can cancel the selection and make the job available again.
+          </Text>
+          <Button
+            title="Cancel Selection"
+            icon={XCircle}
+            variant="secondary"
+            loading={cancellingSelection}
+            onPress={onCancelSelection}
+          />
+        </View>
+      ) : null}
+      {canSelect && isSelected && hasPendingUnlock && !isUnlocked ? <Badge status="LOCKED" /> : null}
       <EmployerOfferCompletionActions
         offer={offer}
         onStatusChange={onStatusChange}
@@ -397,7 +540,17 @@ function EmployerOfferCard({
       {isUnlocked && onOpenChat ? (
         <Button title="Open Chat" icon={MessageCircle} onPress={onOpenChat} />
       ) : null}
+      {isUnlocked && onOpenProfile ? (
+        <Button title="View Contractor Profile" icon={UserRound} variant="secondary" onPress={onOpenProfile} />
+      ) : null}
     </Card>
+  );
+}
+
+function showVerifiedContractorInfo() {
+  Alert.alert(
+    'Verified Contractor',
+    'This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team.',
   );
 }
 
@@ -543,6 +696,11 @@ const styles = StyleSheet.create({
   },
   completionActions: {
     gap: 8,
+  },
+  selectionInfo: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    paddingTop: 10,
   },
   portfolioPreview: {
     flexDirection: 'row',

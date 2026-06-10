@@ -11,9 +11,33 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
   const theme = useTheme();
   const job = offer.jobRequest;
   const badgeStatuses = getOfferBadgeStatuses(offer);
+  const completed = isCompletedOffer(offer);
+  const isSelectedActive = offer.status === 'SELECTED' && offer.unlockStatus !== 'UNLOCKED' && !completed;
+  const showSelectedHistory = offer.selectedByEmployer && !isSelectedActive;
+  const shouldShowUnlock = isSelectedActive;
 
   return (
-    <Card onPress={onPress}>
+    <Card
+      onPress={onPress}
+      style={[
+        isSelectedActive
+          ? {
+              backgroundColor: `${theme.colors.primary}10`,
+              borderColor: theme.colors.primary,
+            }
+          : null,
+      ]}
+    >
+      {isSelectedActive ? (
+        <View style={[styles.selectedNotice, { backgroundColor: `${theme.colors.primary}18`, borderColor: theme.colors.primary }]}>
+          <Text style={[styles.selectedBadge, { color: theme.colors.primary }]}>SELECTED</Text>
+          <Text style={[styles.selectedText, { color: theme.colors.text }]}>Selected by employer</Text>
+        </View>
+      ) : null}
+      {showSelectedHistory ? (
+        <Text style={[styles.historyText, { color: theme.colors.textMuted }]}>Selected by employer</Text>
+      ) : null}
+
       <View style={styles.top}>
         <View style={styles.copy}>
           <Text style={[styles.title, { color: theme.colors.text }]}>{job?.title ?? 'Job request'}</Text>
@@ -25,7 +49,7 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
       </View>
 
       <View style={styles.badges}>
-        {badgeStatuses.map((status) => (
+        {badgeStatuses.filter((status) => !(isSelectedActive && status === 'SELECTED')).map((status) => (
           <Badge key={status} status={status} />
         ))}
       </View>
@@ -35,9 +59,17 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
         <Text style={[styles.meta, { color: theme.colors.textMuted }]}>Starts {formatDate(offer.startDate)}</Text>
       </View>
 
-      <View style={[styles.nextAction, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
-        <Sparkles color={theme.colors.primary} size={16} />
-        <Text style={[styles.nextText, { color: theme.colors.text }]}>{primaryOfferActionLabel(offer)}</Text>
+      <View
+        style={[
+          styles.nextAction,
+          {
+            backgroundColor: shouldShowUnlock ? theme.colors.primary : theme.colors.surfaceMuted,
+            borderColor: shouldShowUnlock ? theme.colors.primary : theme.colors.border,
+          },
+        ]}
+      >
+        <Sparkles color={shouldShowUnlock ? '#FFFFFF' : theme.colors.primary} size={16} />
+        <Text style={[styles.nextText, { color: shouldShowUnlock ? '#FFFFFF' : theme.colors.text }]}>{primaryOfferActionLabel(offer)}</Text>
       </View>
     </Card>
   );
@@ -49,7 +81,7 @@ function getOfferBadgeStatuses(offer: Offer) {
   }
 
   const statuses = [
-    offer.status,
+    offer.status === 'SELECTED' && offer.unlockStatus === 'UNLOCKED' ? null : offer.status,
     offer.jobRequest?.status,
     offer.unlockStatus && offer.unlockStatus !== 'LOCKED' ? offer.unlockStatus : null,
     offer.completionStatus ? completionStatusLabel(offer.completionStatus) : null,
@@ -79,6 +111,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  selectedNotice: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  selectedBadge: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  selectedText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  historyText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   row: {
     flexDirection: 'row',

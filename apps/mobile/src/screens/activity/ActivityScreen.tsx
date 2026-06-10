@@ -4,6 +4,7 @@ import { BriefcaseBusiness, ClipboardList, Star, TimerReset } from 'lucide-react
 import { ComponentType, useCallback, useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../../api/activityHooks';
+import { useNotifications } from '../../api/notificationHooks';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -13,8 +14,13 @@ import { useTheme } from '../../design/theme';
 import { ActivityStackParamList } from '../../navigation/types';
 import { useActivityUiStore } from '../../store/activity.store';
 import { useAuthStore } from '../../store/auth.store';
+import { NotificationType } from '../../types/domain';
 
 type Props = NativeStackScreenProps<ActivityStackParamList, 'ActivityHome'>;
+
+const OFFER_ACTIVITY_TYPES = new Set<NotificationType>(['NEW_OFFER', 'OFFER_SELECTED', 'CONTACT_UNLOCKED', 'JOB_COMPLETED']);
+const REVIEW_ACTIVITY_TYPES = new Set<NotificationType>(['REVIEW_RECEIVED', 'REVIEW_REPLIED', 'REVIEW_REMOVED']);
+const EMPLOYER_REVIEW_ACTIVITY_TYPES = new Set<NotificationType>(['REVIEW_RECEIVED', 'REVIEW_REPLIED']);
 
 export function ActivityScreen({ navigation }: Props) {
   const theme = useTheme();
@@ -23,7 +29,12 @@ export function ActivityScreen({ navigation }: Props) {
   const isAdmin = user?.role === 'ADMIN';
   const isFocused = useIsFocused();
   const summaryQuery = useActivitySummary(Boolean(user), isFocused);
+  const notificationsQuery = useNotifications(Boolean(user && !isAdmin), false);
   const markContractorActivityViewed = useActivityUiStore((state) => state.markContractorActivityViewed);
+  const viewedSectionNotificationIds = useActivityUiStore((state) =>
+    user?.id ? state.viewedContractorSectionNotificationIds[user.id] : undefined,
+  );
+  const markContractorActivitySectionViewed = useActivityUiStore((state) => state.markContractorActivitySectionViewed);
 
   const forceRefreshActivity = useCallback(() => {
     if (!summaryQuery.isFetching) {
@@ -43,6 +54,32 @@ export function ActivityScreen({ navigation }: Props) {
   const summary = summaryQuery.data;
   const contractorActionableCount =
     summary?.role === 'CONTRACTOR' ? summary.selectedOffersCount + summary.jobsInProgressCount : 0;
+  const unreadNotifications = notificationsQuery.data?.data.filter((notification) => !notification.isRead) ?? [];
+  const offerNotifications = unreadNotifications.filter((notification) => OFFER_ACTIVITY_TYPES.has(notification.type));
+  const reviewNotifications = unreadNotifications.filter((notification) => REVIEW_ACTIVITY_TYPES.has(notification.type));
+  const employerReviewNotificationCount = unreadNotifications.filter((notification) =>
+    EMPLOYER_REVIEW_ACTIVITY_TYPES.has(notification.type),
+  ).length;
+  const viewedOfferIds = new Set(viewedSectionNotificationIds?.offers ?? []);
+  const viewedReviewIds = new Set(viewedSectionNotificationIds?.reviews ?? []);
+  const offerBadgeCount = offerNotifications.filter((notification) => !viewedOfferIds.has(notification.id)).length;
+  const reviewBadgeCount = reviewNotifications.filter((notification) => !viewedReviewIds.has(notification.id)).length;
+
+  const openContractorOffers = () => {
+    if (user?.id) {
+      markContractorActivitySectionViewed(user.id, 'offers', offerNotifications.map((notification) => notification.id));
+    }
+
+    navigation.getParent()?.navigate('JobsTab', { screen: 'MyOffers', params: { mode: 'activity' } });
+  };
+
+  const openContractorReviews = () => {
+    if (user?.id) {
+      markContractorActivitySectionViewed(user.id, 'reviews', reviewNotifications.map((notification) => notification.id));
+    }
+
+    navigation.navigate('MyReviews');
+  };
 
   useEffect(() => {
     if (isFocused && user?.role === 'CONTRACTOR' && user.id && summary?.role === 'CONTRACTOR') {
@@ -85,13 +122,19 @@ export function ActivityScreen({ navigation }: Props) {
 
       {isContractor ? (
         <>
-          <ActivityCard title="My Offers" icon={ClipboardList} count={summary?.role === 'CONTRACTOR' ? summary.myOffersCount : 0} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'MyOffers', params: { mode: 'activity' } })} />
-          <ActivityCard title="My Reviews" icon={Star} count={summary?.role === 'CONTRACTOR' ? summary.myReviewsCount : 0} onPress={() => navigation.navigate('MyReviews')} />
+          <ActivityCard title="My Offers" icon={ClipboardList} count={summary?.role === 'CONTRACTOR' ? summary.myOffersCount : 0} badgeCount={offerBadgeCount} onPress={openContractorOffers} />
+          <ActivityCard title="My Reviews" icon={Star} count={summary?.role === 'CONTRACTOR' ? summary.myReviewsCount : 0} badgeCount={reviewBadgeCount} onPress={openContractorReviews} />
         </>
       ) : (
         <>
           <ActivityCard title={isAdmin ? 'All Jobs' : 'My Jobs'} icon={BriefcaseBusiness} count={summary?.role !== 'CONTRACTOR' ? summary?.myJobsCount ?? 0 : 0} onPress={() => navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' })} />
-          <ActivityCard title="Reviews" icon={Star} count={summary?.role !== 'CONTRACTOR' ? summary?.reviewsToLeaveCount ?? 0 : 0} onPress={() => navigation.navigate('Contacts', { filter: 'completed' })} />
+          <ActivityCard
+            title="My Reviews"
+            icon={Star}
+            count={summary?.role !== 'CONTRACTOR' ? summary?.reviewsToLeaveCount ?? 0 : 0}
+            badgeCount={summary?.role !== 'CONTRACTOR' ? (summary?.reviewsToLeaveCount ?? 0) + employerReviewNotificationCount : 0}
+            onPress={() => navigation.navigate('Contacts', { filter: 'completed' })}
+          />
         </>
       )}
     </Screen>
@@ -103,12 +146,14 @@ function ActivityCard({
   icon: Icon,
   count,
   badge,
+  badgeCount = 0,
   onPress,
 }: {
   title: string;
   icon: ComponentType<{ color?: string; size?: number }>;
   count: number;
   badge?: string;
+  badgeCount?: number;
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -121,6 +166,11 @@ function ActivityCard({
           <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{title}</Text>
           <Text style={[styles.count, { color: theme.colors.textMuted }]}>{count} item{count === 1 ? '' : 's'}</Text>
         </View>
+        {badgeCount > 0 ? (
+          <View style={[styles.notificationBadge, { backgroundColor: theme.colors.danger }]}>
+            <Text style={styles.notificationBadgeText}>{badgeCount}</Text>
+          </View>
+        ) : null}
         {badge ? <Badge status={badge} /> : null}
       </View>
       <Button title="Open" variant="secondary" onPress={onPress} />
@@ -158,5 +208,18 @@ const styles = StyleSheet.create({
   },
   count: {
     fontSize: 13,
+  },
+  notificationBadge: {
+    alignItems: 'center',
+    borderRadius: 999,
+    justifyContent: 'center',
+    minWidth: 24,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
   },
 });

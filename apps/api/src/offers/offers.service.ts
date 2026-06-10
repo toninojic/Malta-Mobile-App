@@ -183,6 +183,14 @@ export class OffersService {
       throw new BadRequestException('Offer has already been withdrawn.');
     }
 
+    if (offer.status === OfferStatus.REJECTED) {
+      throw new BadRequestException('Rejected offers cannot be withdrawn.');
+    }
+
+    if (offer.status === OfferStatus.COMPLETED) {
+      throw new BadRequestException('Completed offers cannot be withdrawn.');
+    }
+
     const updated = await this.prisma.offer.update({
       where: { id: offerId },
       data: {
@@ -428,65 +436,169 @@ export class OffersService {
       throw new BadRequestException('Offers can be selected only for active job requests.');
     }
 
-    const selected = await this.prisma.$transaction(async (tx) => {
-      await tx.offer.updateMany({
-        where: {
-          jobRequestId: offer.jobRequestId,
-          selectedByEmployer: true,
-          status: OfferStatus.SELECTED,
-        },
-        data: {
-          status: OfferStatus.PENDING,
-          selectedByEmployer: false,
-        },
+    if (offer.status !== OfferStatus.PENDING) {
+      throw new BadRequestException('Only pending offers can be selected.');
+    }
+
+    try {
+      const selected = await this.prisma.$transaction(async (tx) => {
+        await tx.offer.updateMany({
+          where: {
+            jobRequestId: offer.jobRequestId,
+            id: { not: offerId },
+            status: OfferStatus.PENDING,
+            deletedAt: null,
+          },
+          data: {
+            status: OfferStatus.REJECTED,
+            selectedByEmployer: false,
+          },
+        });
+
+        const contactUnlock = await tx.contactUnlock.upsert({
+          where: { offerId },
+          create: {
+            jobRequestId: offer.jobRequestId,
+            offerId,
+            employerId: offer.jobRequest.employerId,
+            contractorId: offer.contractorId,
+            status: ContactUnlockStatus.PENDING,
+          },
+          update: {
+            status: ContactUnlockStatus.PENDING,
+          },
+        });
+
+        await tx.jobRequest.update({
+          where: { id: offer.jobRequestId },
+          data: { status: JobStatus.IN_PROGRESS },
+        });
+
+        await this.notificationsService.create(
+          {
+            userId: offer.contractorId,
+            type: NotificationType.OFFER_SELECTED,
+            title: 'Offer selected',
+            body: 'Your offer was selected. Unlock contact to start conversation.',
+            data: {
+              jobId: offer.jobRequestId,
+              offerId,
+              contactUnlockId: contactUnlock.id,
+              employerId: offer.jobRequest.employerId,
+            },
+          },
+          tx,
+        );
+
+        return tx.offer.update({
+          where: { id: offerId },
+          data: {
+            status: OfferStatus.SELECTED,
+            selectedByEmployer: true,
+          },
+          include: offerInclude,
+        });
       });
 
-      const contactUnlock = await tx.contactUnlock.upsert({
-        where: { offerId },
-        create: {
-          jobRequestId: offer.jobRequestId,
-          offerId,
-          employerId: offer.jobRequest.employerId,
-          contractorId: offer.contractorId,
-          status: ContactUnlockStatus.PENDING,
-        },
-        update: {
-          status: ContactUnlockStatus.PENDING,
-        },
-      });
+      return this.toEmployerOffer(selected);
+    } catch (error) {
+      if (this.isPrismaError(error, 'P2002')) {
+        throw new ConflictException('Only one offer can be selected for a job request.');
+      }
 
+      throw error;
+    }
+  }
+
+  async reject(user: AuthenticatedUser, offerId: string) {
+    if (user.role !== UserRole.EMPLOYER) {
+      throw new ForbiddenException('Only the employer who owns the job request can reject an offer.');
+    }
+
+    const offer = await this.prisma.offer.findUnique({
+      where: { id: offerId },
+      include: offerInclude,
+    });
+
+    if (!offer || offer.deletedAt) {
+      throw new NotFoundException('Offer not found.');
+    }
+
+    if (offer.jobRequest.employerId !== user.id) {
+      throw new ForbiddenException('You can reject offers only for your own job requests.');
+    }
+
+    if (offer.status === OfferStatus.COMPLETED) {
+      throw new BadRequestException('Completed offers cannot be rejected.');
+    }
+
+    if (offer.status === OfferStatus.WITHDRAWN) {
+      throw new BadRequestException('Withdrawn offers cannot be rejected.');
+    }
+
+    if (offer.status === OfferStatus.REJECTED) {
+      throw new BadRequestException('Offer has already been rejected.');
+    }
+
+    if (offer.status === OfferStatus.SELECTED) {
+      throw new BadRequestException('Use cancel selection for selected offers.');
+    }
+
+    const rejected = await this.prisma.offer.update({
+      where: { id: offerId },
+      data: {
+        status: OfferStatus.REJECTED,
+        selectedByEmployer: false,
+      },
+      include: offerInclude,
+    });
+
+    return this.toEmployerOffer(rejected);
+  }
+
+  async cancelSelection(user: AuthenticatedUser, offerId: string) {
+    if (user.role !== UserRole.EMPLOYER) {
+      throw new ForbiddenException('Only the employer who owns the job request can cancel a selection.');
+    }
+
+    const offer = await this.prisma.offer.findUnique({
+      where: { id: offerId },
+      include: offerInclude,
+    });
+
+    if (!offer || offer.deletedAt) {
+      throw new NotFoundException('Offer not found.');
+    }
+
+    if (offer.jobRequest.employerId !== user.id) {
+      throw new ForbiddenException('You can cancel selections only for your own job requests.');
+    }
+
+    if (offer.status !== OfferStatus.SELECTED || !offer.selectedByEmployer) {
+      throw new BadRequestException('Only selected offers can have selection cancelled.');
+    }
+
+    if (offer.contactUnlock?.status === ContactUnlockStatus.UNLOCKED) {
+      throw new BadRequestException('Selection cannot be cancelled after contact is unlocked.');
+    }
+
+    const cancelled = await this.prisma.$transaction(async (tx) => {
       await tx.jobRequest.update({
         where: { id: offer.jobRequestId },
-        data: { status: JobStatus.IN_PROGRESS },
+        data: { status: JobStatus.ACTIVE },
       });
-
-      await this.notificationsService.create(
-        {
-          userId: offer.contractorId,
-          type: NotificationType.OFFER_SELECTED,
-          title: 'Offer selected',
-          body: 'Your offer was selected. Unlock contact to start conversation.',
-          data: {
-            jobId: offer.jobRequestId,
-            offerId,
-            contactUnlockId: contactUnlock.id,
-            employerId: offer.jobRequest.employerId,
-          },
-        },
-        tx,
-      );
 
       return tx.offer.update({
         where: { id: offerId },
         data: {
-          status: OfferStatus.SELECTED,
-          selectedByEmployer: true,
+          status: OfferStatus.REJECTED,
+          selectedByEmployer: false,
         },
         include: offerInclude,
       });
     });
 
-    return this.toEmployerOffer(selected);
+    return this.toEmployerOffer(cancelled);
   }
 
   private async getContractorOfferOrThrow(user: AuthenticatedUser, offerId: string) {
@@ -544,6 +656,10 @@ export class OffersService {
   private assertMutableOffer(offer: Offer) {
     if (offer.status === OfferStatus.WITHDRAWN || offer.deletedAt) {
       throw new BadRequestException('Withdrawn offers cannot be edited.');
+    }
+
+    if (offer.status !== OfferStatus.PENDING) {
+      throw new BadRequestException('Only pending offers can be edited.');
     }
   }
 

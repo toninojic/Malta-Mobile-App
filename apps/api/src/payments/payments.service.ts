@@ -66,6 +66,7 @@ export class PaymentsService {
 
     return {
       mode: mockPurchasesEnabled ? 'MOCK' : 'STRIPE',
+      allowMockPurchases: mockPurchasesEnabled,
       mockPurchasesEnabled,
       stripeConfigured,
     };

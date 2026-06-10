@@ -30,6 +30,12 @@ This QA sprint fixes mobile UX regressions without adding a new milestone or new
 - Alerts deep link to conversation, offer work details, job details, review details, contacts, or wallet when metadata is present.
 - Contractor profile supports portfolio images and verification upload/status.
 - Admin moderation includes contractor verification approve/reject.
+- Offer selection is single-winner: selecting one offer auto-rejects other pending offers for that job, shows a confirmation modal, and moves the job out of public All Jobs.
+- Employers can reject individual pending offers and can cancel a selected offer before unlock, which rejects that selected offer and makes the job ACTIVE again.
+- Mock purchase mode now follows `/payments/config`; when `ALLOW_MOCK_PURCHASES=true`, Stripe is not required and packages add tokens immediately.
+- Verified badges open an English info modal without exposing verification documents.
+- Employers can open the full contractor profile after unlock; before unlock, private contractor email/phone remain hidden.
+- Employer My Reviews badge counts completed jobs waiting for review plus unread `REVIEW_RECEIVED` / `REVIEW_REPLIED` notifications.
 
 ## Backend QA
 
@@ -106,6 +112,8 @@ Offer / Work Details refresh rules:
 - unlock, withdraw, chat creation, and mark-completed actions invalidate work details, My Offers, Activity, jobs, notifications, contacts, conversations, and wallet/review state when relevant
 - selected locked offers show `Unlock Contact - 1 token` as the primary CTA
 - completed offers do not show edit, withdraw, or unlock actions
+- selected is only the active visual state before unlock; after unlock/completion, cards emphasize unlocked, in-progress, pending confirmation, or completed instead
+- rejected offers do not show edit or unlock actions
 
 Contractor My Offers rules:
 
@@ -127,3 +135,47 @@ Contractor My Offers rules:
 10. Re-enter Activity within 30 seconds. It should not call `/activity/summary` again unless you pull-to-refresh.
 11. Opening Activity should not call `/notifications/read-all`; that endpoint is only used from the Notifications screen manual Read All action.
 12. Open Jobs and expand/collapse Filters repeatedly. No job browse request should fire until Apply or Clear is pressed.
+
+## Final Production-Prep UX Fixes
+
+- Employer offer cards now keep contractor contact details hidden before unlock while allowing portfolio thumbnails to open in a fullscreen swipe viewer.
+- Contractor Activity cards show local section-specific badges for unread offer and review notifications. Opening My Offers or My Reviews clears only that local section badge and does not call `/notifications/read-all`, so Activity avoids 429 loops.
+- Selected offers use distinct card styling, a larger `SELECTED` indicator, the text `Selected by employer`, and an emphasized `Unlock Contact - 1 token` next action.
+- `Mark Job Completed` in Offer / Work Details uses the primary completion-style button treatment so it is easy to notice when available.
+- Admin verification documents can be opened from Moderation. Images use the protected fullscreen preview with auth headers; PDFs open through the system/browser viewer with the admin JWT on the URL. The backend still only serves verification documents to admins.
+- Job category selection includes search across category and subcategory labels. Selecting a filtered subcategory still sets both category and subcategory.
+- Notifications and admin dashboard/moderation/list screens have extra top padding to match the fixed spacing used elsewhere.
+- The mobile app display name is now `MaltaPro` in Expo config and iOS display metadata; bundle identifiers were not changed.
+
+Production-prep regression checklist:
+
+1. As employer, open a contractor offer before contact unlock and tap a portfolio image. Confirm fullscreen swipe preview works and no email, phone, or company contact info is shown.
+2. As contractor, open Activity and confirm My Offers/My Reviews badges show counts, clear per section when opened, and do not trigger repeated Activity or read-all requests.
+3. Select an offer as employer, then view it as contractor. Confirm selected styling is obvious and `Unlock Contact - 1 token` is emphasized.
+4. Open a work item where completion is allowed and confirm `Mark Job Completed` is visually easy to find.
+5. As admin, open a verification image and PDF from Moderation. Confirm employers cannot access verification document URLs.
+6. Create a job and search for a subcategory such as `pipe`; confirm `Plumbing -> Pipe Installation` is selectable.
+7. Check employer Notifications and admin Dashboard, Users, Jobs, Moderation, Reviews, Refunds, Conversations, Verifications, and Audit views for comfortable top spacing.
+8. Rebuild/open the app and confirm the display name appears as `MaltaPro`.
+
+## Final Marketplace Flow Fixes
+
+Run with the API available and `ALLOW_MOCK_PURCHASES=true`:
+
+```bash
+npm run smoke:final-flow-fixes --workspace @malta-marketplace/api
+```
+
+The final flow smoke test verifies:
+
+- one selected offer per job
+- automatic rejection of other pending offers
+- rejected offers cannot unlock
+- selected offers can unlock after mock token purchase
+- employer manual reject
+- cancel selection before unlock
+- job returns to ACTIVE after cancellation
+- mock purchase does not require Stripe
+- employer full contractor profile access after unlock
+- private contractor contact data hidden before unlock
+- employer review badge count before and after review submission

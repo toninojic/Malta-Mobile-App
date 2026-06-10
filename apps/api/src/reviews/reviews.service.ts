@@ -385,6 +385,67 @@ export class ReviewsService {
     );
   }
 
+  async getContractorProfile(user: AuthenticatedUser, contractorId: string) {
+    const contractor = await this.prisma.user.findFirst({
+      where: {
+        id: contractorId,
+        role: UserRole.CONTRACTOR,
+      },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        profile: true,
+        ratingSummary: true,
+        portfolioImages: {
+          orderBy: { sortOrder: 'asc' },
+          take: 10,
+        },
+        verificationRequests: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { status: true },
+        },
+      },
+    });
+
+    if (!contractor) {
+      throw new NotFoundException('Contractor not found.');
+    }
+
+    const canSeePrivateDetails = await this.canSeePrivateContractorProfile(user, contractorId);
+
+    return {
+      id: contractor.id,
+      email: canSeePrivateDetails ? contractor.email : undefined,
+      status: canSeePrivateDetails ? contractor.status : undefined,
+      profile: {
+        id: contractor.profile?.id,
+        userId: contractor.profile?.userId,
+        displayName: canSeePrivateDetails ? contractor.profile?.displayName : undefined,
+        location: contractor.profile?.location,
+        bio: canSeePrivateDetails ? contractor.profile?.bio : undefined,
+        avatarUrl: canSeePrivateDetails ? contractor.profile?.avatarUrl : undefined,
+        companyName: canSeePrivateDetails ? contractor.profile?.companyName : undefined,
+        tradeCategories: contractor.profile?.tradeCategories ?? [],
+        phone: canSeePrivateDetails ? contractor.profile?.phone : undefined,
+      },
+      ratingSummary: contractor.ratingSummary
+        ? this.toRatingSummary(contractor.ratingSummary)
+        : this.toRatingSummary({
+            id: null,
+            contractorId,
+            averageRating: new Prisma.Decimal(0),
+            totalReviews: 0,
+            createdAt: null,
+            updatedAt: null,
+          }),
+      portfolioImages: contractor.portfolioImages,
+      verificationStatus: contractor.verificationRequests[0]?.status ?? 'UNVERIFIED',
+      canSeePrivateDetails,
+    };
+  }
+
   async replyToReview(user: AuthenticatedUser, reviewId: string, dto: ReplyReviewDto) {
     if (user.role !== UserRole.CONTRACTOR) {
       throw new ForbiddenException('Only contractors can reply to reviews.');
@@ -642,6 +703,27 @@ export class ReviewsService {
     if (!contractor || contractor.role !== UserRole.CONTRACTOR) {
       throw new NotFoundException('Contractor not found.');
     }
+  }
+
+  private async canSeePrivateContractorProfile(user: AuthenticatedUser, contractorId: string) {
+    if (user.role === UserRole.ADMIN || user.id === contractorId) {
+      return true;
+    }
+
+    if (user.role !== UserRole.EMPLOYER) {
+      return false;
+    }
+
+    const unlockedContact = await this.prisma.contactUnlock.findFirst({
+      where: {
+        employerId: user.id,
+        contractorId,
+        status: ContactUnlockStatus.UNLOCKED,
+      },
+      select: { id: true },
+    });
+
+    return Boolean(unlockedContact);
   }
 
   private async recalculateRatingSummary(tx: Prisma.TransactionClient, contractorId: string) {

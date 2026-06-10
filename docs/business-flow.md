@@ -32,7 +32,7 @@ Employer leaves review
    Job title must be at least 5 characters, description at least 20 characters, and category/subcategory must be a valid service combination from the shared category list.
 2. Contractors browse ACTIVE jobs and submit PENDING offers with estimated price, start date, completion days, and optional message.
 3. Employers see masked offers: price, completion time, message, average rating, and total reviews. Contractor identity stays hidden.
-4. Employer selects one offer. The offer becomes SELECTED, the job becomes IN_PROGRESS, and a locked ContactUnlock is created.
+4. Employer selects one offer. The offer becomes SELECTED, the job becomes IN_PROGRESS, a locked ContactUnlock is created, and every other pending offer for that job is automatically REJECTED.
 5. Contractor receives `OFFER_SELECTED` and opens Offer / Work Details. Backend `availableActions` makes `UNLOCK_CONTACT` the primary action.
 6. Unlocking spends 1 token, creates a SPEND transaction, marks ContactUnlock as UNLOCKED, and reveals both parties.
 7. Chat opens through the ContactUnlock. Existing conversations are reused by `contactUnlockId`.
@@ -41,6 +41,18 @@ Employer leaves review
 10. Review becomes available only after confirmed completion.
 
 After completion, contractor offer cards become read-only for marketplace actions: edit, withdraw, and unlock controls are hidden. Chat may still be opened when the contact is already unlocked and review details can be viewed when available.
+
+Only one offer can be SELECTED for a job at a time. A database partial unique index and backend transaction enforce this rule for active selected offers. Employers may manually reject individual pending offers. Rejected contractors cannot edit or unlock those offers, but rejected offers remain visible in historical views when filters allow them.
+
+If the selected contractor does not unlock contact, the employer can cancel the selection before contact is unlocked. Cancel Selection changes the selected offer to REJECTED and returns the job to ACTIVE so it appears again in contractor All Jobs. Offers that were auto-rejected during the original selection remain rejected for MVP simplicity.
+
+Visual status follows the current work step:
+
+```text
+PENDING -> SELECTED -> UNLOCKED / IN_PROGRESS -> PENDING_CONFIRMATION -> COMPLETED
+```
+
+`Selected by employer` may remain visible as historical context after unlock or completion, but the active visual status must move forward to unlocked, in progress, pending confirmation, or completed.
 
 ## CLOSED vs COMPLETED
 
@@ -65,12 +77,26 @@ Jobs -> My Offers opens the same work center in active-only mode, showing pendin
 
 Offer / Work Details is the contractor source of truth. It always fetches `GET /api/v1/offers/:offerId/work-details` and displays offer status, job status, contact unlock status, completion status, review state, conversation state, allowed identity data, and backend-calculated `availableActions`.
 
+After contact unlock, employers can open the full contractor profile. The profile may show contractor name, avatar, verified badge, rating, reviews, portfolio images, bio, company profile, email, and phone when available. Before unlock, employers may see public evaluation signals such as rating, portfolio, and verified badge, but private contact information and verification documents remain hidden.
+
+Verified contractor badges open an informational modal only. The modal explains that MaltaPro admins reviewed and approved verification documents. The documents themselves remain admin-only.
+
 Employers keep a compact Activity structure:
 
 ```text
 My Jobs -> own jobs, received offers, selected offers, completion confirmation, reviews to leave
-Reviews -> review-related work
+My Reviews -> completed jobs waiting for employer review and review-related updates
 ```
+
+Employer My Reviews badges count completed jobs waiting for employer review plus unread review-related notifications (`REVIEW_RECEIVED` and `REVIEW_REPLIED`). The count clears when the employer submits the pending review and notifications are read through the normal Alerts flow.
+
+## Payments
+
+The mobile wallet reads `GET /api/v1/payments/config` before purchase actions.
+
+If `ALLOW_MOCK_PURCHASES=true`, the API returns mock mode (`allowMockPurchases=true` / `mockPurchasesEnabled=true`) and Buy Package uses the mock purchase endpoint. Stripe keys are not required, tokens are added immediately, and a PURCHASE token transaction is recorded.
+
+If `ALLOW_MOCK_PURCHASES=false`, Buy Package uses Stripe Checkout. When Stripe keys are missing in that mode, the wallet shows `Payments are not configured.`
 
 Admins can view operational data but do not participate in marketplace conversations or token unlocks as a user.
 

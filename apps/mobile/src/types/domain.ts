@@ -186,6 +186,17 @@ export type ContractorVerification = {
   reviewedByAdmin?: Pick<AuthUser, 'id' | 'email' | 'profile'> | null;
 };
 
+export type ContractorProfile = {
+  id: string;
+  email?: string;
+  status?: UserStatus;
+  profile?: Partial<UserProfile> | null;
+  ratingSummary?: ContractorRatingSummary | null;
+  portfolioImages: ContractorPortfolioImage[];
+  verificationStatus: ContractorVerificationStatus;
+  canSeePrivateDetails: boolean;
+};
+
 export type TokenPackage = {
   id: string;
   title: string;
@@ -259,6 +270,7 @@ export type CreateCheckoutSessionResponse = {
 
 export type PaymentConfig = {
   mode: 'MOCK' | 'STRIPE';
+  allowMockPurchases?: boolean;
   mockPurchasesEnabled: boolean;
   stripeConfigured: boolean;
 };

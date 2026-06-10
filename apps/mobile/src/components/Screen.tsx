@@ -11,6 +11,7 @@ type ScreenProps = {
   onRefresh?: () => void;
   keyboardAware?: boolean;
   safeAreaTop?: boolean;
+  contentTopPadding?: number;
 };
 
 export function Screen({
@@ -21,11 +22,14 @@ export function Screen({
   onRefresh,
   keyboardAware = true,
   safeAreaTop = false,
+  contentTopPadding,
 }: ScreenProps) {
   const theme = useTheme();
   const safeAreaEdges = safeAreaTop ? (['top', 'left', 'right'] as const) : (['left', 'right'] as const);
   const content = (
-    <View style={[styles.content, { padding: theme.spacing.lg }]}>{children}</View>
+    <View style={[styles.content, { padding: theme.spacing.lg, paddingTop: contentTopPadding ?? theme.spacing.lg }]}>
+      {children}
+    </View>
   );
 
   return (

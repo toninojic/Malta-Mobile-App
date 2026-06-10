@@ -66,7 +66,7 @@ export function AdminUsersScreen() {
   };
 
   return (
-    <Screen>
+    <Screen contentTopPadding={28}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Users</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Search profiles, review roles, and suspend or activate accounts.</Text>

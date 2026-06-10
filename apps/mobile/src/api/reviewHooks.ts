@@ -91,6 +91,15 @@ export function useContractorRatingSummary(contractorId?: string) {
   });
 }
 
+export function useContractorProfile(contractorId?: string) {
+  return useQuery({
+    queryKey: ['contractors', contractorId, 'profile'],
+    queryFn: () => api.contractorProfile(contractorId as string),
+    enabled: Boolean(contractorId),
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useReplyReview() {
   const queryClient = useQueryClient();
 

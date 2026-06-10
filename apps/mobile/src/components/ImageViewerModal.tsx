@@ -5,6 +5,7 @@ import { FlatList, Image, Modal, Pressable, StyleSheet, Text, useWindowDimension
 type ImageItem = {
   id: string;
   url: string;
+  headers?: Record<string, string>;
 };
 
 type Props = {
@@ -50,7 +51,7 @@ export function ImageViewerModal({ images, initialIndex, visible, onClose }: Pro
           }}
           renderItem={({ item }) => (
             <View style={[styles.slide, { width, height }]}>
-              <Image source={{ uri: item.url }} style={[styles.image, { width, height: height * 0.78 }]} resizeMode="contain" />
+              <Image source={{ uri: item.url, headers: item.headers }} style={[styles.image, { width, height: height * 0.78 }]} resizeMode="contain" />
             </View>
           )}
         />

@@ -38,7 +38,10 @@ export function WalletScreen({ navigation }: Props) {
   const adminRefundsQuery = useAdminRefunds(isAdmin);
   const checkoutMutation = useCreateCheckoutSession();
   const mockPurchaseMutation = useMockPurchase();
-  const isMockMode = paymentConfigQuery.data?.mode === 'MOCK';
+  const isMockMode =
+    paymentConfigQuery.data?.allowMockPurchases === true ||
+    paymentConfigQuery.data?.mockPurchasesEnabled === true ||
+    paymentConfigQuery.data?.mode === 'MOCK';
 
   useFocusEffect(
     useCallback(() => {
@@ -73,6 +76,11 @@ export function WalletScreen({ navigation }: Props) {
           Alert.alert('Could not buy package', error instanceof Error ? error.message : 'Please try again.');
         },
       });
+      return;
+    }
+
+    if (paymentConfigQuery.data && !paymentConfigQuery.data.stripeConfigured) {
+      Alert.alert('Payments are not configured.', 'Mock purchases are disabled and Stripe is not configured.');
       return;
     }
 

@@ -2,8 +2,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Edit3, LockOpen, MessageCircle, RefreshCw, Star, Trash2 } from 'lucide-react-native';
-import { useCallback } from 'react';
-import { Alert, Image, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { useUnlockOffer } from '../../api/contactHooks';
 import { invalidateMarketplaceState } from '../../api/invalidation';
@@ -14,6 +14,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { Screen } from '../../components/Screen';
 import { serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
@@ -33,6 +34,8 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
   const ensureConversationMutation = useEnsureConversationForContact();
   const completeMutation = useCompleteContact();
   const confirmMutation = useConfirmCompletion();
+  const [portfolioViewerIndex, setPortfolioViewerIndex] = useState(0);
+  const [portfolioViewerOpen, setPortfolioViewerOpen] = useState(false);
   const withdrawMutation = useMutation({
     mutationFn: api.withdrawOffer,
     onSuccess: async (offer) => {
@@ -161,13 +164,40 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
   const isEmployer = user?.role === 'EMPLOYER' && details.contactUnlock?.employerId === user.id;
   const completionStatus = details.completion?.status ?? details.offer.completionStatus;
   const canEmployerReview = isEmployer && completionStatus === 'CONFIRMED' && !details.review && details.contactUnlock?.id;
+  const isCompleted =
+    details.offer.status === 'COMPLETED' ||
+    details.offer.completionStatus === 'CONFIRMED' ||
+    details.job.status === 'COMPLETED';
+  const isSelectedActive = details.offer.status === 'SELECTED' && details.offer.unlockStatus !== 'UNLOCKED' && !isCompleted;
+  const showSelectedHistory = details.offer.selectedByEmployer && !isSelectedActive;
+  const headlineStatus = isCompleted
+    ? 'COMPLETED'
+    : details.offer.completionStatus ?? (details.offer.unlockStatus === 'UNLOCKED' ? details.job.status : details.offer.status);
 
   return (
     <Screen refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
-      <Card>
+      <Card
+        style={
+          isSelectedActive
+            ? {
+                backgroundColor: `${theme.colors.primary}10`,
+                borderColor: theme.colors.primary,
+              }
+            : undefined
+        }
+      >
+        {isSelectedActive ? (
+          <View style={[styles.selectedNotice, { backgroundColor: `${theme.colors.primary}18`, borderColor: theme.colors.primary }]}>
+            <Text style={[styles.selectedBadge, { color: theme.colors.primary }]}>SELECTED</Text>
+            <Text style={[styles.selectedText, { color: theme.colors.text }]}>Selected by employer</Text>
+          </View>
+        ) : null}
+        {showSelectedHistory ? (
+          <Text style={[styles.historyText, { color: theme.colors.textMuted }]}>Selected by employer</Text>
+        ) : null}
         <View style={styles.titleRow}>
           <Text style={[styles.title, { color: theme.colors.text }]}>{details.job.title}</Text>
-          <Badge status={details.offer.status} />
+          {!isSelectedActive ? <Badge status={headlineStatus} /> : null}
         </View>
         <Text style={[styles.copy, { color: theme.colors.textMuted }]}>{details.job.description}</Text>
         <Text style={[styles.meta, { color: theme.colors.text }]}>
@@ -202,10 +232,26 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
         <Card>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Portfolio</Text>
           <View style={styles.portfolio}>
-            {details.contractor.portfolioImages.map((image) => (
-              <Image key={image.id} source={{ uri: image.url }} style={styles.portfolioImage} />
+            {details.contractor.portfolioImages.map((image, index) => (
+              <Pressable
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Open portfolio image ${index + 1}`}
+                key={image.id}
+                onPress={() => {
+                  setPortfolioViewerIndex(index);
+                  setPortfolioViewerOpen(true);
+                }}
+              >
+                <Image source={{ uri: image.url }} style={styles.portfolioImage} />
+              </Pressable>
             ))}
           </View>
+          <ImageViewerModal
+            images={details.contractor.portfolioImages.map((image) => ({ id: image.id, url: image.url }))}
+            initialIndex={portfolioViewerIndex}
+            visible={portfolioViewerOpen}
+            onClose={() => setPortfolioViewerOpen(false)}
+          />
         </Card>
       ) : null}
 
@@ -217,7 +263,7 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
           <Button title="Open Chat" icon={MessageCircle} variant="secondary" loading={ensureConversationMutation.isPending} onPress={openChat} />
         ) : null}
         {actions.includes('MARK_COMPLETED') ? (
-          <Button title="Mark Job Completed" icon={CheckCircle2} variant="secondary" loading={completeMutation.isPending} onPress={markCompleted} />
+          <Button title="Mark Job Completed" icon={CheckCircle2} loading={completeMutation.isPending} onPress={markCompleted} style={styles.completeButton} />
         ) : null}
         {actions.includes('EDIT_OFFER') ? (
           <Button title="Edit Offer" icon={Edit3} variant="secondary" onPress={() => navigation.navigate('OfferForm', { jobId: details.job.id, offerId })} />
@@ -304,6 +350,28 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  selectedNotice: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  selectedBadge: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  selectedText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  historyText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   portfolio: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -316,5 +384,8 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 10,
+  },
+  completeButton: {
+    minHeight: 52,
   },
 });

@@ -24,7 +24,8 @@
     "smoke:qa-mobile-ux": "node scripts/qa-mobile-ux-smoke.mjs",
     "smoke:qa-fixes": "node scripts/qa-fixes-smoke.mjs",
     "smoke:flow-refactor": "node scripts/flow-refactor-smoke.mjs",
-    "smoke:ux-consolidation": "node scripts/ux-consolidation-smoke.mjs"
+    "smoke:ux-consolidation": "node scripts/ux-consolidation-smoke.mjs",
+    "smoke:final-flow-fixes": "node scripts/final-flow-fixes-smoke.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

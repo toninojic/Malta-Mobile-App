@@ -93,6 +93,18 @@ export class OffersController {
     return this.offersService.select(user, offerId);
   }
 
+  @Post('offers/:offerId/reject')
+  @Roles(UserRole.EMPLOYER)
+  reject(@CurrentUser() user: AuthenticatedUser, @Param('offerId', ParseUUIDPipe) offerId: string) {
+    return this.offersService.reject(user, offerId);
+  }
+
+  @Post('offers/:offerId/cancel-selection')
+  @Roles(UserRole.EMPLOYER)
+  cancelSelection(@CurrentUser() user: AuthenticatedUser, @Param('offerId', ParseUUIDPipe) offerId: string) {
+    return this.offersService.cancelSelection(user, offerId);
+  }
+
   @Post('offers/:offerId/withdraw')
   @Roles(UserRole.CONTRACTOR)
   withdraw(@CurrentUser() user: AuthenticatedUser, @Param('offerId', ParseUUIDPipe) offerId: string) {

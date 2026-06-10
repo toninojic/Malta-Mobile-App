@@ -35,7 +35,7 @@ export function NotificationsScreen() {
   );
 
   return (
-    <Screen>
+    <Screen contentTopPadding={28}>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: theme.colors.text }]}>{isAdmin ? 'All notifications' : 'Notifications'}</Text>

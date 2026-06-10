@@ -1,6 +1,6 @@
-import { CheckCircle2, Link2, MessageCircle, RefreshCw, RotateCcw, ScrollText, Star, XCircle } from 'lucide-react-native';
+import { CheckCircle2, Eye, Link2, MessageCircle, RefreshCw, RotateCcw, ScrollText, Star, XCircle } from 'lucide-react-native';
 import { ComponentType, ReactNode, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useAdminAuditLogs, useAdminConversationMessages, useAdminRefundsForModeration } from '../../api/adminHooks';
 import { useAdminContacts } from '../../api/contactHooks';
 import { useAdminConversations } from '../../api/messageHooks';
@@ -15,12 +15,14 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { OptionSelect } from '../../components/OptionSelect';
 import { ReviewCard } from '../../components/reviews/ReviewCard';
 import { RefundCard } from '../../components/wallet/RefundCard';
 import { Screen } from '../../components/Screen';
 import { useTheme } from '../../design/theme';
-import { Conversation, Review } from '../../types/domain';
+import { getAccessToken } from '../../store/auth.store';
+import { ContractorVerification, Conversation, Review } from '../../types/domain';
 import { formatDate } from '../../utils/date';
 
 const SECTION_OPTIONS = [
@@ -39,7 +41,7 @@ export function AdminModerationScreen() {
   const [section, setSection] = useState<Section>('REFUNDS');
 
   return (
-    <Screen>
+    <Screen contentTopPadding={28}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Moderation</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Refunds, reviews, conversations, contact unlocks, and immutable audit logs.</Text>
@@ -62,6 +64,8 @@ function VerificationsSection() {
   const query = useAdminContractorVerifications(true);
   const approveMutation = useApproveContractorVerification();
   const rejectMutation = useRejectContractorVerification();
+  const [previewDocument, setPreviewDocument] = useState<ContractorVerification | null>(null);
+  const authHeaders = accessTokenHeaders();
 
   const approve = (verificationId: string) => {
     Alert.alert('Approve verification', 'Approve this contractor verification?', [
@@ -77,6 +81,26 @@ function VerificationsSection() {
     ]);
   };
 
+  const openDocument = async (verification: ContractorVerification) => {
+    if (!verification.documentUrl) {
+      return;
+    }
+
+    if (isImageDocument(verification)) {
+      setPreviewDocument(verification);
+      return;
+    }
+
+    const url = documentUrlWithToken(verification.documentUrl);
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      Alert.alert('Could not open document', 'No app is available to open this document.');
+      return;
+    }
+
+    await Linking.openURL(url);
+  };
+
   return (
     <SectionFrame
       loading={query.isLoading}
@@ -86,6 +110,22 @@ function VerificationsSection() {
       emptyTitle="No verification requests"
       onRetry={() => void query.refetch()}
     >
+      <ImageViewerModal
+        images={
+          previewDocument?.documentUrl
+            ? [
+                {
+                  id: previewDocument.id ?? previewDocument.documentUrl,
+                  url: previewDocument.documentUrl,
+                  headers: authHeaders,
+                },
+              ]
+            : []
+        }
+        initialIndex={0}
+        visible={Boolean(previewDocument)}
+        onClose={() => setPreviewDocument(null)}
+      />
       {query.data?.data.map((verification) => (
         <Card key={verification.id}>
           <View style={styles.row}>
@@ -100,9 +140,18 @@ function VerificationsSection() {
             <Badge status={verification.status} />
           </View>
           {verification.documentUrl ? (
-            <Text style={[styles.metadata, { color: theme.colors.textMuted }]} numberOfLines={2}>
-              {verification.documentUrl}
-            </Text>
+            <View style={styles.documentRow}>
+              <Text style={[styles.metadata, styles.documentPath, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                {verification.documentUrl}
+              </Text>
+              <Button
+                title={isImageDocument(verification) ? 'Preview' : 'Open'}
+                icon={Eye}
+                variant="secondary"
+                onPress={() => void openDocument(verification)}
+                style={styles.documentButton}
+              />
+            </View>
           ) : null}
           {verification.status === 'PENDING_REVIEW' && verification.id ? (
             <View style={styles.actions}>
@@ -323,6 +372,25 @@ function AuditSection() {
   );
 }
 
+function isImageDocument(verification: ContractorVerification) {
+  return verification.documentMimeType?.startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(verification.documentUrl ?? '');
+}
+
+function documentUrlWithToken(url: string) {
+  const accessToken = getAccessToken();
+  if (!accessToken) {
+    return url;
+  }
+
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(accessToken)}`;
+}
+
+function accessTokenHeaders() {
+  const accessToken = getAccessToken();
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
+}
+
 function SectionFrame({
   loading,
   error,
@@ -421,5 +489,16 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 12,
     lineHeight: 18,
+  },
+  documentRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  documentPath: {
+    flex: 1,
+  },
+  documentButton: {
+    width: 104,
   },
 });

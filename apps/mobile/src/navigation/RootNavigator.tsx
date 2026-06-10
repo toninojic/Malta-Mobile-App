@@ -9,7 +9,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle, ShieldCheck, Star, UserRound, UsersRound, WalletCards } from 'lucide-react-native';
 import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../api/activityHooks';
 import { useConversations } from '../api/messageHooks';
 import { useUnreadNotificationCount } from '../api/notificationHooks';
@@ -203,8 +203,24 @@ function HeaderUserSummary() {
           <Text style={[styles.headerMeta, { color: theme.colors.textMuted }]}>{averageRating}</Text>
         </View>
       ) : null}
-      {isContractor && verified ? <ShieldCheck color={theme.colors.success} size={15} /> : null}
+      {isContractor && verified ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Verified contractor information"
+          hitSlop={8}
+          onPress={showVerifiedContractorInfo}
+        >
+          <ShieldCheck color={theme.colors.success} size={15} />
+        </Pressable>
+      ) : null}
     </View>
+  );
+}
+
+function showVerifiedContractorInfo() {
+  Alert.alert(
+    'Verified Contractor',
+    'This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team.',
   );
 }
 

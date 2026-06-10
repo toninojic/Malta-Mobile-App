@@ -57,7 +57,7 @@ export function AdminRefundDetailsScreen({ route, navigation }: Props) {
 
   if (refundsQuery.isLoading) {
     return (
-      <Screen>
+      <Screen contentTopPadding={28}>
         <EmptyState icon={RefreshCw} title="Loading refund" message="Fetching request details." />
       </Screen>
     );
@@ -65,7 +65,7 @@ export function AdminRefundDetailsScreen({ route, navigation }: Props) {
 
   if (!refund) {
     return (
-      <Screen>
+      <Screen contentTopPadding={28}>
         <EmptyState
           icon={RefreshCw}
           title="Refund unavailable"
@@ -80,7 +80,7 @@ export function AdminRefundDetailsScreen({ route, navigation }: Props) {
   const isPending = refund.status === 'PENDING';
 
   return (
-    <Screen>
+    <Screen contentTopPadding={28}>
       <RefundCard refund={refund} />
       <Card>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Purchase transaction</Text>

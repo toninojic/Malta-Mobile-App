@@ -57,6 +57,12 @@ export class ReviewsController {
     return this.reviewsService.getRatingSummary(contractorId);
   }
 
+  @Get('contractors/:contractorId/profile')
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
+  contractorProfile(@CurrentUser() user: AuthenticatedUser, @Param('contractorId', ParseUUIDPipe) contractorId: string) {
+    return this.reviewsService.getContractorProfile(user, contractorId);
+  }
+
   @Patch('reviews/:reviewId/reply')
   @Roles(UserRole.CONTRACTOR)
   reply(

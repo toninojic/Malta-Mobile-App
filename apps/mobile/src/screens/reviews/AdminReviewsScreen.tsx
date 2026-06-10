@@ -15,7 +15,7 @@ export function AdminReviewsScreen({ navigation }: Props) {
   const query = useAdminReviews(true);
 
   return (
-    <Screen>
+    <Screen contentTopPadding={28}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Review moderation</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>View and remove marketplace reviews.</Text>
