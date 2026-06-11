@@ -34,6 +34,10 @@ export function offerMatchesFilter(offer: Offer, filter: OfferWorkFilter) {
     return completed;
   }
 
+  if (completed) {
+    return false;
+  }
+
   if (filter === 'UNLOCKED') {
     return offer.unlockStatus === 'UNLOCKED' && !completed;
   }

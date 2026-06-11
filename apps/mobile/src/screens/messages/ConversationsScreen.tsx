@@ -32,7 +32,14 @@ export function ConversationsScreen({ navigation }: Props) {
   );
 
   return (
-    <Screen>
+    <Screen
+      refreshing={query.isRefetching}
+      onRefresh={() => {
+        if (!query.isFetching) {
+          void query.refetch({ cancelRefetch: false });
+        }
+      }}
+    >
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>{isAdmin ? 'All conversations' : 'Messages'}</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Unlocked contacts become conversations after the first message.</Text>

@@ -1,6 +1,6 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BriefcaseBusiness, ClipboardList, Star, TimerReset } from 'lucide-react-native';
+import { BriefcaseBusiness, ClipboardList, Star, TimerReset, WalletCards } from 'lucide-react-native';
 import { ComponentType, useCallback, useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../../api/activityHooks';
@@ -31,10 +31,14 @@ export function ActivityScreen({ navigation }: Props) {
   const summaryQuery = useActivitySummary(Boolean(user), isFocused);
   const notificationsQuery = useNotifications(Boolean(user && !isAdmin), false);
   const markContractorActivityViewed = useActivityUiStore((state) => state.markContractorActivityViewed);
+  const viewedReviewTaskCount = useActivityUiStore((state) =>
+    user?.id ? state.viewedReviewTaskCounts[user.id] ?? 0 : 0,
+  );
   const viewedSectionNotificationIds = useActivityUiStore((state) =>
     user?.id ? state.viewedContractorSectionNotificationIds[user.id] : undefined,
   );
   const markContractorActivitySectionViewed = useActivityUiStore((state) => state.markContractorActivitySectionViewed);
+  const markReviewTasksViewed = useActivityUiStore((state) => state.markReviewTasksViewed);
 
   const forceRefreshActivity = useCallback(() => {
     if (!summaryQuery.isFetching) {
@@ -59,11 +63,14 @@ export function ActivityScreen({ navigation }: Props) {
   const reviewNotifications = unreadNotifications.filter((notification) => REVIEW_ACTIVITY_TYPES.has(notification.type));
   const employerReviewNotificationCount = unreadNotifications.filter((notification) =>
     EMPLOYER_REVIEW_ACTIVITY_TYPES.has(notification.type),
-  ).length;
+  );
   const viewedOfferIds = new Set(viewedSectionNotificationIds?.offers ?? []);
   const viewedReviewIds = new Set(viewedSectionNotificationIds?.reviews ?? []);
   const offerBadgeCount = offerNotifications.filter((notification) => !viewedOfferIds.has(notification.id)).length;
   const reviewBadgeCount = reviewNotifications.filter((notification) => !viewedReviewIds.has(notification.id)).length;
+  const employerReviewNotificationBadgeCount = employerReviewNotificationCount.filter((notification) => !viewedReviewIds.has(notification.id)).length;
+  const employerReviewTaskBadgeCount =
+    summary?.role !== 'CONTRACTOR' ? Math.max((summary?.reviewsToLeaveCount ?? 0) - viewedReviewTaskCount, 0) : 0;
 
   const openContractorOffers = () => {
     if (user?.id) {
@@ -79,6 +86,17 @@ export function ActivityScreen({ navigation }: Props) {
     }
 
     navigation.navigate('MyReviews');
+  };
+
+  const openEmployerReviews = () => {
+    if (user?.id && summary?.role !== 'CONTRACTOR') {
+      markReviewTasksViewed(user.id, summary?.reviewsToLeaveCount ?? 0);
+      markContractorActivitySectionViewed(user.id, 'reviews', employerReviewNotificationCount.map((notification) => notification.id));
+    }
+
+    navigation.navigate('MyReviews', {
+      initialTab: summary?.role !== 'CONTRACTOR' && summary?.reviewsToLeaveCount ? 'toLeave' : 'received',
+    });
   };
 
   useEffect(() => {
@@ -124,6 +142,7 @@ export function ActivityScreen({ navigation }: Props) {
         <>
           <ActivityCard title="My Offers" icon={ClipboardList} count={summary?.role === 'CONTRACTOR' ? summary.myOffersCount : 0} badgeCount={offerBadgeCount} onPress={openContractorOffers} />
           <ActivityCard title="My Reviews" icon={Star} count={summary?.role === 'CONTRACTOR' ? summary.myReviewsCount : 0} badgeCount={reviewBadgeCount} onPress={openContractorReviews} />
+          <ActivityCard title="Wallet" icon={WalletCards} count={0} countLabel="Token balance and purchases" badge="TOKENS" onPress={() => navigation.navigate('WalletHome')} />
         </>
       ) : (
         <>
@@ -132,8 +151,8 @@ export function ActivityScreen({ navigation }: Props) {
             title="My Reviews"
             icon={Star}
             count={summary?.role !== 'CONTRACTOR' ? summary?.reviewsToLeaveCount ?? 0 : 0}
-            badgeCount={summary?.role !== 'CONTRACTOR' ? (summary?.reviewsToLeaveCount ?? 0) + employerReviewNotificationCount : 0}
-            onPress={() => navigation.navigate('Contacts', { filter: 'completed' })}
+            badgeCount={summary?.role !== 'CONTRACTOR' ? employerReviewTaskBadgeCount + employerReviewNotificationBadgeCount : 0}
+            onPress={openEmployerReviews}
           />
         </>
       )}
@@ -147,6 +166,7 @@ function ActivityCard({
   count,
   badge,
   badgeCount = 0,
+  countLabel,
   onPress,
 }: {
   title: string;
@@ -154,6 +174,7 @@ function ActivityCard({
   count: number;
   badge?: string;
   badgeCount?: number;
+  countLabel?: string;
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -164,7 +185,9 @@ function ActivityCard({
         <Icon color={theme.colors.primary} size={22} />
         <View style={styles.cardCopy}>
           <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{title}</Text>
-          <Text style={[styles.count, { color: theme.colors.textMuted }]}>{count} item{count === 1 ? '' : 's'}</Text>
+          <Text style={[styles.count, { color: theme.colors.textMuted }]}>
+            {countLabel ?? `${count} item${count === 1 ? '' : 's'}`}
+          </Text>
         </View>
         {badgeCount > 0 ? (
           <View style={[styles.notificationBadge, { backgroundColor: theme.colors.danger }]}>

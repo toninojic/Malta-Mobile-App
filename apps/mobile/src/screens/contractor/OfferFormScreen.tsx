@@ -148,6 +148,9 @@ export function OfferFormScreen({ route, navigation }: Props) {
         keyboardType="decimal-pad"
         placeholder="120"
       />
+      <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
+        Enter the total price for the job, not an hourly rate.
+      </Text>
       <TextField
         label="When can you start?"
         value={startDate}
@@ -185,6 +188,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     lineHeight: 21,
+  },
+  helperText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: -8,
   },
 });
 

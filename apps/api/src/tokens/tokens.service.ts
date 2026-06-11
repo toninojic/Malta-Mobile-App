@@ -49,6 +49,10 @@ type RefundWithRelations = Prisma.RefundRequestGetPayload<{ include: typeof refu
 type TokenPackageEntity = Prisma.TokenPackageGetPayload<Record<string, never>>;
 type TokenTransactionWithPackage = Prisma.TokenTransactionGetPayload<{ include: { package: true } }>;
 
+function parseBooleanEnv(value: string | undefined) {
+  return ['true', '1', 'yes', 'on'].includes(String(value ?? '').trim().replace(/^['"]|['"]$/g, '').toLowerCase());
+}
+
 @Injectable()
 export class TokensService {
   constructor(
@@ -208,7 +212,7 @@ export class TokensService {
   }
 
   async mockPurchase(user: AuthenticatedUser, dto: MockPurchaseDto) {
-    if (this.config.get<string>('ALLOW_MOCK_PURCHASES') !== 'true') {
+    if (!parseBooleanEnv(this.config.get<string>('ALLOW_MOCK_PURCHASES'))) {
       throw new GoneException('Mock purchases have been replaced by Stripe Checkout.');
     }
 

@@ -1,9 +1,9 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Edit3, LockOpen, MessageCircle, RefreshCw, Star, Trash2 } from 'lucide-react-native';
-import { useCallback, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CheckCircle2, Edit3, LockOpen, MessageCircle, RefreshCw, Star, Trash2, UserRound } from 'lucide-react-native';
+import { ComponentType, useCallback, useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { useUnlockOffer } from '../../api/contactHooks';
 import { invalidateMarketplaceState } from '../../api/invalidation';
@@ -14,6 +14,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { AppModal, AppModalAction } from '../../components/AppModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { Screen } from '../../components/Screen';
 import { serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
@@ -23,6 +24,12 @@ import { useAuthStore } from '../../store/auth.store';
 import { formatDate } from '../../utils/date';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'OfferWorkDetails'>;
+type BusinessModalState = {
+  title: string;
+  body: string;
+  icon?: ComponentType<{ color?: string; size?: number }>;
+  actions: AppModalAction[];
+};
 
 export function OfferWorkDetailsScreen({ route, navigation }: Props) {
   const theme = useTheme();
@@ -36,6 +43,10 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
   const confirmMutation = useConfirmCompletion();
   const [portfolioViewerIndex, setPortfolioViewerIndex] = useState(0);
   const [portfolioViewerOpen, setPortfolioViewerOpen] = useState(false);
+  const [jobImageViewerIndex, setJobImageViewerIndex] = useState(0);
+  const [jobImageViewerOpen, setJobImageViewerOpen] = useState(false);
+  const [employerInfoOpen, setEmployerInfoOpen] = useState(false);
+  const [businessModal, setBusinessModal] = useState<BusinessModalState | null>(null);
   const withdrawMutation = useMutation({
     mutationFn: api.withdrawOffer,
     onSuccess: async (offer) => {
@@ -104,7 +115,12 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
     completeMutation.mutate(details.contactUnlock.id, {
       onSuccess: async () => {
         await refreshAfterAction();
-        Alert.alert('Completion requested', 'The employer has been notified.');
+        setBusinessModal({
+          title: 'Completion Requested',
+          body: 'The employer has been notified.',
+          icon: CheckCircle2,
+          actions: [{ label: 'Close', variant: 'primary', onPress: () => setBusinessModal(null) }],
+        });
       },
       onError: (error) => Alert.alert('Could not mark completed', error instanceof Error ? error.message : 'Please try again.'),
     });
@@ -118,24 +134,36 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
     confirmMutation.mutate(details.contactUnlock.id, {
       onSuccess: async () => {
         await refreshAfterAction();
-        Alert.alert('Completion confirmed', 'Review is now available.');
+        setBusinessModal({
+          title: 'Completion Confirmed',
+          body: 'Review is now available.',
+          icon: CheckCircle2,
+          actions: [{ label: 'Close', variant: 'primary', onPress: () => setBusinessModal(null) }],
+        });
       },
       onError: (error) => Alert.alert('Could not confirm completion', error instanceof Error ? error.message : 'Please try again.'),
     });
   };
 
   const withdraw = () => {
-    Alert.alert('Withdraw offer', 'This offer will no longer appear to the employer.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Withdraw',
-        style: 'destructive',
-        onPress: () =>
-          withdrawMutation.mutate(offerId, {
-            onError: (error) => Alert.alert('Could not withdraw offer', error instanceof Error ? error.message : 'Please try again.'),
-          }),
-      },
-    ]);
+    setBusinessModal({
+      title: 'Withdraw Offer',
+      body: 'This offer will no longer appear to the employer.',
+      icon: Trash2,
+      actions: [
+        { label: 'Cancel', onPress: () => setBusinessModal(null) },
+        {
+          label: 'Withdraw',
+          variant: 'danger',
+          onPress: () => {
+            setBusinessModal(null);
+            withdrawMutation.mutate(offerId, {
+              onError: (error) => Alert.alert('Could not withdraw offer', error instanceof Error ? error.message : 'Please try again.'),
+            });
+          },
+        },
+      ],
+    });
   };
 
   if (query.error && !details) {
@@ -164,6 +192,13 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
   const isEmployer = user?.role === 'EMPLOYER' && details.contactUnlock?.employerId === user.id;
   const completionStatus = details.completion?.status ?? details.offer.completionStatus;
   const canEmployerReview = isEmployer && completionStatus === 'CONFIRMED' && !details.review && details.contactUnlock?.id;
+  const canContractorReviewEmployer =
+    user?.role === 'CONTRACTOR' &&
+    details.contactUnlock?.contractorId === user.id &&
+    completionStatus === 'CONFIRMED' &&
+    !details.employerReview &&
+    details.contactUnlock?.id;
+  const employerReviewId = details.employerReview?.id;
   const isCompleted =
     details.offer.status === 'COMPLETED' ||
     details.offer.completionStatus === 'CONFIRMED' ||
@@ -173,9 +208,53 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
   const headlineStatus = isCompleted
     ? 'COMPLETED'
     : details.offer.completionStatus ?? (details.offer.unlockStatus === 'UNLOCKED' ? details.job.status : details.offer.status);
+  const employerInfoBody = details.employer
+    ? [
+        details.employer.profile?.displayName ?? details.employer.email,
+        details.employer.email,
+        details.employer.profile?.phone ? `Phone: ${details.employer.profile.phone}` : null,
+        details.employer.profile?.location ? `Location: ${details.employer.profile.location}` : null,
+        details.employer.profile?.companyName ? `Company: ${details.employer.profile.companyName}` : null,
+        details.employerRatingSummary?.totalReviews
+          ? `Rating: ${Number(details.employerRatingSummary.averageRating).toFixed(1)} (${details.employerRatingSummary.totalReviews})`
+          : 'No employer reviews yet',
+        details.employer.profile?.bio ? `Bio: ${details.employer.profile.bio}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '';
 
   return (
     <Screen refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
+      <AppModal
+        visible={Boolean(businessModal)}
+        title={businessModal?.title ?? ''}
+        body={businessModal?.body ?? ''}
+        icon={businessModal?.icon}
+        actions={businessModal?.actions ?? []}
+        onRequestClose={() => setBusinessModal(null)}
+      />
+      <AppModal
+        visible={employerInfoOpen}
+        title="Employer Info"
+        body={employerInfoBody}
+        icon={UserRound}
+        media={
+          details.employer ? (
+            <View style={styles.employerModalAvatarWrap}>
+              {details.employer.profile?.avatarUrl ? (
+                <Image source={{ uri: details.employer.profile.avatarUrl }} style={styles.employerModalAvatar} />
+              ) : (
+                <View style={[styles.employerModalAvatarFallback, { backgroundColor: theme.colors.surfaceMuted }]}>
+                  <UserRound color={theme.colors.success} size={34} />
+                </View>
+              )}
+            </View>
+          ) : null
+        }
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setEmployerInfoOpen(false) }]}
+        onRequestClose={() => setEmployerInfoOpen(false)}
+      />
       <Card
         style={
           isSelectedActive
@@ -200,11 +279,37 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
           {!isSelectedActive ? <Badge status={headlineStatus} /> : null}
         </View>
         <Text style={[styles.copy, { color: theme.colors.textMuted }]}>{details.job.description}</Text>
+        {details.job.images.length ? (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.jobImages}>
+              {details.job.images.map((image, index) => (
+                <Pressable
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel={`Open job image ${index + 1}`}
+                  key={image.id}
+                  onPress={() => {
+                    setJobImageViewerIndex(index);
+                    setJobImageViewerOpen(true);
+                  }}
+                >
+                  <Image source={{ uri: image.url }} style={styles.jobImage} />
+                </Pressable>
+              ))}
+            </ScrollView>
+            <ImageViewerModal
+              images={details.job.images.map((image) => ({ id: image.id, url: image.url }))}
+              initialIndex={jobImageViewerIndex}
+              visible={jobImageViewerOpen}
+              onClose={() => setJobImageViewerOpen(false)}
+            />
+          </>
+        ) : null}
         <Text style={[styles.meta, { color: theme.colors.text }]}>
           {serviceCategoryLabel(details.job.category)} / {serviceSubcategoryLabel(details.job.category, details.job.subcategory)}
         </Text>
         <View style={styles.badges}>
           <Badge status={details.job.status} />
+          {details.job.status === 'CLOSED' ? <Badge status="JOB CLOSED" /> : null}
           <Badge status={details.offer.unlockStatus} />
           {details.offer.completionStatus ? <Badge status={details.offer.completionStatus} /> : null}
         </View>
@@ -219,12 +324,25 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
       </Card>
 
       {details.employer ? (
-        <Card>
+        <Card onPress={() => setEmployerInfoOpen(true)}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Employer</Text>
           <Text style={[styles.copy, { color: theme.colors.textMuted }]}>
             {details.employer.profile?.displayName ?? details.employer.email}
           </Text>
           <Text style={[styles.copy, { color: theme.colors.textMuted }]}>{details.employer.email}</Text>
+          {details.employerRatingSummary?.totalReviews ? (
+            <Text style={[styles.copy, { color: theme.colors.textMuted }]}>
+              Employer rating {Number(details.employerRatingSummary.averageRating).toFixed(1)} ({details.employerRatingSummary.totalReviews})
+            </Text>
+          ) : null}
+          <Text style={[styles.linkText, { color: theme.colors.success }]}>View employer info</Text>
+        </Card>
+      ) : details.employerRatingSummary?.totalReviews ? (
+        <Card>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Employer rating</Text>
+          <Text style={[styles.copy, { color: theme.colors.textMuted }]}>
+            Anonymous employer rating {Number(details.employerRatingSummary.averageRating).toFixed(1)} ({details.employerRatingSummary.totalReviews})
+          </Text>
         </Card>
       ) : null}
 
@@ -313,6 +431,32 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
             }
           />
         ) : null}
+        {canContractorReviewEmployer ? (
+          <Button
+            title="Review Employer"
+            icon={Star}
+            variant="secondary"
+            onPress={() =>
+              navigation.getParent()?.navigate('ActivityTab', {
+                screen: 'LeaveReview',
+                params: { contactId: details.contactUnlock?.id ?? '', target: 'employer' },
+              })
+            }
+          />
+        ) : null}
+        {user?.role === 'CONTRACTOR' && employerReviewId ? (
+          <Button
+            title="View Employer Review"
+            icon={Star}
+            variant="secondary"
+            onPress={() =>
+              navigation.getParent()?.navigate('ActivityTab', {
+                screen: 'ReviewDetails',
+                params: { reviewId: employerReviewId, target: 'employer' },
+              })
+            }
+          />
+        ) : null}
       </View>
     </Screen>
   );
@@ -337,9 +481,37 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
+  jobImages: {
+    gap: 8,
+  },
+  jobImage: {
+    width: 132,
+    height: 96,
+    borderRadius: 8,
+  },
   copy: {
     fontSize: 14,
     lineHeight: 21,
+  },
+  linkText: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  employerModalAvatarWrap: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  employerModalAvatar: {
+    borderRadius: 42,
+    height: 84,
+    width: 84,
+  },
+  employerModalAvatarFallback: {
+    alignItems: 'center',
+    borderRadius: 42,
+    height: 84,
+    justifyContent: 'center',
+    width: 84,
   },
   meta: {
     fontSize: 14,

@@ -53,6 +53,10 @@ type StripePaymentIntentEvent = {
   } | null;
 };
 
+function parseBooleanEnv(value: string | undefined) {
+  return ['true', '1', 'yes', 'on'].includes(String(value ?? '').trim().replace(/^['"]|['"]$/g, '').toLowerCase());
+}
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -400,10 +404,10 @@ export class PaymentsService {
     return expectedBuffer.length === candidateBuffer.length && timingSafeEqual(expectedBuffer, candidateBuffer);
   }
 
-  private getStripeSecretKey() {
+  private getStripeSecretKey(): string {
     const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
 
-    if (!secretKey || !secretKey.startsWith('sk_test_')) {
+    if (!this.isUsableStripeSecretKey(secretKey)) {
       throw new ServiceUnavailableException('Payments are not configured.');
     }
 
@@ -412,11 +416,15 @@ export class PaymentsService {
 
   private isStripeConfigured() {
     const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
-    return Boolean(secretKey?.startsWith('sk_test_'));
+    return this.isUsableStripeSecretKey(secretKey);
   }
 
   private isMockPurchasesEnabled() {
-    return this.config.get<string>('ALLOW_MOCK_PURCHASES') === 'true';
+    return parseBooleanEnv(this.config.get<string>('ALLOW_MOCK_PURCHASES'));
+  }
+
+  private isUsableStripeSecretKey(secretKey: string | undefined): secretKey is string {
+    return Boolean(secretKey?.startsWith('sk_test_') && secretKey !== 'sk_test_replace_me');
   }
 
   private getStripeWebhookSecret() {

@@ -3,7 +3,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { MessageSquareReply, RefreshCw, Trash2 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import { useRemoveReview, useReplyReview, useReview } from '../../api/reviewHooks';
+import { useEmployerReview, useRemoveReview, useReplyReview, useReview } from '../../api/reviewHooks';
+import { AppModal } from '../../components/AppModal';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -20,10 +21,14 @@ export function ReviewDetailsScreen({ route }: Props) {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const isAdmin = route.params.admin || user?.role === 'ADMIN';
-  const query = useReview(route.params.reviewId, Boolean(isAdmin));
+  const isEmployerReview = route.params.target === 'employer';
+  const contractorReviewQuery = useReview(route.params.reviewId, Boolean(isAdmin), !isEmployerReview);
+  const employerReviewQuery = useEmployerReview(route.params.reviewId, isEmployerReview);
+  const query = isEmployerReview ? employerReviewQuery : contractorReviewQuery;
   const replyMutation = useReplyReview();
   const removeMutation = useRemoveReview();
   const [reply, setReply] = useState('');
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -46,8 +51,15 @@ export function ReviewDetailsScreen({ route }: Props) {
   }
 
   const review = query.data;
-  const canReply = user?.role === 'CONTRACTOR' && review.contractorId === user.id && !review.contractorReply && review.status === 'ACTIVE';
-  const canRemove = isAdmin && review.status === 'ACTIVE';
+  const contractorReply =
+    'contractorReply' in review && typeof review.contractorReply === 'string' ? review.contractorReply : null;
+  const canReply =
+    !isEmployerReview &&
+    user?.role === 'CONTRACTOR' &&
+    review.contractorId === user.id &&
+    !contractorReply &&
+    review.status === 'ACTIVE';
+  const canRemove = !isEmployerReview && isAdmin && review.status === 'ACTIVE';
 
   const submitReply = () => {
     const trimmed = reply.trim();
@@ -71,24 +83,34 @@ export function ReviewDetailsScreen({ route }: Props) {
   };
 
   const removeReview = () => {
-    Alert.alert('Remove review', 'Removed reviews stay in the database but no longer count toward ratings.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () =>
-          removeMutation.mutate(review.id, {
-            onSuccess: () => void query.refetch(),
-            onError: (error) => {
-              Alert.alert('Could not remove review', error instanceof Error ? error.message : 'Please try again.');
-            },
-          }),
-      },
-    ]);
+    setRemoveDialogOpen(true);
   };
 
   return (
     <Screen>
+      <AppModal
+        visible={removeDialogOpen}
+        title="Remove Review"
+        body="Removed reviews stay in the database but no longer count toward ratings."
+        icon={Trash2}
+        actions={[
+          { label: 'Cancel', variant: 'secondary', onPress: () => setRemoveDialogOpen(false) },
+          {
+            label: 'Remove',
+            variant: 'danger',
+            onPress: () => {
+              setRemoveDialogOpen(false);
+              removeMutation.mutate(review.id, {
+                onSuccess: () => void query.refetch(),
+                onError: (error) => {
+                  Alert.alert('Could not remove review', error instanceof Error ? error.message : 'Please try again.');
+                },
+              });
+            },
+          },
+        ]}
+        onRequestClose={() => setRemoveDialogOpen(false)}
+      />
       <Card>
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
@@ -110,10 +132,10 @@ export function ReviewDetailsScreen({ route }: Props) {
         </Text>
       </Card>
 
-      {review.contractorReply ? (
+      {!isEmployerReview && contractorReply ? (
         <Card>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Contractor reply</Text>
-          <Text style={[styles.body, { color: theme.colors.textMuted }]}>{review.contractorReply}</Text>
+          <Text style={[styles.body, { color: theme.colors.textMuted }]}>{contractorReply}</Text>
         </Card>
       ) : null}
 

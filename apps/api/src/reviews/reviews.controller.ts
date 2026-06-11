@@ -45,6 +45,16 @@ export class ReviewsController {
     return this.reviewsService.createReview(user, contactId, dto);
   }
 
+  @Post('contacts/:contactId/employer-review')
+  @Roles(UserRole.CONTRACTOR)
+  createEmployerReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+    @Body() dto: CreateReviewDto,
+  ) {
+    return this.reviewsService.createEmployerReview(user, contactId, dto);
+  }
+
   @Get('contractors/:contractorId/reviews')
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
   contractorReviews(@Param('contractorId', ParseUUIDPipe) contractorId: string, @Query() query: PaginationQueryDto) {
@@ -55,6 +65,24 @@ export class ReviewsController {
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
   contractorRatingSummary(@Param('contractorId', ParseUUIDPipe) contractorId: string) {
     return this.reviewsService.getRatingSummary(contractorId);
+  }
+
+  @Get('employers/:employerId/reviews')
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
+  employerReviews(@Param('employerId', ParseUUIDPipe) employerId: string, @Query() query: PaginationQueryDto) {
+    return this.reviewsService.findEmployerReviews(employerId, query);
+  }
+
+  @Get('employers/:employerId/rating-summary')
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
+  employerRatingSummary(@Param('employerId', ParseUUIDPipe) employerId: string) {
+    return this.reviewsService.getEmployerRatingSummary(employerId);
+  }
+
+  @Get('reviews/mine/given')
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR)
+  givenReviews(@CurrentUser() user: AuthenticatedUser, @Query() query: PaginationQueryDto) {
+    return this.reviewsService.findGivenReviews(user, query);
   }
 
   @Get('contractors/:contractorId/profile')
@@ -77,5 +105,11 @@ export class ReviewsController {
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
   review(@CurrentUser() user: AuthenticatedUser, @Param('reviewId', ParseUUIDPipe) reviewId: string) {
     return this.reviewsService.findReviewForUser(user, reviewId);
+  }
+
+  @Get('employer-reviews/:reviewId')
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
+  employerReview(@CurrentUser() user: AuthenticatedUser, @Param('reviewId', ParseUUIDPipe) reviewId: string) {
+    return this.reviewsService.findEmployerReviewForUser(user, reviewId);
   }
 }

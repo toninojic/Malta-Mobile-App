@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { CheckCircle2, ClipboardCheck, Mail, MessageCircle, Phone, RefreshCw, Star, UserRound } from 'lucide-react-native';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useContact } from '../../api/contactHooks';
 import { useEnsureConversationForContact } from '../../api/messageHooks';
@@ -10,6 +10,7 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { AppModal } from '../../components/AppModal';
 import { Screen } from '../../components/Screen';
 import { useTheme } from '../../design/theme';
 import { ActivityStackParamList } from '../../navigation/types';
@@ -26,6 +27,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
   const ensureConversationMutation = useEnsureConversationForContact();
   const completeMutation = useCompleteContact();
   const confirmMutation = useConfirmCompletion();
+  const [completionInfo, setCompletionInfo] = useState<{ title: string; body: string } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -60,7 +62,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
       onSuccess: async () => {
         await completionQuery.refetch({ cancelRefetch: false });
         await query.refetch({ cancelRefetch: false });
-        Alert.alert('Completion requested', 'The employer has been notified.');
+        setCompletionInfo({ title: 'Completion Requested', body: 'The employer has been notified.' });
       },
       onError: (error) => {
         Alert.alert('Could not mark completed', error instanceof Error ? error.message : 'Please try again.');
@@ -73,7 +75,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
       onSuccess: async () => {
         await completionQuery.refetch({ cancelRefetch: false });
         await query.refetch({ cancelRefetch: false });
-        Alert.alert('Completion confirmed', 'Review is now available.');
+        setCompletionInfo({ title: 'Completion Confirmed', body: 'Review is now available.' });
       },
       onError: (error) => {
         Alert.alert('Could not confirm completion', error instanceof Error ? error.message : 'Please try again.');
@@ -95,7 +97,21 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <Screen
+      refreshing={query.isRefetching || completionQuery.isRefetching}
+      onRefresh={() => {
+        if (!query.isFetching) void query.refetch({ cancelRefetch: false });
+        if (!completionQuery.isFetching) void completionQuery.refetch({ cancelRefetch: false });
+      }}
+    >
+      <AppModal
+        visible={Boolean(completionInfo)}
+        title={completionInfo?.title ?? ''}
+        body={completionInfo?.body ?? ''}
+        icon={CheckCircle2}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setCompletionInfo(null) }]}
+        onRequestClose={() => setCompletionInfo(null)}
+      />
       <Card>
         <View style={styles.headerRow}>
           <Text style={[styles.title, { color: theme.colors.text }]}>{contact.jobRequest.title}</Text>

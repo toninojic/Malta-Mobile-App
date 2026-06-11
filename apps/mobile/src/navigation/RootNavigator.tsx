@@ -7,16 +7,18 @@ import {
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle, ShieldCheck, Star, UserRound, UsersRound, WalletCards } from 'lucide-react-native';
-import { useEffect } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle, ShieldCheck, Star, UserRound, UsersRound } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../api/activityHooks';
 import { useConversations } from '../api/messageHooks';
 import { useUnreadNotificationCount } from '../api/notificationHooks';
 import { useContractorVerification } from '../api/offerWorkHooks';
-import { useContractorRatingSummary } from '../api/reviewHooks';
+import { useContractorRatingSummary, useEmployerRatingSummary } from '../api/reviewHooks';
+import { AppModal } from '../components/AppModal';
 import { useTheme } from '../design/theme';
 import { useActivityUiStore } from '../store/activity.store';
+import { useAppearanceStore } from '../store/appearance.store';
 import { useAuthStore } from '../store/auth.store';
 import { ActivityScreen } from '../screens/activity/ActivityScreen';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
@@ -54,13 +56,11 @@ import {
   AuthStackParamList,
   JobsStackParamList,
   MessagesStackParamList,
-  WalletStackParamList,
 } from './types';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const JobsStack = createNativeStackNavigator<JobsStackParamList>();
 const ActivityStack = createNativeStackNavigator<ActivityStackParamList>();
-const WalletStack = createNativeStackNavigator<WalletStackParamList>();
 const MessagesStack = createNativeStackNavigator<MessagesStackParamList>();
 const Tabs = createBottomTabNavigator<AppTabParamList>();
 
@@ -68,8 +68,9 @@ const linking: LinkingOptions<AppTabParamList> = {
   prefixes: ['maltacraftsman://'],
   config: {
     screens: {
-      WalletTab: {
+      ActivityTab: {
         screens: {
+          WalletHome: 'wallet',
           PaymentSuccess: 'payment-success',
           PaymentFailed: 'payment-failed',
           PaymentPending: 'payment-pending',
@@ -84,10 +85,12 @@ export function RootNavigator() {
   const hydrated = useAuthStore((state) => state.hydrated);
   const user = useAuthStore((state) => state.user);
   const hydrate = useAuthStore((state) => state.hydrate);
+  const hydrateAppearance = useAppearanceStore((state) => state.hydrate);
 
   useEffect(() => {
     void hydrate();
-  }, [hydrate]);
+    void hydrateAppearance();
+  }, [hydrate, hydrateAppearance]);
 
   const navTheme: Theme = {
     ...(theme.isDark ? DarkTheme : DefaultTheme),
@@ -141,19 +144,6 @@ function JobsRoutes() {
   );
 }
 
-function WalletRoutes() {
-  return (
-    <WalletStack.Navigator screenOptions={{ headerRight: () => <HeaderUserSummary /> }}>
-      <WalletStack.Screen name="WalletHome" component={WalletScreen} options={{ title: 'Wallet' }} />
-      <WalletStack.Screen name="RefundRequest" component={RefundRequestScreen} options={{ title: 'Request Refund' }} />
-      <WalletStack.Screen name="AdminRefundDetails" component={AdminRefundDetailsScreen} options={{ title: 'Refund Details' }} />
-      <WalletStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ title: 'Payment' }} />
-      <WalletStack.Screen name="PaymentFailed" component={PaymentFailedScreen} options={{ title: 'Payment' }} />
-      <WalletStack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ title: 'Payment' }} />
-    </WalletStack.Navigator>
-  );
-}
-
 function ActivityRoutes() {
   return (
     <ActivityStack.Navigator screenOptions={{ headerRight: () => <HeaderUserSummary /> }}>
@@ -166,6 +156,12 @@ function ActivityRoutes() {
       <ActivityStack.Screen name="ContractorProfile" component={ContractorProfileScreen} options={{ title: 'Contractor Profile' }} />
       <ActivityStack.Screen name="AdminReviews" component={AdminReviewsScreen} options={{ title: 'Review Moderation' }} />
       <ActivityStack.Screen name="NotificationsHome" component={NotificationsScreen} options={{ title: 'Alerts' }} />
+      <ActivityStack.Screen name="WalletHome" component={WalletScreen} options={{ title: 'Wallet' }} />
+      <ActivityStack.Screen name="RefundRequest" component={RefundRequestScreen} options={{ title: 'Request Refund' }} />
+      <ActivityStack.Screen name="AdminRefundDetails" component={AdminRefundDetailsScreen} options={{ title: 'Refund Details' }} />
+      <ActivityStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ title: 'Payment' }} />
+      <ActivityStack.Screen name="PaymentFailed" component={PaymentFailedScreen} options={{ title: 'Payment' }} />
+      <ActivityStack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ title: 'Payment' }} />
     </ActivityStack.Navigator>
   );
 }
@@ -181,13 +177,17 @@ function MessagesRoutes() {
 
 function HeaderUserSummary() {
   const theme = useTheme();
+  const [verifiedInfoOpen, setVerifiedInfoOpen] = useState(false);
   const user = useAuthStore((state) => state.user);
   const isContractor = user?.role === 'CONTRACTOR';
+  const isEmployer = user?.role === 'EMPLOYER';
   const ratingQuery = useContractorRatingSummary(isContractor ? user?.id : undefined);
+  const employerRatingQuery = useEmployerRatingSummary(isEmployer ? user?.id : undefined);
   const verificationQuery = useContractorVerification(isContractor);
   const displayName = user?.profile?.displayName ?? user?.email ?? '';
-  const totalReviews = ratingQuery.data?.totalReviews ?? 0;
-  const averageRating = ratingQuery.data?.averageRating ? Number(ratingQuery.data.averageRating).toFixed(1) : null;
+  const ratingSummary = isContractor ? ratingQuery.data : employerRatingQuery.data;
+  const totalReviews = ratingSummary?.totalReviews ?? 0;
+  const averageRating = ratingSummary?.averageRating ? Number(ratingSummary.averageRating).toFixed(1) : null;
   const verified = verificationQuery.data?.status === 'VERIFIED';
 
   if (!user || user.role === 'ADMIN') {
@@ -195,32 +195,37 @@ function HeaderUserSummary() {
   }
 
   return (
-    <View style={styles.headerSummary}>
-      <Text numberOfLines={1} style={[styles.headerName, { color: theme.colors.text }]}>{displayName}</Text>
-      {isContractor && totalReviews > 0 && averageRating ? (
-        <View style={styles.headerMetric}>
-          <Star color={theme.colors.warning} size={13} />
-          <Text style={[styles.headerMeta, { color: theme.colors.textMuted }]}>{averageRating}</Text>
-        </View>
-      ) : null}
-      {isContractor && verified ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Verified contractor information"
-          hitSlop={8}
-          onPress={showVerifiedContractorInfo}
-        >
-          <ShieldCheck color={theme.colors.success} size={15} />
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
-function showVerifiedContractorInfo() {
-  Alert.alert(
-    'Verified Contractor',
-    'This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team.',
+    <>
+      <View style={styles.headerSummary}>
+        <Text numberOfLines={1} style={[styles.headerName, { color: theme.colors.text }]}>{displayName}</Text>
+        {(isContractor || isEmployer) && totalReviews > 0 && averageRating ? (
+          <View style={styles.headerMetric}>
+            <Star color={theme.colors.warning} size={13} />
+            <Text style={[styles.headerMeta, { color: theme.colors.textMuted }]}>
+              {averageRating} ({totalReviews})
+            </Text>
+          </View>
+        ) : null}
+        {isContractor && verified ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Verified contractor information"
+            hitSlop={8}
+            onPress={() => setVerifiedInfoOpen(true)}
+          >
+            <ShieldCheck color={theme.colors.success} size={15} />
+          </Pressable>
+        ) : null}
+      </View>
+      <AppModal
+        visible={verifiedInfoOpen}
+        title="Verified Contractor"
+        body="This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team."
+        icon={ShieldCheck}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setVerifiedInfoOpen(false) }]}
+        onRequestClose={() => setVerifiedInfoOpen(false)}
+      />
+    </>
   );
 }
 
@@ -241,7 +246,7 @@ function UserTabs() {
     user?.id ? state.viewedContractorActionCounts[user.id] ?? 0 : 0,
   );
   const conversationsQuery = useConversations();
-  const notificationsCountQuery = useUnreadNotificationCount(user?.role === 'EMPLOYER', true);
+  const notificationsCountQuery = useUnreadNotificationCount(Boolean(user && user.role !== 'ADMIN'), true);
   const activitySummaryQuery = useActivitySummary(user?.role === 'CONTRACTOR', true);
   const unreadMessages =
     conversationsQuery.data?.data.reduce((total, conversation) => total + conversation.unreadCount, 0) ?? 0;
@@ -256,12 +261,16 @@ function UserTabs() {
     <Tabs.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
+        tabBarActiveTintColor: theme.colors.brand,
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
         },
+        tabBarItemStyle: styles.tabItem,
+        tabBarIconStyle: styles.tabIcon,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
@@ -296,26 +305,15 @@ function UserTabs() {
           tabBarIcon: ({ color, size }) => <MessageCircle color={color} size={size} />,
         }}
       />
-      {user?.role === 'EMPLOYER' ? (
-        <Tabs.Screen
-          name="AlertsTab"
-          component={NotificationsScreen}
-          options={{
-            title: 'Alerts',
-            tabBarBadge: unreadNotifications || undefined,
-            tabBarIcon: ({ color, size }) => <Bell color={color} size={size} />,
-          }}
-        />
-      ) : (
-        <Tabs.Screen
-          name="WalletTab"
-          component={WalletRoutes}
-          options={{
-            title: 'Wallet',
-            tabBarIcon: ({ color, size }) => <WalletCards color={color} size={size} />,
-          }}
-        />
-      )}
+      <Tabs.Screen
+        name="AlertsTab"
+        component={NotificationsScreen}
+        options={{
+          title: 'Alerts',
+          tabBarBadge: unreadNotifications || undefined,
+          tabBarIcon: ({ color, size }) => <Bell color={color} size={size} />,
+        }}
+      />
       <Tabs.Screen
         name="ProfileTab"
         component={ProfileEditScreen}
@@ -335,12 +333,16 @@ function AdminTabs() {
     <Tabs.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
+        tabBarActiveTintColor: theme.colors.brand,
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
         },
+        tabBarItemStyle: styles.tabItem,
+        tabBarIconStyle: styles.tabIcon,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
@@ -388,15 +390,29 @@ function AdminTabs() {
 }
 
 const styles = StyleSheet.create({
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  tabIcon: {
+    marginTop: 2,
+  },
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingBottom: 2,
+  },
   headerSummary: {
-    maxWidth: 170,
+    maxWidth: 190,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 6,
   },
   headerName: {
-    maxWidth: 110,
+    maxWidth: 96,
     fontSize: 13,
     fontWeight: '800',
   },

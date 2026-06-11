@@ -64,11 +64,41 @@ export function useCreateReview() {
   });
 }
 
-export function useReview(reviewId?: string, admin = false) {
+export function useCreateEmployerReview() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ contactId, rating, comment }: { contactId: string; rating: number; comment?: string }) =>
+      api.createEmployerReview(contactId, { rating, comment }),
+    onSuccess: async (review) => {
+      await invalidateMarketplaceState(queryClient, {
+        contactId: review.contactUnlockId ?? undefined,
+        jobId: review.jobRequestId,
+        offerId: review.offerId,
+        includeReviews: true,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['employers', review.employerId, 'reviews'] }),
+        queryClient.invalidateQueries({ queryKey: ['employers', review.employerId, 'rating-summary'] }),
+      ]);
+    },
+  });
+}
+
+export function useReview(reviewId?: string, admin = false, enabled = true) {
   return useQuery({
     queryKey: [admin ? 'admin' : 'reviews', 'details', reviewId],
     queryFn: () => (admin ? api.adminReview(reviewId as string) : api.review(reviewId as string)),
-    enabled: Boolean(reviewId),
+    enabled: Boolean(reviewId) && enabled,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useEmployerReview(reviewId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['employer-reviews', 'details', reviewId],
+    queryFn: () => api.employerReview(reviewId as string),
+    enabled: Boolean(reviewId) && enabled,
     refetchOnWindowFocus: true,
   });
 }
@@ -87,6 +117,33 @@ export function useContractorRatingSummary(contractorId?: string) {
     queryKey: ['contractors', contractorId, 'rating-summary'],
     queryFn: () => api.contractorRatingSummary(contractorId as string),
     enabled: Boolean(contractorId),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useEmployerReviews(employerId?: string) {
+  return useQuery({
+    queryKey: ['employers', employerId, 'reviews'],
+    queryFn: () => api.employerReviews(employerId as string, { limit: 50 }),
+    enabled: Boolean(employerId),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useEmployerRatingSummary(employerId?: string) {
+  return useQuery({
+    queryKey: ['employers', employerId, 'rating-summary'],
+    queryFn: () => api.employerRatingSummary(employerId as string),
+    enabled: Boolean(employerId),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useMyGivenReviews(userId?: string) {
+  return useQuery({
+    queryKey: ['reviews', 'mine', 'given', userId],
+    queryFn: () => api.myGivenReviews({ limit: 50 }),
+    enabled: Boolean(userId),
     refetchOnWindowFocus: true,
   });
 }

@@ -20,6 +20,15 @@ export function useContacts(enabled = true) {
   });
 }
 
+export function useContactsReadyForReview(enabled = true) {
+  return useQuery({
+    queryKey: ['contacts', 'reviews-to-leave'],
+    queryFn: () => api.contactsReadyForReview({ limit: 50 }),
+    enabled,
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useContact(contactId?: string, admin = false) {
   return useQuery({
     queryKey: [admin ? 'admin' : 'contacts', 'details', contactId],

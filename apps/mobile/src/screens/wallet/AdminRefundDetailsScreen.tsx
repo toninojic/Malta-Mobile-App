@@ -1,8 +1,9 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { ComponentType, useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useAdminRefunds, useApproveRefund, useRejectRefund } from '../../api/tokenHooks';
+import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
@@ -14,9 +15,16 @@ import { WalletStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'AdminRefundDetails'>;
 
+type StatusDialog = {
+  title: string;
+  body: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
+};
+
 export function AdminRefundDetailsScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const [adminNote, setAdminNote] = useState('');
+  const [statusDialog, setStatusDialog] = useState<StatusDialog | null>(null);
   const refundsQuery = useAdminRefunds(true);
   const approveMutation = useApproveRefund();
   const rejectMutation = useRejectRefund();
@@ -30,8 +38,11 @@ export function AdminRefundDetailsScreen({ route, navigation }: Props) {
       { refundRequestId: route.params.refundId, adminNote: adminNote.trim() || undefined },
       {
         onSuccess: () => {
-          Alert.alert('Refund approved', 'Tokens were removed and the refund transaction was recorded.');
-          navigation.goBack();
+          setStatusDialog({
+            title: 'Refund Approved',
+            body: 'Tokens were removed and the refund transaction was recorded.',
+            icon: CheckCircle2,
+          });
         },
         onError: (error) => {
           Alert.alert('Could not approve refund', error instanceof Error ? error.message : 'Please try again.');
@@ -45,8 +56,11 @@ export function AdminRefundDetailsScreen({ route, navigation }: Props) {
       { refundRequestId: route.params.refundId, adminNote: adminNote.trim() || undefined },
       {
         onSuccess: () => {
-          Alert.alert('Refund rejected', 'The request was marked as rejected.');
-          navigation.goBack();
+          setStatusDialog({
+            title: 'Refund Rejected',
+            body: 'The request was marked as rejected.',
+            icon: XCircle,
+          });
         },
         onError: (error) => {
           Alert.alert('Could not reject refund', error instanceof Error ? error.message : 'Please try again.');
@@ -81,6 +95,16 @@ export function AdminRefundDetailsScreen({ route, navigation }: Props) {
 
   return (
     <Screen contentTopPadding={28}>
+      {statusDialog ? (
+        <AppModal
+          visible
+          title={statusDialog.title}
+          body={statusDialog.body}
+          icon={statusDialog.icon}
+          actions={[{ label: 'Close', variant: 'primary', onPress: () => navigation.goBack() }]}
+          onRequestClose={() => navigation.goBack()}
+        />
+      ) : null}
       <RefundCard refund={refund} />
       <Card>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Purchase transaction</Text>

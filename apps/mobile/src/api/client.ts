@@ -14,6 +14,8 @@ import {
   ContractorVerification,
   Conversation,
   CreateCheckoutSessionResponse,
+  EmployerRatingSummary,
+  EmployerReview,
   InAppNotification,
   JobCompletion,
   JobBrowseFilters,
@@ -505,6 +507,11 @@ export const api = {
       `/contacts${queryString({ page: input.page, limit: input.limit })}`,
     );
   },
+  contactsReadyForReview(input: { page?: number; limit?: number } = {}) {
+    return request<PaginatedResponse<ContactUnlock>>(
+      `/contacts/reviews-to-leave${queryString({ page: input.page, limit: input.limit })}`,
+    );
+  },
   contact(contactId: string) {
     return request<ContactUnlock>(`/contacts/${contactId}`);
   },
@@ -535,8 +542,17 @@ export const api = {
       body: input,
     });
   },
+  createEmployerReview(contactId: string, input: { rating: number; comment?: string }) {
+    return request<EmployerReview>(`/contacts/${contactId}/employer-review`, {
+      method: 'POST',
+      body: input,
+    });
+  },
   review(reviewId: string) {
     return request<Review>(`/reviews/${reviewId}`);
+  },
+  employerReview(reviewId: string) {
+    return request<EmployerReview>(`/employer-reviews/${reviewId}`);
   },
   contractorReviews(contractorId: string, input: { page?: number; limit?: number } = {}) {
     return request<PaginatedResponse<Review>>(
@@ -545,6 +561,19 @@ export const api = {
   },
   contractorRatingSummary(contractorId: string) {
     return request<ContractorRatingSummary>(`/contractors/${contractorId}/rating-summary`);
+  },
+  employerReviews(employerId: string, input: { page?: number; limit?: number } = {}) {
+    return request<PaginatedResponse<EmployerReview>>(
+      `/employers/${employerId}/reviews${queryString({ page: input.page, limit: input.limit })}`,
+    );
+  },
+  employerRatingSummary(employerId: string) {
+    return request<EmployerRatingSummary>(`/employers/${employerId}/rating-summary`);
+  },
+  myGivenReviews(input: { page?: number; limit?: number } = {}) {
+    return request<PaginatedResponse<Review | EmployerReview>>(
+      `/reviews/mine/given${queryString({ page: input.page, limit: input.limit })}`,
+    );
   },
   contractorProfile(contractorId: string) {
     return request<ContractorProfile>(`/contractors/${contractorId}/profile`);

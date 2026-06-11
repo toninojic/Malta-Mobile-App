@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { LockOpen, RefreshCw } from 'lucide-react-native';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useUnlockOffer, useUnlockStatus } from '../../api/contactHooks';
 import { api } from '../../api/client';
@@ -10,6 +10,7 @@ import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
+import { AppModal } from '../../components/AppModal';
 import { Screen } from '../../components/Screen';
 import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
@@ -27,6 +28,7 @@ export function UnlockContactScreen({ route, navigation }: Props) {
   const statusQuery = useUnlockStatus(offerId);
   const unlockMutation = useUnlockOffer();
   const ensureConversationMutation = useEnsureConversationForContact();
+  const [unlockSuccess, setUnlockSuccess] = useState<{ contactId: string; balance: number } | null>(null);
   const cost = statusQuery.data?.cost ?? 1;
   const balance = balanceQuery.data?.balance ?? 0;
   const canUnlock = balance >= cost && statusQuery.data?.status !== 'UNLOCKED';
@@ -41,20 +43,7 @@ export function UnlockContactScreen({ route, navigation }: Props) {
   const confirmUnlock = () => {
     unlockMutation.mutate(offerId, {
       onSuccess: (result) => {
-        Alert.alert('Contact unlocked', `Your wallet balance is now ${result.balance.balance} tokens.`, [
-          { text: 'Later', style: 'cancel', onPress: () => navigation.goBack() },
-          {
-            text: 'Open Chat',
-            onPress: () =>
-              ensureConversationMutation.mutate(result.contact.id, {
-                onSuccess: (conversation) => {
-                  navigation
-                    .getParent()
-                    ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
-                },
-              }),
-          },
-        ]);
+        setUnlockSuccess({ contactId: result.contact.id, balance: result.balance.balance });
       },
       onError: (error) => {
         Alert.alert('Could not unlock contact', error instanceof Error ? error.message : 'Please try again.');
@@ -82,6 +71,42 @@ export function UnlockContactScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
+      <AppModal
+        visible={Boolean(unlockSuccess)}
+        title="Contact Unlocked"
+        body={`Your wallet balance is now ${unlockSuccess?.balance ?? balance} tokens.`}
+        icon={LockOpen}
+        actions={[
+          {
+            label: 'Later',
+            onPress: () => {
+              setUnlockSuccess(null);
+              navigation.goBack();
+            },
+          },
+          {
+            label: 'Open Chat',
+            variant: 'primary',
+            onPress: () => {
+              const contactId = unlockSuccess?.contactId;
+              if (!contactId) {
+                setUnlockSuccess(null);
+                return;
+              }
+
+              setUnlockSuccess(null);
+              ensureConversationMutation.mutate(contactId, {
+                onSuccess: (conversation) => {
+                  navigation
+                    .getParent()
+                    ?.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId: conversation.id } });
+                },
+              });
+            },
+          },
+        ]}
+        onRequestClose={() => setUnlockSuccess(null)}
+      />
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Unlock contact</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
@@ -115,7 +140,7 @@ export function UnlockContactScreen({ route, navigation }: Props) {
           <Button
             title="Buy Tokens"
             variant="secondary"
-            onPress={() => navigation.getParent()?.navigate('WalletTab', { screen: 'WalletHome' })}
+            onPress={() => navigation.getParent()?.navigate('ActivityTab', { screen: 'WalletHome' })}
           />
         </>
       ) : null}

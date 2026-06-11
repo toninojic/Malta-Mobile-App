@@ -1,10 +1,9 @@
 import { Star } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../design/theme';
-import { ContractorRatingSummary } from '../../types/domain';
 import { Card } from '../Card';
 
-export function RatingSummaryCard({ summary }: { summary?: ContractorRatingSummary }) {
+export function RatingSummaryCard({ summary }: { summary?: { averageRating: string; totalReviews: number } }) {
   const theme = useTheme();
   const average = Number(summary?.averageRating ?? 0).toFixed(1);
   const total = summary?.totalReviews ?? 0;

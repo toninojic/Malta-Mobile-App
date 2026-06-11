@@ -16,7 +16,7 @@ export function AdminDashboardScreen() {
   const query = useAdminStatistics();
 
   return (
-    <Screen contentTopPadding={28}>
+    <Screen contentTopPadding={28} refreshing={query.isRefetching} onRefresh={() => void query.refetch({ cancelRefetch: false })}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Admin dashboard</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Platform overview, moderation health, and MVP revenue.</Text>

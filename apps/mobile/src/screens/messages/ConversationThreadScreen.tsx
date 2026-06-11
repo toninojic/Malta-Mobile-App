@@ -6,14 +6,17 @@ import {
   Alert,
   FlatList,
   Keyboard,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '../../api/client';
 import { useConversationMessages, useMarkMessageRead, useSendMessage } from '../../api/messageHooks';
 import { Button } from '../../components/Button';
@@ -27,22 +30,21 @@ import { ChatMessage } from '../../types/domain';
 import { formatChatTimestamp } from '../../utils/date';
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'ConversationThread'>;
-const KEYBOARD_CLEARANCE = 6;
 const CHAT_BOTTOM_GAP = 6;
+const ANDROID_SUGGESTION_BAR_CLEARANCE = 47;
 
 export function ConversationThreadScreen({ route, navigation }: Props) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const user = useAuthStore((state) => state.user);
   const [content, setContent] = useState('');
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-  const [composerHeight, setComposerHeight] = useState(72);
+  const [keyboardClearance, setKeyboardClearance] = useState(0);
   const messagesQuery = useConversationMessages(route.params.conversationId, isFocused);
   const sendMutation = useSendMessage();
   const markReadMutation = useMarkMessageRead();
   const markedReadIdsRef = useRef(new Set<string>());
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  const rootRef = useRef<View>(null);
   const isNewContactConversation =
     messagesQuery.error instanceof ApiError && messagesQuery.error.status === 404;
   const messages = isNewContactConversation ? [] : messagesQuery.data ?? [];
@@ -87,29 +89,13 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   }, [messages.length]);
 
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSubscription = Keyboard.addListener(showEvent, (event) => {
-      const keyboardTop = event.endCoordinates.screenY;
-      const setMeasuredOffset = (rootBottom: number) => {
-        const overlap = Math.max(0, rootBottom - keyboardTop);
-        const nextOffset = overlap > 0 ? overlap + KEYBOARD_CLEARANCE : 0;
-        setKeyboardOffset(nextOffset);
-        requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-      };
-
-      if (rootRef.current) {
-        rootRef.current.measureInWindow((_x, y, _width, height) => {
-          setMeasuredOffset(y + height);
-        });
-        return;
-      }
-
-      setKeyboardOffset(event.endCoordinates.height + KEYBOARD_CLEARANCE);
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardClearance(Platform.OS === 'android' ? ANDROID_SUGGESTION_BAR_CLEARANCE : 0);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardOffset(0));
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardClearance(0);
+    });
 
     return () => {
       showSubscription.remove();
@@ -159,17 +145,32 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['left', 'right']}>
-      <View ref={rootRef} style={styles.root}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        style={styles.root}
+      >
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={(message) => message.id}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={messagesQuery.isRefetching}
+              onRefresh={() => {
+                if (!messagesQuery.isFetching) {
+                  void messagesQuery.refetch({ cancelRefetch: false });
+                }
+              }}
+              tintColor={theme.colors.primary}
+            />
+          }
           contentContainerStyle={[
             styles.listContent,
             {
               padding: theme.spacing.lg,
-              paddingBottom: composerHeight + (keyboardOffset > 0 ? keyboardOffset + CHAT_BOTTOM_GAP : CHAT_BOTTOM_GAP),
+              paddingBottom: CHAT_BOTTOM_GAP,
             },
           ]}
           ListEmptyComponent={
@@ -185,13 +186,13 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
         <View
-          onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           style={[
             styles.composer,
             {
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
-              bottom: keyboardOffset,
+              marginBottom: keyboardClearance,
+              paddingBottom: Math.max(insets.bottom, 8),
             },
           ]}
         >
@@ -222,7 +223,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
             <ComposerIcon color="#FFFFFF" size={21} />
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -238,7 +239,7 @@ function MessageBubble({ message, mine }: { message: ChatMessage; mine: boolean 
       <Text style={[styles.message, { color: theme.colors.text }]}>{message.content}</Text>
       <Text style={[styles.status, { color: theme.colors.textMuted }]}>
         {formatChatTimestamp(message.createdAt)}
-        {mine ? ` / ${message.isRead ? 'read' : 'unread'}` : ''}
+        {mine ? `  ${message.isRead ? '\u2713\u2713' : '\u2713'}` : ''}
       </Text>
     </Card>
   );
@@ -274,9 +275,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   composer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 10,

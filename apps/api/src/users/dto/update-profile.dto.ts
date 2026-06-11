@@ -34,6 +34,14 @@ export class UpdateProfileDto {
   bio?: string;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : undefined;
+  })
   @IsUrl()
   @MaxLength(2048)
   avatarUrl?: string;

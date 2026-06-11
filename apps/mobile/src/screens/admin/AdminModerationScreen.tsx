@@ -11,6 +11,7 @@ import {
 } from '../../api/offerWorkHooks';
 import { useAdminReviews, useRemoveReview } from '../../api/reviewHooks';
 import { useApproveRefund, useRejectRefund } from '../../api/tokenHooks';
+import { AppModal, AppModalAction } from '../../components/AppModal';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -35,6 +36,13 @@ const SECTION_OPTIONS = [
 ];
 
 type Section = 'REFUNDS' | 'REVIEWS' | 'CONVERSATIONS' | 'CONTACTS' | 'VERIFICATIONS' | 'AUDIT';
+
+type ModerationDialog = {
+  title: string;
+  body: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
+  actions: AppModalAction[];
+};
 
 export function AdminModerationScreen() {
   const theme = useTheme();
@@ -65,20 +73,45 @@ function VerificationsSection() {
   const approveMutation = useApproveContractorVerification();
   const rejectMutation = useRejectContractorVerification();
   const [previewDocument, setPreviewDocument] = useState<ContractorVerification | null>(null);
+  const [confirmationDialog, setConfirmationDialog] = useState<ModerationDialog | null>(null);
   const authHeaders = accessTokenHeaders();
 
   const approve = (verificationId: string) => {
-    Alert.alert('Approve verification', 'Approve this contractor verification?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Approve', onPress: () => approveMutation.mutate(verificationId) },
-    ]);
+    setConfirmationDialog({
+      title: 'Approve Verification',
+      body: 'Approve this contractor verification? The contractor will receive verified status and a notification.',
+      icon: CheckCircle2,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Approve',
+          variant: 'primary',
+          onPress: () => {
+            setConfirmationDialog(null);
+            approveMutation.mutate(verificationId);
+          },
+        },
+      ],
+    });
   };
 
   const reject = (verificationId: string) => {
-    Alert.alert('Reject verification', 'Reject this verification request?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => rejectMutation.mutate({ id: verificationId }) },
-    ]);
+    setConfirmationDialog({
+      title: 'Reject Verification',
+      body: 'Reject this verification request? The contractor will be notified and can submit another document if eligible.',
+      icon: XCircle,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Reject',
+          variant: 'danger',
+          onPress: () => {
+            setConfirmationDialog(null);
+            rejectMutation.mutate({ id: verificationId });
+          },
+        },
+      ],
+    });
   };
 
   const openDocument = async (verification: ContractorVerification) => {
@@ -110,6 +143,16 @@ function VerificationsSection() {
       emptyTitle="No verification requests"
       onRetry={() => void query.refetch()}
     >
+      {confirmationDialog ? (
+        <AppModal
+          visible
+          title={confirmationDialog.title}
+          body={confirmationDialog.body}
+          icon={confirmationDialog.icon}
+          actions={confirmationDialog.actions}
+          onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
       <ImageViewerModal
         images={
           previewDocument?.documentUrl
@@ -169,19 +212,44 @@ function RefundsSection() {
   const approveMutation = useApproveRefund();
   const rejectMutation = useRejectRefund();
   const query = useAdminRefundsForModeration(true);
+  const [confirmationDialog, setConfirmationDialog] = useState<ModerationDialog | null>(null);
 
   const approve = (refundId: string) => {
-    Alert.alert('Approve refund', 'Approve this refund and subtract tokens from the wallet?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Approve', onPress: () => approveMutation.mutate({ refundRequestId: refundId }) },
-    ]);
+    setConfirmationDialog({
+      title: 'Approve Refund',
+      body: 'Approve this refund and subtract tokens from the user wallet? The refund transaction will be recorded.',
+      icon: RotateCcw,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Approve',
+          variant: 'primary',
+          onPress: () => {
+            setConfirmationDialog(null);
+            approveMutation.mutate({ refundRequestId: refundId });
+          },
+        },
+      ],
+    });
   };
 
   const reject = (refundId: string) => {
-    Alert.alert('Reject refund', 'Reject this refund request?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => rejectMutation.mutate({ refundRequestId: refundId }) },
-    ]);
+    setConfirmationDialog({
+      title: 'Reject Refund',
+      body: 'Reject this refund request? Token balance will not change.',
+      icon: XCircle,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Reject',
+          variant: 'danger',
+          onPress: () => {
+            setConfirmationDialog(null);
+            rejectMutation.mutate({ refundRequestId: refundId });
+          },
+        },
+      ],
+    });
   };
 
   return (
@@ -193,6 +261,16 @@ function RefundsSection() {
       emptyTitle="No refunds"
       onRetry={() => void query.refetch()}
     >
+      {confirmationDialog ? (
+        <AppModal
+          visible
+          title={confirmationDialog.title}
+          body={confirmationDialog.body}
+          icon={confirmationDialog.icon}
+          actions={confirmationDialog.actions}
+          onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
       {query.data?.data.map((refund) => (
         <View key={refund.id} style={styles.itemGroup}>
           <RefundCard refund={refund} />
@@ -211,12 +289,25 @@ function RefundsSection() {
 function ReviewsSection() {
   const query = useAdminReviews(true);
   const removeMutation = useRemoveReview();
+  const [confirmationDialog, setConfirmationDialog] = useState<ModerationDialog | null>(null);
 
   const remove = (review: Review) => {
-    Alert.alert('Remove review', `Remove review for "${review.jobRequest?.title ?? 'this job'}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeMutation.mutate(review.id) },
-    ]);
+    setConfirmationDialog({
+      title: 'Remove Review',
+      body: `Remove review for "${review.jobRequest?.title ?? 'this job'}"? It stays in the database but no longer counts toward ratings.`,
+      icon: XCircle,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Remove',
+          variant: 'danger',
+          onPress: () => {
+            setConfirmationDialog(null);
+            removeMutation.mutate(review.id);
+          },
+        },
+      ],
+    });
   };
 
   return (
@@ -228,6 +319,16 @@ function ReviewsSection() {
       emptyTitle="No reviews"
       onRetry={() => void query.refetch()}
     >
+      {confirmationDialog ? (
+        <AppModal
+          visible
+          title={confirmationDialog.title}
+          body={confirmationDialog.body}
+          icon={confirmationDialog.icon}
+          actions={confirmationDialog.actions}
+          onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
       {query.data?.data.map((review) => (
         <View key={review.id} style={styles.itemGroup}>
           <ReviewCard review={review} />

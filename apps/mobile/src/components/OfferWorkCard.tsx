@@ -15,6 +15,9 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
   const isSelectedActive = offer.status === 'SELECTED' && offer.unlockStatus !== 'UNLOCKED' && !completed;
   const showSelectedHistory = offer.selectedByEmployer && !isSelectedActive;
   const shouldShowUnlock = isSelectedActive;
+  const isRejected = offer.status === 'REJECTED';
+  const isClosedJob = offer.jobRequest?.status === 'CLOSED';
+  const showNextAction = !isRejected && !isClosedJob;
 
   return (
     <Card
@@ -24,6 +27,13 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
           ? {
               backgroundColor: `${theme.colors.primary}10`,
               borderColor: theme.colors.primary,
+            }
+          : null,
+        isRejected || isClosedJob
+          ? {
+              backgroundColor: theme.colors.surfaceMuted,
+              borderColor: isRejected ? theme.colors.danger : theme.colors.border,
+              opacity: 0.72,
             }
           : null,
       ]}
@@ -49,28 +59,41 @@ export function OfferWorkCard({ offer, onPress }: { offer: Offer; onPress: () =>
       </View>
 
       <View style={styles.badges}>
+        {isClosedJob ? <Badge status="JOB CLOSED" /> : null}
         {badgeStatuses.filter((status) => !(isSelectedActive && status === 'SELECTED')).map((status) => (
           <Badge key={status} status={status} />
         ))}
       </View>
+      {offer.employerRatingSummary?.totalReviews ? (
+        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
+          Employer rating {Number(offer.employerRatingSummary.averageRating).toFixed(1)} ({offer.employerRatingSummary.totalReviews})
+        </Text>
+      ) : null}
+      {offer.message ? (
+        <Text numberOfLines={3} style={[styles.message, { color: theme.colors.textMuted }]}>
+          {offer.message}
+        </Text>
+      ) : null}
 
       <View style={styles.row}>
         <CalendarClock color={theme.colors.textMuted} size={16} />
         <Text style={[styles.meta, { color: theme.colors.textMuted }]}>Starts {formatDate(offer.startDate)}</Text>
       </View>
 
-      <View
-        style={[
-          styles.nextAction,
-          {
-            backgroundColor: shouldShowUnlock ? theme.colors.primary : theme.colors.surfaceMuted,
-            borderColor: shouldShowUnlock ? theme.colors.primary : theme.colors.border,
-          },
-        ]}
-      >
-        <Sparkles color={shouldShowUnlock ? '#FFFFFF' : theme.colors.primary} size={16} />
-        <Text style={[styles.nextText, { color: shouldShowUnlock ? '#FFFFFF' : theme.colors.text }]}>{primaryOfferActionLabel(offer)}</Text>
-      </View>
+      {showNextAction ? (
+        <View
+          style={[
+            styles.nextAction,
+            {
+              backgroundColor: shouldShowUnlock ? theme.colors.primary : theme.colors.surfaceMuted,
+              borderColor: shouldShowUnlock ? theme.colors.primary : theme.colors.border,
+            },
+          ]}
+        >
+          <Sparkles color={shouldShowUnlock ? '#FFFFFF' : theme.colors.primary} size={16} />
+          <Text style={[styles.nextText, { color: shouldShowUnlock ? '#FFFFFF' : theme.colors.text }]}>{primaryOfferActionLabel(offer)}</Text>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -106,6 +129,10 @@ const styles = StyleSheet.create({
   },
   meta: {
     fontSize: 13,
+  },
+  message: {
+    fontSize: 13,
+    lineHeight: 19,
   },
   badges: {
     flexDirection: 'row',

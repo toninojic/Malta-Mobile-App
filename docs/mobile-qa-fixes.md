@@ -179,3 +179,19 @@ The final flow smoke test verifies:
 - employer full contractor profile access after unlock
 - private contractor contact data hidden before unlock
 - employer review badge count before and after review submission
+
+## Final QA Polish Sprint
+
+- Profile now includes an Appearance setting with `System`, `Light`, and `Dark`. The setting is stored locally and updates the app theme immediately.
+- The active bottom-tab tint uses the MaltaPro brand red `#ED3A35`.
+- Contractor bottom navigation is now Jobs, Activity, Messages, Alerts, and Profile. Wallet is opened from the Wallet card inside Contractor Activity.
+- Alerts excludes `NEW_MESSAGE` notifications. Message unread state stays in Messages/conversation badges, while Alerts shows only non-message updates.
+- Alerts shows `No new alerts` and hides `Read All` when there are no unread non-message alerts.
+- Pull-to-refresh is available on the key server-data screens: jobs, job details, Activity, My Offers, Offer / Work Details, wallet, alerts, messages list, chat thread, profile, contractor profile, admin dashboard/users/jobs/reviews, contacts, and contact details.
+- Chat sent messages show `✓` for delivered and `✓✓` for read. Received messages do not show read indicators.
+- Contractor offer cards truncate messages to three lines; full text remains available in details.
+- Rejected offer cards use muted styling with a red `REJECTED` badge and no dominant next-action CTA.
+- Closed jobs show `JOB CLOSED` in contractor work surfaces, and invalid offer actions are hidden by backend `availableActions`.
+- Employer offer views label contractor portfolio previews as `Portfolio`; tapping opens fullscreen preview while private contact data stays hidden before unlock.
+- Avatar selection uses a 1:1 crop flow, enforces the existing 5MB image limit, shows circular previews, and opens fullscreen when the visible avatar is tapped.
+- Contractor can review the employer after a confirmed completed job. Employer rating summaries are shown on the employer profile and anonymously to contractors before unlock.

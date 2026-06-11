@@ -1,7 +1,8 @@
 import { RefreshCw, ShieldOff, UserCheck, UsersRound } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { ComponentType, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useActivateUser, useAdminUsers, useSuspendUser } from '../../api/adminHooks';
+import { AppModal, AppModalAction } from '../../components/AppModal';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -26,12 +27,20 @@ const STATUS_OPTIONS = [
   { key: 'SUSPENDED', label: 'Suspended' },
 ];
 
+type ConfirmationDialog = {
+  title: string;
+  body: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
+  actions: AppModalAction[];
+};
+
 export function AdminUsersScreen() {
   const theme = useTheme();
   const currentUser = useAuthStore((state) => state.user);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('ALL');
   const [status, setStatus] = useState('ALL');
+  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialog | null>(null);
   const filters = useMemo(
     () => ({
       search: search.trim() || undefined,
@@ -45,28 +54,55 @@ export function AdminUsersScreen() {
   const activateMutation = useActivateUser();
 
   const confirmSuspend = (user: AdminUser) => {
-    Alert.alert('Suspend user', `Suspend ${user.email}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Suspend',
-        style: 'destructive',
-        onPress: () => suspendMutation.mutate(user.id),
-      },
-    ]);
+    setConfirmationDialog({
+      title: 'Suspend User',
+      body: `Suspend ${user.email}? This blocks protected actions until the account is activated again.`,
+      icon: ShieldOff,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Suspend',
+          variant: 'danger',
+          onPress: () => {
+            setConfirmationDialog(null);
+            suspendMutation.mutate(user.id);
+          },
+        },
+      ],
+    });
   };
 
   const confirmActivate = (user: AdminUser) => {
-    Alert.alert('Activate user', `Activate ${user.email}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Activate',
-        onPress: () => activateMutation.mutate(user.id),
-      },
-    ]);
+    setConfirmationDialog({
+      title: 'Activate User',
+      body: `Activate ${user.email}? This restores access to MaltaPro.`,
+      icon: UserCheck,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Activate',
+          variant: 'primary',
+          onPress: () => {
+            setConfirmationDialog(null);
+            activateMutation.mutate(user.id);
+          },
+        },
+      ],
+    });
   };
 
   return (
-    <Screen contentTopPadding={28}>
+    <Screen contentTopPadding={28} refreshing={usersQuery.isRefetching} onRefresh={() => void usersQuery.refetch({ cancelRefetch: false })}>
+      {confirmationDialog ? (
+        <AppModal
+          visible
+          title={confirmationDialog.title}
+          body={confirmationDialog.body}
+          icon={confirmationDialog.icon}
+          actions={confirmationDialog.actions}
+          onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Users</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Search profiles, review roles, and suspend or activate accounts.</Text>

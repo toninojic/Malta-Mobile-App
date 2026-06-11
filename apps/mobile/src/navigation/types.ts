@@ -35,12 +35,18 @@ export type ActivityStackParamList = {
       }
     | undefined;
   ContactDetails: { contactId: string; admin?: boolean };
-  LeaveReview: { contactId: string };
-  ReviewDetails: { reviewId: string; admin?: boolean };
-  MyReviews: undefined;
+  LeaveReview: { contactId: string; target?: 'contractor' | 'employer' };
+  ReviewDetails: { reviewId: string; admin?: boolean; target?: 'contractor' | 'employer' };
+  MyReviews: { initialTab?: 'received' | 'given' | 'toLeave' } | undefined;
   ContractorProfile: { contractorId: string };
   AdminReviews: undefined;
   NotificationsHome: undefined;
+  WalletHome: undefined;
+  RefundRequest: { transactionId: string };
+  AdminRefundDetails: { refundId: string };
+  PaymentSuccess: { paymentId?: string } | undefined;
+  PaymentFailed: { paymentId?: string } | undefined;
+  PaymentPending: { paymentId?: string } | undefined;
 };
 
 export type MessagesStackParamList = {
@@ -55,7 +61,6 @@ export type AppTabParamList = {
   AdminModerationTab: undefined;
   JobsTab: NavigatorScreenParams<JobsStackParamList>;
   ActivityTab: NavigatorScreenParams<ActivityStackParamList>;
-  WalletTab: NavigatorScreenParams<WalletStackParamList>;
   MessagesTab: NavigatorScreenParams<MessagesStackParamList>;
   AlertsTab: undefined;
   ProfileTab: undefined;

@@ -8,7 +8,14 @@ type BadgeProps = {
 
 export function Badge({ status }: BadgeProps) {
   const theme = useTheme();
-  const tone = status === 'ACTIVE' ? theme.colors.primary : status === 'CLOSED' ? theme.colors.textMuted : theme.colors.warning;
+  const tone =
+    status === 'ACTIVE'
+      ? theme.colors.primary
+      : status === 'REJECTED' || status === 'JOB CLOSED'
+        ? theme.colors.danger
+        : status === 'CLOSED'
+          ? theme.colors.textMuted
+          : theme.colors.warning;
 
   return (
     <Text

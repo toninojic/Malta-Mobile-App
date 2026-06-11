@@ -64,7 +64,7 @@ PENDING -> SELECTED -> UNLOCKED / IN_PROGRESS -> PENDING_CONFIRMATION -> COMPLET
 
 Employers never spend tokens and do not need Wallet. Their bottom navigation is Jobs, Activity, Messages, Alerts, and Profile.
 
-Contractors buy and spend tokens. Their bottom navigation is Jobs, Activity, Messages, Wallet, and Profile.
+Contractors buy and spend tokens. They access Wallet from Activity instead of the bottom tab. The visible contractor bottom navigation is Jobs, Activity, Messages, Alerts, and Profile.
 
 Contractor Activity is intentionally small:
 
@@ -89,6 +89,32 @@ My Reviews -> completed jobs waiting for employer review and review-related upda
 ```
 
 Employer My Reviews badges count completed jobs waiting for employer review plus unread review-related notifications (`REVIEW_RECEIVED` and `REVIEW_REPLIED`). The count clears when the employer submits the pending review and notifications are read through the normal Alerts flow.
+
+## Reverse Employer Reviews
+
+After a job is completed and confirmed, the employer may review the contractor once and the contractor may review the employer once for the same unlocked contact relationship.
+
+Employer review rules:
+
+- only the contractor on the completed unlocked contact can review the employer
+- the job must be `COMPLETED` and the completion must be `CONFIRMED`
+- one employer review is allowed per completed contact/offer
+- employer rating summaries store average rating and total reviews
+- contractors may see anonymous employer rating signals before unlock
+- employer email, phone, and other private identity data remain hidden before unlock
+
+## Selection Cancellation
+
+When an employer selects one offer, other pending offers are marked `REJECTED` with reason `AUTO_REJECTED_BY_SELECTION`.
+
+If the employer cancels the selected offer before contact unlock:
+
+- the job returns to `ACTIVE`
+- offers rejected automatically by that selection return to `PENDING`
+- offers manually rejected by the employer stay `REJECTED`
+- the cancelled selected offer becomes `REJECTED` with reason `SELECTION_CANCELLED_BY_EMPLOYER`
+
+Closed jobs are terminal marketplace states. Contractor work surfaces show `JOB CLOSED`, and backend `availableActions` returns only view-only actions for closed jobs.
 
 ## Payments
 

@@ -1,4 +1,5 @@
 export const palette = {
+  brandRed: '#ED3A35',
   emerald700: '#047857',
   emerald600: '#059669',
   emerald500: '#10B981',
@@ -27,6 +28,7 @@ export const lightColors = {
   textMuted: palette.neutral500,
   primary: palette.emerald600,
   primaryPressed: palette.emerald700,
+  brand: palette.brandRed,
   accent: palette.sky600,
   warning: palette.amber500,
   success: palette.emerald600,
@@ -42,6 +44,7 @@ export const darkColors = {
   textMuted: palette.neutral400,
   primary: palette.emerald500,
   primaryPressed: palette.emerald600,
+  brand: palette.brandRed,
   accent: '#38BDF8',
   warning: palette.amber500,
   success: palette.emerald500,

@@ -1,13 +1,13 @@
 import { Star } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../design/theme';
-import { Review } from '../../types/domain';
+import { EmployerReview, Review } from '../../types/domain';
 import { formatDate } from '../../utils/date';
 import { Badge } from '../Badge';
 import { Card } from '../Card';
 
 type ReviewCardProps = {
-  review: Review;
+  review: Review | EmployerReview;
   onPress?: () => void;
 };
 
@@ -31,7 +31,7 @@ export function ReviewCard({ review, onPress }: ReviewCardProps) {
       {review.comment ? (
         <Text style={[styles.body, { color: theme.colors.textMuted }]}>{review.comment}</Text>
       ) : null}
-      {review.contractorReply ? (
+      {'contractorReply' in review && review.contractorReply ? (
         <View style={[styles.reply, { borderColor: theme.colors.border }]}>
           <Text style={[styles.replyLabel, { color: theme.colors.text }]}>Contractor reply</Text>
           <Text style={[styles.body, { color: theme.colors.textMuted }]}>{review.contractorReply}</Text>

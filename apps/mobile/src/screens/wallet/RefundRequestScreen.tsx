@@ -3,6 +3,7 @@ import { SendHorizontal } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useCreateRefund } from '../../api/tokenHooks';
+import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
@@ -14,6 +15,7 @@ type Props = NativeStackScreenProps<WalletStackParamList, 'RefundRequest'>;
 export function RefundRequestScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const [reason, setReason] = useState('');
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
   const mutation = useCreateRefund();
 
   const submit = () => {
@@ -29,8 +31,7 @@ export function RefundRequestScreen({ route, navigation }: Props) {
       },
       {
         onSuccess: () => {
-          Alert.alert('Refund requested', 'An admin can now review this request.');
-          navigation.goBack();
+          setRequestSubmitted(true);
         },
         onError: (error) => {
           Alert.alert('Could not request refund', error instanceof Error ? error.message : 'Please try again.');
@@ -41,6 +42,14 @@ export function RefundRequestScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
+      <AppModal
+        visible={requestSubmitted}
+        title="Refund Requested"
+        body="An admin can now review this request."
+        icon={SendHorizontal}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => navigation.goBack() }]}
+        onRequestClose={() => navigation.goBack()}
+      />
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Request refund</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Explain why this purchase should be refunded.</Text>

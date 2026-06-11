@@ -74,8 +74,27 @@ const reviewInclude = {
   },
 };
 
+const employerReviewInclude = {
+  jobRequest: {
+    include: {
+      images: {
+        orderBy: { sortOrder: 'asc' as const },
+      },
+    },
+  },
+  offer: true,
+  contactUnlock: true,
+  employer: {
+    select: userSelect,
+  },
+  contractor: {
+    select: userSelect,
+  },
+};
+
 type CompletionWithRelations = Prisma.JobCompletionGetPayload<{ include: typeof completionInclude }>;
 type ReviewWithRelations = Prisma.ReviewGetPayload<{ include: typeof reviewInclude }>;
+type EmployerReviewWithRelations = Prisma.EmployerReviewGetPayload<{ include: typeof employerReviewInclude }>;
 
 @Injectable()
 export class ReviewsService {
@@ -253,6 +272,10 @@ export class ReviewsService {
       where: { contactUnlockId: contact.id },
       include: reviewInclude,
     });
+    const employerReview = await this.prisma.employerReview.findUnique({
+      where: { contactUnlockId: contact.id },
+      include: employerReviewInclude,
+    });
 
     return {
       contactId: contact.id,
@@ -260,8 +283,13 @@ export class ReviewsService {
       offerId: contact.offerId,
       status: completion?.status ?? null,
       canReview: completion?.status === JobCompletionStatus.CONFIRMED && contact.jobRequest.status === JobStatus.COMPLETED,
+      canReviewEmployer:
+        completion?.status === JobCompletionStatus.CONFIRMED &&
+        contact.jobRequest.status === JobStatus.COMPLETED &&
+        !employerReview,
       completion: completion ? this.toCompletion(completion) : null,
       review: review ? this.toReview(review) : null,
+      employerReview: employerReview ? this.toEmployerReview(employerReview) : null,
     };
   }
 
@@ -338,6 +366,79 @@ export class ReviewsService {
     return this.toReview(review);
   }
 
+  async createEmployerReview(user: AuthenticatedUser, contactId: string, dto: CreateReviewDto) {
+    if (user.role !== UserRole.CONTRACTOR) {
+      throw new ForbiddenException('Only contractors can review employers.');
+    }
+
+    const contact = await this.getUnlockedContact(contactId);
+    if (contact.contractorId !== user.id) {
+      throw new ForbiddenException('You can review only employers from your own unlocked jobs.');
+    }
+
+    const completion = await this.prisma.jobCompletion.findUnique({
+      where: { contactUnlockId: contact.id },
+      include: completionInclude,
+    });
+
+    if (!completion || completion.status !== JobCompletionStatus.CONFIRMED || contact.jobRequest.status !== JobStatus.COMPLETED) {
+      throw new BadRequestException('Employer review becomes available only after confirmed job completion.');
+    }
+
+    const existingReview = await this.prisma.employerReview.findFirst({
+      where: {
+        OR: [
+          { contactUnlockId: contact.id },
+          { offerId: contact.offerId },
+          { jobRequestId: contact.jobRequestId, contractorId: contact.contractorId },
+        ],
+      },
+    });
+
+    if (existingReview) {
+      throw new ConflictException('This employer has already been reviewed for this completed job.');
+    }
+
+    const comment = this.sanitizeOptional(dto.comment);
+    const review = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.employerReview.create({
+        data: {
+          jobRequestId: contact.jobRequestId,
+          offerId: contact.offerId,
+          contactUnlockId: contact.id,
+          employerId: contact.employerId,
+          contractorId: contact.contractorId,
+          rating: dto.rating,
+          comment,
+          status: ReviewStatus.ACTIVE,
+        },
+        include: employerReviewInclude,
+      });
+
+      await this.recalculateEmployerRatingSummary(tx, contact.employerId);
+
+      await this.notificationsService.create(
+        {
+          userId: contact.employerId,
+          type: NotificationType.REVIEW_RECEIVED,
+          title: 'New review received',
+          body: `${contact.contractor.profile?.displayName ?? contact.contractor.email} reviewed you after ${contact.jobRequest.title}.`,
+          data: {
+            employerReviewId: created.id,
+            contactId: contact.id,
+            jobRequestId: contact.jobRequestId,
+            offerId: contact.offerId,
+          },
+        },
+        tx,
+      );
+
+      return created;
+    });
+
+    return this.toEmployerReview(review);
+  }
+
   async findContractorReviews(
     contractorId: string,
     query: PaginationQueryDto,
@@ -383,6 +484,108 @@ export class ReviewsService {
         updatedAt: null,
       },
     );
+  }
+
+  async findEmployerReviews(
+    employerId: string,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ReturnType<ReviewsService['toEmployerReview']>>> {
+    await this.assertEmployerExists(employerId);
+
+    const where: Prisma.EmployerReviewWhereInput = {
+      employerId,
+      status: ReviewStatus.ACTIVE,
+      removedAt: null,
+    };
+
+    const [reviews, total] = await this.prisma.$transaction([
+      this.prisma.employerReview.findMany({
+        where,
+        include: employerReviewInclude,
+        orderBy: { createdAt: 'desc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.employerReview.count({ where }),
+    ]);
+
+    return {
+      data: reviews.map((review) => this.toEmployerReview(review)),
+      pagination: paginationMeta(query.page, query.limit, total),
+    };
+  }
+
+  async getEmployerRatingSummary(employerId: string) {
+    await this.assertEmployerExists(employerId);
+    const summary = await this.prisma.employerRatingSummary.findUnique({
+      where: { employerId },
+    });
+
+    return this.toEmployerRatingSummary(
+      summary ?? {
+        id: null,
+        employerId,
+        averageRating: new Prisma.Decimal(0),
+        totalReviews: 0,
+        createdAt: null,
+        updatedAt: null,
+      },
+    );
+  }
+
+  async findGivenReviews(
+    user: AuthenticatedUser,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ReturnType<ReviewsService['toReview']> | ReturnType<ReviewsService['toEmployerReview']>>> {
+    if (user.role === UserRole.EMPLOYER) {
+      const where: Prisma.ReviewWhereInput = {
+        employerId: user.id,
+        status: ReviewStatus.ACTIVE,
+        removedAt: null,
+      };
+
+      const [reviews, total] = await this.prisma.$transaction([
+        this.prisma.review.findMany({
+          where,
+          include: reviewInclude,
+          orderBy: { createdAt: 'desc' },
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+        }),
+        this.prisma.review.count({ where }),
+      ]);
+
+      return {
+        data: reviews.map((review) => this.toReview(review)),
+        pagination: paginationMeta(query.page, query.limit, total),
+      };
+    }
+
+    if (user.role === UserRole.CONTRACTOR) {
+      const where: Prisma.EmployerReviewWhereInput = {
+        contractorId: user.id,
+        status: ReviewStatus.ACTIVE,
+        removedAt: null,
+      };
+
+      const [reviews, total] = await this.prisma.$transaction([
+        this.prisma.employerReview.findMany({
+          where,
+          include: employerReviewInclude,
+          orderBy: { createdAt: 'desc' },
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+        }),
+        this.prisma.employerReview.count({ where }),
+      ]);
+
+      return {
+        data: reviews.map((review) => this.toEmployerReview(review)),
+        pagination: paginationMeta(query.page, query.limit, total),
+      };
+    }
+
+    throw new ForbiddenException('Only employers and contractors can view given reviews.');
   }
 
   async getContractorProfile(user: AuthenticatedUser, contractorId: string) {
@@ -520,6 +723,27 @@ export class ReviewsService {
     }
 
     throw new ForbiddenException('You cannot access this review.');
+  }
+
+  async findEmployerReviewForUser(user: AuthenticatedUser, reviewId: string) {
+    const review = await this.prisma.employerReview.findUnique({
+      where: { id: reviewId },
+      include: employerReviewInclude,
+    });
+
+    if (!review) {
+      throw new NotFoundException('Employer review not found.');
+    }
+
+    if (user.role === UserRole.ADMIN || review.employerId === user.id || review.contractorId === user.id) {
+      return this.toEmployerReview(review);
+    }
+
+    if (review.status === ReviewStatus.ACTIVE && !review.removedAt) {
+      return this.toEmployerReview(review);
+    }
+
+    throw new ForbiddenException('You cannot access this employer review.');
   }
 
   async findAdminReviews(query: PaginationQueryDto): Promise<PaginatedResponse<ReturnType<ReviewsService['toReview']>>> {
@@ -705,6 +929,17 @@ export class ReviewsService {
     }
   }
 
+  private async assertEmployerExists(employerId: string) {
+    const employer = await this.prisma.user.findUnique({
+      where: { id: employerId },
+      select: { id: true, role: true },
+    });
+
+    if (!employer || employer.role !== UserRole.EMPLOYER) {
+      throw new NotFoundException('Employer not found.');
+    }
+  }
+
   private async canSeePrivateContractorProfile(user: AuthenticatedUser, contractorId: string) {
     if (user.role === UserRole.ADMIN || user.id === contractorId) {
       return true;
@@ -744,6 +979,34 @@ export class ReviewsService {
       where: { contractorId },
       create: {
         contractorId,
+        averageRating: new Prisma.Decimal(averageRating.toFixed(2)),
+        totalReviews,
+      },
+      update: {
+        averageRating: new Prisma.Decimal(averageRating.toFixed(2)),
+        totalReviews,
+      },
+    });
+  }
+
+  private async recalculateEmployerRatingSummary(tx: Prisma.TransactionClient, employerId: string) {
+    const aggregate = await tx.employerReview.aggregate({
+      where: {
+        employerId,
+        status: ReviewStatus.ACTIVE,
+        removedAt: null,
+      },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+
+    const totalReviews = aggregate._count.rating;
+    const averageRating = aggregate._avg.rating ?? 0;
+
+    await tx.employerRatingSummary.upsert({
+      where: { employerId },
+      create: {
+        employerId,
         averageRating: new Prisma.Decimal(averageRating.toFixed(2)),
         totalReviews,
       },
@@ -863,6 +1126,50 @@ export class ReviewsService {
     };
   }
 
+  private toEmployerReview(review: EmployerReviewWithRelations) {
+    return {
+      id: review.id,
+      jobRequestId: review.jobRequestId,
+      offerId: review.offerId,
+      contactUnlockId: review.contactUnlockId,
+      employerId: review.employerId,
+      contractorId: review.contractorId,
+      rating: review.rating,
+      comment: review.comment,
+      status: review.status,
+      removedByAdminId: review.removedByAdminId,
+      removedAt: review.removedAt,
+      createdAt: review.createdAt,
+      updatedAt: review.updatedAt,
+      jobRequest: {
+        id: review.jobRequest.id,
+        title: review.jobRequest.title,
+        description: review.jobRequest.description,
+        category: review.jobRequest.category,
+        subcategory: review.jobRequest.subcategory,
+        location: review.jobRequest.location,
+        status: review.jobRequest.status,
+        expiresAt: review.jobRequest.expiresAt,
+        images: review.jobRequest.images,
+        createdAt: review.jobRequest.createdAt,
+        updatedAt: review.jobRequest.updatedAt,
+      },
+      offer: {
+        id: review.offer.id,
+        estimatedPrice: review.offer.estimatedPrice.toString(),
+        startDate: review.offer.startDate,
+        estimatedCompletionDays: review.offer.estimatedCompletionDays,
+        message: review.offer.message,
+        status: review.offer.status,
+        selectedByEmployer: review.offer.selectedByEmployer,
+        createdAt: review.offer.createdAt,
+        updatedAt: review.offer.updatedAt,
+      },
+      employer: review.employer,
+      contractor: review.contractor,
+    };
+  }
+
   private toRatingSummary(summary: {
     id: string | null;
     contractorId: string;
@@ -874,6 +1181,24 @@ export class ReviewsService {
     return {
       id: summary.id,
       contractorId: summary.contractorId,
+      averageRating: summary.averageRating.toString(),
+      totalReviews: summary.totalReviews,
+      createdAt: summary.createdAt,
+      updatedAt: summary.updatedAt,
+    };
+  }
+
+  private toEmployerRatingSummary(summary: {
+    id: string | null;
+    employerId: string;
+    averageRating: Prisma.Decimal;
+    totalReviews: number;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+  }) {
+    return {
+      id: summary.id,
+      employerId: summary.employerId,
       averageRating: summary.averageRating.toString(),
       totalReviews: summary.totalReviews,
       createdAt: summary.createdAt,

@@ -13,6 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:clean": "node scripts/reset-clean-test-db.mjs",
+    "db:reset-clean": "prisma migrate reset --force --skip-seed --skip-generate && node scripts/reset-clean-test-db.mjs",
     "smoke:milestone1": "node scripts/milestone1-smoke.mjs",
     "smoke:milestone2": "node scripts/milestone2-smoke.mjs",
     "smoke:milestone3": "node scripts/milestone3-smoke.mjs",

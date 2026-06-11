@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { ImagePlus, LogOut, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, Image, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import {
   useContractorVerification,
@@ -11,12 +11,16 @@ import {
   useUploadContractorVerification,
   useUploadPortfolioImages,
 } from '../../api/offerWorkHooks';
+import { useEmployerRatingSummary } from '../../api/reviewHooks';
 import { Badge } from '../../components/Badge';
+import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
+import { AppearanceMode, useAppearanceStore } from '../../store/appearance.store';
 import { useAuthStore } from '../../store/auth.store';
 import { AuthUser, UserProfile } from '../../types/domain';
 
@@ -37,6 +41,8 @@ export function ProfileEditScreen() {
   const clearSession = useAuthStore((state) => state.clearSession);
   const updateUser = useAuthStore((state) => state.updateUser);
   const currentUser = useAuthStore((state) => state.user);
+  const appearanceMode = useAppearanceStore((state) => state.mode);
+  const setAppearanceMode = useAppearanceStore((state) => state.setMode);
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
@@ -45,6 +51,8 @@ export function ProfileEditScreen() {
   const [avatarImage, setAvatarImage] = useState<SelectedAvatar | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [tradeCategories, setTradeCategories] = useState('');
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const [profileSavedOpen, setProfileSavedOpen] = useState(false);
 
   const query = useQuery({
     queryKey: ['users', 'me'],
@@ -52,6 +60,7 @@ export function ProfileEditScreen() {
   });
   const portfolioQuery = usePortfolioImages(currentUser?.role === 'CONTRACTOR');
   const verificationQuery = useContractorVerification(currentUser?.role === 'CONTRACTOR');
+  const employerRatingQuery = useEmployerRatingSummary(currentUser?.role === 'EMPLOYER' ? currentUser.id : undefined);
   const uploadPortfolioMutation = useUploadPortfolioImages();
   const removePortfolioMutation = useRemovePortfolioImage();
   const uploadVerificationMutation = useUploadContractorVerification();
@@ -81,12 +90,14 @@ export function ProfileEditScreen() {
         nextAvatarUrl = uploadedProfile.avatarUrl ?? '';
       }
 
+      const trimmedAvatarUrl = nextAvatarUrl.trim();
+
       return api.updateProfile({
         displayName,
         phone,
         location,
         bio,
-        avatarUrl: nextAvatarUrl,
+        ...(trimmedAvatarUrl ? { avatarUrl: trimmedAvatarUrl } : {}),
         companyName,
         tradeCategories: tradeCategories
           .split(',')
@@ -103,7 +114,7 @@ export function ProfileEditScreen() {
       setAvatarUrl(profile.avatarUrl ?? '');
       setAvatarImage(null);
       await queryClient.invalidateQueries({ queryKey: ['users', 'me'] });
-      Alert.alert('Profile saved', 'Your profile has been updated.');
+      setProfileSavedOpen(true);
     },
     onError: (error) => {
       Alert.alert('Could not save profile', error instanceof Error ? error.message : 'Please check the form.');
@@ -122,6 +133,7 @@ export function ProfileEditScreen() {
   const canUploadAvatar = role === 'EMPLOYER' || role === 'CONTRACTOR';
   const avatarPreviewUri = avatarImage?.uri ?? avatarUrl;
   const isContractor = role === 'CONTRACTOR';
+  const isEmployer = role === 'EMPLOYER';
 
   const pickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -133,6 +145,8 @@ export function ProfileEditScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: false,
+      allowsEditing: true,
+      aspect: [1, 1],
       quality: 0.85,
     });
 
@@ -253,17 +267,49 @@ export function ProfileEditScreen() {
   };
 
   return (
-    <Screen>
-      <View style={styles.profileTopSpacer} />
+    <Screen
+      contentTopPadding={44}
+      refreshing={query.isRefetching || portfolioQuery.isRefetching || verificationQuery.isRefetching || employerRatingQuery.isRefetching}
+      onRefresh={() => {
+        void query.refetch();
+        if (isContractor) {
+          void portfolioQuery.refetch();
+          void verificationQuery.refetch();
+        }
+        if (isEmployer) {
+          void employerRatingQuery.refetch();
+        }
+      }}
+    >
+      <AppModal
+        visible={profileSavedOpen}
+        title="Profile Saved"
+        body="Your profile has been updated."
+        icon={Save}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setProfileSavedOpen(false) }]}
+        onRequestClose={() => setProfileSavedOpen(false)}
+      />
       <Card style={styles.profileTopCard}>
         <View style={styles.headerRow}>
-          <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
+          <Pressable
+            accessibilityRole={avatarPreviewUri ? 'imagebutton' : undefined}
+            accessibilityLabel={avatarPreviewUri ? 'Preview avatar' : undefined}
+            disabled={!avatarPreviewUri}
+            onPress={() => setAvatarViewerOpen(true)}
+            style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+          >
             {avatarPreviewUri ? (
               <Image source={{ uri: avatarPreviewUri }} style={styles.avatarImage} />
             ) : (
               <UserRound color="#FFFFFF" size={28} />
             )}
-          </View>
+          </Pressable>
+          <ImageViewerModal
+            images={avatarPreviewUri ? [{ id: 'avatar', url: avatarPreviewUri }] : []}
+            initialIndex={0}
+            visible={avatarViewerOpen}
+            onClose={() => setAvatarViewerOpen(false)}
+          />
           <View style={styles.headerText}>
             <Text style={[styles.name, { color: theme.colors.text }]}>{displayName || currentUser?.email}</Text>
             <Text style={[styles.email, { color: theme.colors.textMuted }]}>{query.data?.email ?? currentUser?.email}</Text>
@@ -281,6 +327,45 @@ export function ProfileEditScreen() {
       ) : null}
       <TextField label="Company name" value={companyName} onChangeText={setCompanyName} />
       <TextField label="Trade categories" value={tradeCategories} onChangeText={setTradeCategories} />
+
+      {isEmployer && employerRatingQuery.data?.totalReviews ? (
+        <Card>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Employer rating</Text>
+          <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+            {Number(employerRatingQuery.data.averageRating).toFixed(1)} average from {employerRatingQuery.data.totalReviews}{' '}
+            {employerRatingQuery.data.totalReviews === 1 ? 'review' : 'reviews'}
+          </Text>
+        </Card>
+      ) : null}
+
+      <Card>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Appearance</Text>
+        <View style={styles.appearanceOptions}>
+          {appearanceOptions.map((option) => (
+            <Pressable
+              accessibilityRole="button"
+              key={option.value}
+              onPress={() => void setAppearanceMode(option.value)}
+              style={[
+                styles.appearanceOption,
+                {
+                  backgroundColor: appearanceMode === option.value ? theme.colors.success : theme.colors.surfaceMuted,
+                  borderColor: appearanceMode === option.value ? theme.colors.success : theme.colors.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.appearanceOptionText,
+                  { color: appearanceMode === option.value ? '#FFFFFF' : theme.colors.text },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </Card>
 
       {isContractor ? (
         <Card>
@@ -346,9 +431,6 @@ export function ProfileEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  profileTopSpacer: {
-    height: 12,
-  },
   profileTopCard: {
     marginTop: 0,
   },
@@ -360,12 +442,12 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 28,
   },
   avatar: {
     width: 56,
     height: 56,
-    borderRadius: 8,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -410,7 +492,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  appearanceOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  appearanceOption: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  appearanceOptionText: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
 });
+
+const appearanceOptions: Array<{ label: string; value: AppearanceMode }> = [
+  { label: 'System', value: 'system' },
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
+];
 
 function mimeTypeFromUri(uri: string) {
   const lower = uri.toLowerCase();

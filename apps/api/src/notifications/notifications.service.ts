@@ -12,6 +12,11 @@ type NotificationCreateInput = {
   data?: Prisma.InputJsonValue;
 };
 
+const alertsWhere = (userId: string): Prisma.NotificationWhereInput => ({
+  userId,
+  type: { not: NotificationType.NEW_MESSAGE },
+});
+
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -28,7 +33,7 @@ export class NotificationsService {
     user: AuthenticatedUser,
     query: PaginationQueryDto,
   ): Promise<PaginatedResponse<ReturnType<NotificationsService['toNotification']>>> {
-    const where: Prisma.NotificationWhereInput = { userId: user.id };
+    const where = alertsWhere(user.id);
 
     const [notifications, total] = await this.prisma.$transaction([
       this.prisma.notification.findMany({
@@ -67,6 +72,7 @@ export class NotificationsService {
       where: {
         userId: user.id,
         isRead: false,
+        type: { not: NotificationType.NEW_MESSAGE },
       },
     });
 
@@ -102,6 +108,7 @@ export class NotificationsService {
       where: {
         userId: user.id,
         isRead: false,
+        type: { not: NotificationType.NEW_MESSAGE },
       },
       data: {
         isRead: true,

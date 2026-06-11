@@ -223,6 +223,42 @@ export class ContactsService {
     };
   }
 
+  async findContactsReadyForReview(
+    user: AuthenticatedUser,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ReturnType<ContactsService['toContact']>>> {
+    const where: Prisma.ContactUnlockWhereInput =
+      user.role === UserRole.EMPLOYER
+        ? {
+            employerId: user.id,
+            status: ContactUnlockStatus.UNLOCKED,
+            jobRequest: { status: JobStatus.COMPLETED },
+            review: null,
+          }
+        : {
+            contractorId: user.id,
+            status: ContactUnlockStatus.UNLOCKED,
+            jobRequest: { status: JobStatus.COMPLETED },
+            employerReview: null,
+          };
+
+    const [contacts, total] = await this.prisma.$transaction([
+      this.prisma.contactUnlock.findMany({
+        where,
+        include: contactInclude,
+        orderBy: { updatedAt: 'desc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.contactUnlock.count({ where }),
+    ]);
+
+    return {
+      data: contacts.map((contact) => this.toContact(contact)),
+      pagination: paginationMeta(query.page, query.limit, total),
+    };
+  }
+
   async findContact(user: AuthenticatedUser, contactId: string) {
     const contact = await this.prisma.contactUnlock.findUnique({
       where: { id: contactId },

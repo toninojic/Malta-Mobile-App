@@ -27,6 +27,9 @@ export function NotificationsScreen() {
   const query = isAdmin ? adminNotificationsQuery : notificationsQuery;
   const markReadMutation = useMarkNotificationRead();
   const markAllMutation = useMarkAllNotificationsRead();
+  const notifications = (query.data?.data ?? []).filter((notification) => notification.type !== 'NEW_MESSAGE');
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+  const isRefreshing = query.isRefetching || markAllMutation.isPending;
 
   useFocusEffect(
     useCallback(() => {
@@ -35,13 +38,21 @@ export function NotificationsScreen() {
   );
 
   return (
-    <Screen contentTopPadding={28}>
+    <Screen
+      contentTopPadding={44}
+      refreshing={isRefreshing}
+      onRefresh={() => {
+        if (!query.isFetching) {
+          void query.refetch({ cancelRefetch: false });
+        }
+      }}
+    >
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: theme.colors.text }]}>{isAdmin ? 'All notifications' : 'Notifications'}</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Message and contact unlock updates.</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Offer, contact, wallet, and review updates.</Text>
         </View>
-        {!isAdmin ? (
+        {!isAdmin && unreadCount > 0 ? (
           <Button
             title="Read All"
             icon={CheckCheck}
@@ -52,6 +63,9 @@ export function NotificationsScreen() {
           />
         ) : null}
       </View>
+      {!isAdmin && unreadCount === 0 ? (
+        <Text style={[styles.noNewAlerts, { color: theme.colors.textMuted }]}>No new alerts</Text>
+      ) : null}
 
       {query.isLoading ? (
         <View style={styles.center}>
@@ -69,12 +83,12 @@ export function NotificationsScreen() {
         />
       ) : null}
 
-      {query.data?.data.length === 0 ? (
-        <EmptyState icon={Bell} title="No notifications" message="Unread updates will appear here." />
+      {!query.isLoading && !query.error && notifications.length === 0 ? (
+        <EmptyState icon={Bell} title={unreadCount === 0 ? 'No new alerts' : 'No alerts'} message="Non-message updates will appear here." />
       ) : null}
 
       <View style={styles.list}>
-        {query.data?.data.map((notification) => (
+        {notifications.map((notification) => (
           <NotificationCard
             key={notification.id}
             notification={notification}
@@ -138,6 +152,7 @@ function openNotificationTarget(
   const offerId = stringMeta(metadata, 'offerId');
   const jobId = stringMeta(metadata, 'jobId') ?? stringMeta(metadata, 'jobRequestId');
   const reviewId = stringMeta(metadata, 'reviewId');
+  const employerReviewId = stringMeta(metadata, 'employerReviewId');
   const contactId = stringMeta(metadata, 'contactId') ?? stringMeta(metadata, 'contactUnlockId');
   const isEmployer = role === 'EMPLOYER';
 
@@ -161,6 +176,11 @@ function openNotificationTarget(
       navigation.navigate('JobsTab', { screen: 'JobDetails', params: { jobId } });
       return;
     }
+  }
+
+  if (employerReviewId) {
+    navigation.navigate('ActivityTab', { screen: 'ReviewDetails', params: { reviewId: employerReviewId, target: 'employer' } });
+    return;
   }
 
   if ((notification.type === 'REVIEW_RECEIVED' || notification.type === 'REVIEW_REPLIED' || notification.type === 'REVIEW_REMOVED') && reviewId) {
@@ -198,7 +218,7 @@ function openNotificationTarget(
   }
 
   if (notification.type === 'REFUND_APPROVED' || notification.type === 'REFUND_DENIED') {
-    navigation.navigate('WalletTab', { screen: 'WalletHome' });
+    navigation.navigate('ActivityTab', { screen: 'WalletHome' });
   }
 }
 
@@ -227,6 +247,10 @@ const styles = StyleSheet.create({
   },
   readAllButton: {
     width: 116,
+  },
+  noNewAlerts: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   center: {
     paddingVertical: 32,

@@ -2,7 +2,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SendHorizontal, Star } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import { useCreateReview } from '../../api/reviewHooks';
+import { useCreateEmployerReview, useCreateReview } from '../../api/reviewHooks';
+import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { RatingInput } from '../../components/reviews/RatingInput';
@@ -17,7 +18,11 @@ export function LeaveReviewScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
-  const mutation = useCreateReview();
+  const [submittedReviewId, setSubmittedReviewId] = useState<string | null>(null);
+  const contractorReviewMutation = useCreateReview();
+  const employerReviewMutation = useCreateEmployerReview();
+  const target = route.params.target ?? 'contractor';
+  const mutation = target === 'employer' ? employerReviewMutation : contractorReviewMutation;
 
   const submit = () => {
     mutation.mutate(
@@ -28,8 +33,7 @@ export function LeaveReviewScreen({ route, navigation }: Props) {
       },
       {
         onSuccess: (review) => {
-          Alert.alert('Review submitted', 'The contractor has been notified.');
-          navigation.replace('ReviewDetails', { reviewId: review.id });
+          setSubmittedReviewId(review.id);
         },
         onError: (error) => {
           Alert.alert('Could not submit review', error instanceof Error ? error.message : 'Please try again.');
@@ -40,13 +44,35 @@ export function LeaveReviewScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
+      <AppModal
+        visible={Boolean(submittedReviewId)}
+        title="Review Submitted"
+        body={target === 'employer' ? 'The employer has been notified.' : 'The contractor has been notified.'}
+        icon={Star}
+        actions={[
+          {
+            label: 'Close',
+            variant: 'primary',
+            onPress: () => {
+              const reviewId = submittedReviewId;
+              setSubmittedReviewId(null);
+              if (reviewId) {
+                navigation.replace('ReviewDetails', { reviewId, target });
+              }
+            },
+          },
+        ]}
+        onRequestClose={() => setSubmittedReviewId(null)}
+      />
       <Card>
         <View style={styles.header}>
           <Star color={theme.colors.warning} fill={theme.colors.warning} size={24} />
           <View style={styles.copy}>
             <Text style={[styles.title, { color: theme.colors.text }]}>Leave a review</Text>
             <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
-              Rate the completed job and optionally add a short comment.
+              {target === 'employer'
+                ? 'Rate the employer after the confirmed job and optionally add a short comment.'
+                : 'Rate the completed job and optionally add a short comment.'}
             </Text>
           </View>
         </View>

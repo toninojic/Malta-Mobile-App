@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { Coins, CreditCard, ReceiptText, RefreshCw, RotateCcw } from 'lucide-react-native';
-import { ReactNode, useCallback } from 'react';
+import { ComponentType, ReactNode, useCallback, useState } from 'react';
 import { Alert, ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import {
   useAdminRefunds,
@@ -12,6 +12,7 @@ import {
 } from '../../api/tokenHooks';
 import { useCreateCheckoutSession, useMockPurchase, usePaymentConfig, usePayments } from '../../api/paymentHooks';
 import { BalanceCard } from '../../components/wallet/BalanceCard';
+import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { PackageCard } from '../../components/wallet/PackageCard';
@@ -25,9 +26,16 @@ import { useAuthStore } from '../../store/auth.store';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'WalletHome'>;
 
+type InfoDialog = {
+  title: string;
+  body: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
+};
+
 export function WalletScreen({ navigation }: Props) {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
+  const [infoDialog, setInfoDialog] = useState<InfoDialog | null>(null);
   const isAdmin = user?.role === 'ADMIN';
   const packagesQuery = useTokenPackages();
   const balanceQuery = useTokenBalance();
@@ -66,11 +74,22 @@ export function WalletScreen({ navigation }: Props) {
     ]),
   );
 
-  const handleBuy = (tokenPackageId: string) => {
-    if (isMockMode) {
+  const handleBuy = async (tokenPackageId: string) => {
+    const latestConfigResult = await paymentConfigQuery.refetch({ cancelRefetch: false });
+    const paymentConfig = latestConfigResult.data ?? paymentConfigQuery.data;
+    const shouldUseMock =
+      paymentConfig?.allowMockPurchases === true ||
+      paymentConfig?.mockPurchasesEnabled === true ||
+      paymentConfig?.mode === 'MOCK';
+
+    if (shouldUseMock) {
       mockPurchaseMutation.mutate(tokenPackageId, {
         onSuccess: (result) => {
-          Alert.alert('Package added', `Your wallet now has ${result.balance.balance} tokens.`);
+          setInfoDialog({
+            title: 'Package Added',
+            body: `Your wallet now has ${result.balance.balance} tokens.`,
+            icon: Coins,
+          });
         },
         onError: (error) => {
           Alert.alert('Could not buy package', error instanceof Error ? error.message : 'Please try again.');
@@ -79,8 +98,12 @@ export function WalletScreen({ navigation }: Props) {
       return;
     }
 
-    if (paymentConfigQuery.data && !paymentConfigQuery.data.stripeConfigured) {
-      Alert.alert('Payments are not configured.', 'Mock purchases are disabled and Stripe is not configured.');
+    if (paymentConfig && !paymentConfig.stripeConfigured) {
+      setInfoDialog({
+        title: 'Payments Not Configured',
+        body: 'Mock purchases are disabled and Stripe is not configured.',
+        icon: CreditCard,
+      });
       return;
     }
 
@@ -89,7 +112,11 @@ export function WalletScreen({ navigation }: Props) {
         try {
           await Linking.openURL(result.checkoutUrl);
         } catch {
-          Alert.alert('Checkout ready', 'Stripe checkout could not be opened on this device.');
+          setInfoDialog({
+            title: 'Checkout Ready',
+            body: 'Stripe checkout could not be opened on this device.',
+            icon: CreditCard,
+          });
         }
       },
       onError: (error) => {
@@ -113,8 +140,37 @@ export function WalletScreen({ navigation }: Props) {
     paymentsQuery.error ??
     paymentConfigQuery.error;
 
+  const refreshing =
+    packagesQuery.isRefetching ||
+    balanceQuery.isRefetching ||
+    transactionsQuery.isRefetching ||
+    refundsQuery.isRefetching ||
+    paymentsQuery.isRefetching ||
+    paymentConfigQuery.isRefetching ||
+    adminRefundsQuery.isRefetching;
+
+  const refreshWallet = () => {
+    if (!packagesQuery.isFetching) void packagesQuery.refetch({ cancelRefetch: false });
+    if (!balanceQuery.isFetching) void balanceQuery.refetch({ cancelRefetch: false });
+    if (!transactionsQuery.isFetching) void transactionsQuery.refetch({ cancelRefetch: false });
+    if (!refundsQuery.isFetching) void refundsQuery.refetch({ cancelRefetch: false });
+    if (!paymentsQuery.isFetching) void paymentsQuery.refetch({ cancelRefetch: false });
+    if (!paymentConfigQuery.isFetching) void paymentConfigQuery.refetch({ cancelRefetch: false });
+    if (isAdmin && !adminRefundsQuery.isFetching) void adminRefundsQuery.refetch({ cancelRefetch: false });
+  };
+
   return (
-    <Screen>
+    <Screen refreshing={refreshing} onRefresh={refreshWallet}>
+      {infoDialog ? (
+        <AppModal
+          visible
+          title={infoDialog.title}
+          body={infoDialog.body}
+          icon={infoDialog.icon}
+          actions={[{ label: 'Close', variant: 'primary', onPress: () => setInfoDialog(null) }]}
+          onRequestClose={() => setInfoDialog(null)}
+        />
+      ) : null}
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Token wallet</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>

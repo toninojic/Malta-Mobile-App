@@ -1,7 +1,8 @@
 import { BriefcaseBusiness, RefreshCw, XCircle } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { ComponentType, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAdminJobs, useCloseAdminJob } from '../../api/adminHooks';
+import { AppModal, AppModalAction } from '../../components/AppModal';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -21,11 +22,19 @@ const STATUS_OPTIONS = [
   { key: 'EXPIRED', label: 'Expired' },
 ];
 
+type ConfirmationDialog = {
+  title: string;
+  body: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
+  actions: AppModalAction[];
+};
+
 export function AdminJobsScreen() {
   const theme = useTheme();
   const [status, setStatus] = useState('ALL');
   const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
+  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialog | null>(null);
   const filters = useMemo(
     () => ({
       status: status === 'ALL' ? undefined : (status as JobStatus),
@@ -38,18 +47,36 @@ export function AdminJobsScreen() {
   const closeMutation = useCloseAdminJob();
 
   const confirmClose = (job: JobRequest) => {
-    Alert.alert('Close job', `Close "${job.title}"? This will cancel the job and block reviews.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Close',
-        style: 'destructive',
-        onPress: () => closeMutation.mutate(job.id),
-      },
-    ]);
+    setConfirmationDialog({
+      title: 'Close Job',
+      body: `Close "${job.title}"? This cancels the job and blocks future reviews for this request.`,
+      icon: XCircle,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: 'Close Job',
+          variant: 'danger',
+          onPress: () => {
+            setConfirmationDialog(null);
+            closeMutation.mutate(job.id);
+          },
+        },
+      ],
+    });
   };
 
   return (
-    <Screen contentTopPadding={28}>
+    <Screen contentTopPadding={28} refreshing={jobsQuery.isRefetching} onRefresh={() => void jobsQuery.refetch({ cancelRefetch: false })}>
+      {confirmationDialog ? (
+        <AppModal
+          visible
+          title={confirmationDialog.title}
+          body={confirmationDialog.body}
+          icon={confirmationDialog.icon}
+          actions={confirmationDialog.actions}
+          onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Jobs</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Inspect requests, filter by status, and close unsafe or cancelled jobs.</Text>

@@ -34,6 +34,12 @@ enum OfferStatus {
   COMPLETED
 }
 
+enum OfferRejectionReason {
+  AUTO_REJECTED_BY_SELECTION
+  MANUALLY_REJECTED_BY_EMPLOYER
+  SELECTION_CANCELLED_BY_EMPLOYER
+}
+
 enum TokenTransactionType {
   PURCHASE
   SPEND
@@ -130,8 +136,11 @@ model User {
   reviewsGiven      Review[]          @relation("EmployerReviews")
   reviewsReceived   Review[]          @relation("ContractorReviews")
   reviewsRemoved     Review[]          @relation("ReviewRemovals")
+  employerReviewsGiven EmployerReview[] @relation("ContractorEmployerReviews")
+  employerReviewsReceived EmployerReview[] @relation("ReviewedEmployerReviews")
   auditLogs          AuditLog[]        @relation("AdminAuditLogs")
   ratingSummary      ContractorRatingSummary? @relation("ContractorRatingSummary")
+  employerRatingSummary EmployerRatingSummary? @relation("EmployerRatingSummary")
   portfolioImages    ContractorPortfolioImage[] @relation("ContractorPortfolioImages")
   verificationRequests ContractorVerification[] @relation("ContractorVerifications")
   reviewedVerifications ContractorVerification[] @relation("VerificationReviews")
@@ -175,6 +184,7 @@ model JobRequest {
   completions                    JobCompletion[]
   chats                         Chat[]
   reviews                       Review[]
+  employerReviews               EmployerReview[]
   createdAt                     DateTime     @default(now())
   updatedAt                     DateTime     @updatedAt
 
@@ -206,11 +216,13 @@ model Offer {
   message                 String?        @db.VarChar(1500)
   status                  OfferStatus    @default(PENDING)
   selectedByEmployer      Boolean        @default(false)
+  rejectionReason         OfferRejectionReason?
   deletedAt               DateTime?
   contactUnlock           ContactUnlock?
   chat                    Chat?
   completion              JobCompletion?
   review                  Review?
+  employerReview          EmployerReview?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 
@@ -266,6 +278,7 @@ model ContactUnlock {
   conversation       Conversation?
   completion         JobCompletion?
   review             Review?
+  employerReview      EmployerReview?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -391,6 +404,41 @@ model ContractorRatingSummary {
   id            String   @id @default(uuid()) @db.Uuid
   contractorId  String   @unique @db.Uuid
   contractor    User     @relation("ContractorRatingSummary", fields: [contractorId], references: [id], onDelete: Cascade)
+  averageRating Decimal  @default(0) @db.Decimal(3, 2)
+  totalReviews  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model EmployerReview {
+  id                 String       @id @default(uuid()) @db.Uuid
+  jobRequestId       String       @db.Uuid
+  offerId            String       @unique @db.Uuid
+  contactUnlockId    String?      @unique @db.Uuid
+  employerId         String       @db.Uuid
+  contractorId       String       @db.Uuid
+  jobRequest         JobRequest   @relation(fields: [jobRequestId], references: [id], onDelete: Cascade)
+  offer              Offer        @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  contactUnlock      ContactUnlock? @relation(fields: [contactUnlockId], references: [id], onDelete: Cascade)
+  employer           User         @relation("ReviewedEmployerReviews", fields: [employerId], references: [id], onDelete: Cascade)
+  contractor         User         @relation("ContractorEmployerReviews", fields: [contractorId], references: [id], onDelete: Cascade)
+  rating             Int
+  comment            String?      @db.VarChar(1500)
+  status             ReviewStatus @default(ACTIVE)
+  removedByAdminId   String?      @db.Uuid
+  removedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([jobRequestId, contractorId])
+  @@index([employerId, status, removedAt])
+  @@index([contractorId])
+}
+
+model EmployerRatingSummary {
+  id            String   @id @default(uuid()) @db.Uuid
+  employerId    String   @unique @db.Uuid
+  employer      User     @relation("EmployerRatingSummary", fields: [employerId], references: [id], onDelete: Cascade)
   averageRating Decimal  @default(0) @db.Decimal(3, 2)
   totalReviews  Int      @default(0)
   createdAt     DateTime @default(now())

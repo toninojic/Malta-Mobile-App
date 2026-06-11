@@ -5,7 +5,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ContactUnlockStatus, JobStatus, NotificationType, Offer, OfferStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  ContactUnlockStatus,
+  JobStatus,
+  NotificationType,
+  Offer,
+  OfferRejectionReason,
+  OfferStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -18,6 +27,7 @@ const offerInclude = {
   contactUnlock: true,
   completion: true,
   review: true,
+  employerReview: true,
   contractor: {
     select: {
       id: true,
@@ -49,6 +59,7 @@ const offerInclude = {
           email: true,
           status: true,
           profile: true,
+          employerRatingSummary: true,
         },
       },
     },
@@ -376,6 +387,21 @@ export class OffersService {
             updatedAt: offer.review.updatedAt,
           }
         : null,
+      employerReview: offer.employerReview
+        ? {
+            id: offer.employerReview.id,
+            jobRequestId: offer.employerReview.jobRequestId,
+            offerId: offer.employerReview.offerId,
+            contactUnlockId: offer.employerReview.contactUnlockId,
+            employerId: offer.employerReview.employerId,
+            contractorId: offer.employerReview.contractorId,
+            rating: offer.employerReview.rating,
+            comment: offer.employerReview.comment,
+            status: offer.employerReview.status,
+            createdAt: offer.employerReview.createdAt,
+            updatedAt: offer.employerReview.updatedAt,
+          }
+        : null,
       conversation: offer.contactUnlock?.conversation
         ? {
             id: offer.contactUnlock.conversation.id,
@@ -386,6 +412,12 @@ export class OffersService {
           }
         : null,
       employer: canSeeEmployer ? offer.jobRequest.employer : null,
+      employerRatingSummary: offer.jobRequest.employer.employerRatingSummary
+        ? {
+            averageRating: offer.jobRequest.employer.employerRatingSummary.averageRating.toString(),
+            totalReviews: offer.jobRequest.employer.employerRatingSummary.totalReviews,
+          }
+        : { averageRating: '0', totalReviews: 0 },
       contractor: {
         id: offer.contractor.id,
         email: canSeeContractorPrivate ? offer.contractor.email : undefined,
@@ -452,6 +484,7 @@ export class OffersService {
           data: {
             status: OfferStatus.REJECTED,
             selectedByEmployer: false,
+            rejectionReason: OfferRejectionReason.AUTO_REJECTED_BY_SELECTION,
           },
         });
 
@@ -495,6 +528,7 @@ export class OffersService {
           data: {
             status: OfferStatus.SELECTED,
             selectedByEmployer: true,
+            rejectionReason: null,
           },
           include: offerInclude,
         });
@@ -549,6 +583,7 @@ export class OffersService {
       data: {
         status: OfferStatus.REJECTED,
         selectedByEmployer: false,
+        rejectionReason: OfferRejectionReason.MANUALLY_REJECTED_BY_EMPLOYER,
       },
       include: offerInclude,
     });
@@ -588,11 +623,26 @@ export class OffersService {
         data: { status: JobStatus.ACTIVE },
       });
 
+      await tx.offer.updateMany({
+        where: {
+          jobRequestId: offer.jobRequestId,
+          status: OfferStatus.REJECTED,
+          rejectionReason: OfferRejectionReason.AUTO_REJECTED_BY_SELECTION,
+          deletedAt: null,
+        },
+        data: {
+          status: OfferStatus.PENDING,
+          rejectionReason: null,
+          selectedByEmployer: false,
+        },
+      });
+
       return tx.offer.update({
         where: { id: offerId },
         data: {
           status: OfferStatus.REJECTED,
           selectedByEmployer: false,
+          rejectionReason: OfferRejectionReason.SELECTION_CANCELLED_BY_EMPLOYER,
         },
         include: offerInclude,
       });
@@ -687,7 +737,12 @@ export class OffersService {
 
     const actions: WorkDetailsAction[] = ['VIEW_DETAILS'];
     const isCompleted = offer.status === OfferStatus.COMPLETED;
-    const isTerminal = isCompleted || offer.status === OfferStatus.WITHDRAWN || offer.status === OfferStatus.REJECTED || Boolean(offer.deletedAt);
+    const isTerminal =
+      isCompleted ||
+      offer.jobRequest.status === JobStatus.CLOSED ||
+      offer.status === OfferStatus.WITHDRAWN ||
+      offer.status === OfferStatus.REJECTED ||
+      Boolean(offer.deletedAt);
     const isUnlocked = offer.contactUnlock?.status === ContactUnlockStatus.UNLOCKED;
     const completionStatus = offer.completion?.status;
 
@@ -774,6 +829,7 @@ export class OffersService {
       message: offer.message,
       status: offer.status,
       selectedByEmployer: offer.selectedByEmployer,
+      rejectionReason: offer.rejectionReason,
       unlockStatus: offer.contactUnlock?.status ?? 'LOCKED',
       contactId: offer.contactUnlock?.id ?? null,
       rating: offer.contractor.ratingSummary ? Number(offer.contractor.ratingSummary.averageRating) : null,
@@ -799,6 +855,7 @@ export class OffersService {
       message: offer.message,
       status: offer.status,
       selectedByEmployer: offer.selectedByEmployer,
+      rejectionReason: offer.rejectionReason,
       unlockStatus: offer.contactUnlock?.status ?? 'LOCKED',
       contactId: offer.contactUnlock?.id ?? null,
       deletedAt: offer.deletedAt,
@@ -819,6 +876,12 @@ export class OffersService {
         updatedAt: offer.jobRequest.updatedAt,
       },
       employer: isUnlocked ? offer.jobRequest.employer : undefined,
+      employerRatingSummary: offer.jobRequest.employer.employerRatingSummary
+        ? {
+            averageRating: offer.jobRequest.employer.employerRatingSummary.averageRating.toString(),
+            totalReviews: offer.jobRequest.employer.employerRatingSummary.totalReviews,
+          }
+        : { averageRating: '0', totalReviews: 0 },
     };
   }
 
@@ -833,6 +896,7 @@ export class OffersService {
       message: offer.message,
       status: offer.status,
       selectedByEmployer: offer.selectedByEmployer,
+      rejectionReason: offer.rejectionReason,
       unlockStatus: offer.contactUnlock?.status ?? 'LOCKED',
       contactId: offer.contactUnlock?.id ?? null,
       deletedAt: offer.deletedAt,
@@ -855,6 +919,7 @@ export class OffersService {
       message: offer.message,
       status: offer.status,
       selectedByEmployer: offer.selectedByEmployer,
+      rejectionReason: offer.rejectionReason,
       unlockStatus: offer.contactUnlock?.status ?? 'LOCKED',
       contactId: offer.contactUnlock?.id ?? null,
       completionStatus: offer.completion?.status ?? null,

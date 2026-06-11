@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { CalendarClock, CheckCircle2, Edit3, MapPin, MessageCircle, RefreshCw, SendHorizontal, ShieldCheck, Star, Trash2, UserRound, XCircle } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { ComponentType, useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { cacheJob, cacheOffer, invalidateMarketplaceState } from '../../api/invalidation';
+import { AppModal, AppModalAction } from '../../components/AppModal';
 import { useEnsureConversationForContact } from '../../api/messageHooks';
 import { useCompletionStatus, useConfirmCompletion } from '../../api/reviewHooks';
 import { Badge } from '../../components/Badge';
@@ -22,6 +23,12 @@ import { JobRequest, Offer } from '../../types/domain';
 import { formatDate } from '../../utils/date';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'JobDetails'>;
+type BusinessModalState = {
+  title: string;
+  body: string;
+  icon?: ComponentType<{ color?: string; size?: number }>;
+  actions: AppModalAction[];
+};
 
 export function JobDetailsScreen({ route, navigation }: Props) {
   const theme = useTheme();
@@ -33,6 +40,7 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   const canSelectOffers = user?.role === 'EMPLOYER';
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [businessModal, setBusinessModal] = useState<BusinessModalState | null>(null);
 
   const query = useQuery({
     queryKey: ['jobs', jobId],
@@ -144,46 +152,80 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   const ensureConversationMutation = useEnsureConversationForContact();
 
   const confirmDelete = () => {
-    Alert.alert('Close job request', 'This will close the request and remove it from contractor browsing.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Close', style: 'destructive', onPress: () => deleteMutation.mutate() },
-    ]);
+    setBusinessModal({
+      title: 'Close Job Request',
+      body: 'This will close the request and remove it from contractor browsing.',
+      icon: Trash2,
+      actions: [
+        { label: 'Cancel', onPress: () => setBusinessModal(null) },
+        {
+          label: 'Close',
+          variant: 'danger',
+          onPress: () => {
+            setBusinessModal(null);
+            deleteMutation.mutate();
+          },
+        },
+      ],
+    });
   };
 
   const confirmSelectOffer = (offer: Offer) => {
-    Alert.alert(
-      'Selecting an offer',
-      'When you select an offer, this job will no longer be visible to other contractors. The selected contractor will be notified and can unlock contact by spending 1 token.\n\nIf the selected contractor does not respond, you can cancel the selection and make the job available again.',
-      [
-        { text: 'Cancel', style: 'cancel' },
+    setBusinessModal({
+      title: 'Selecting an Offer',
+      body:
+        'When you select an offer, this job will no longer be visible to other contractors. The selected contractor will be notified and can unlock contact by spending 1 token.\n\nIf the selected contractor does not respond, you can cancel the selection and make the job available again.',
+      icon: CheckCircle2,
+      actions: [
+        { label: 'Cancel', onPress: () => setBusinessModal(null) },
         {
-          text: 'Select Offer',
-          onPress: () => selectOfferMutation.mutate(offer.id),
+          label: 'Select Offer',
+          variant: 'primary',
+          onPress: () => {
+            setBusinessModal(null);
+            selectOfferMutation.mutate(offer.id);
+          },
         },
       ],
-    );
+    });
   };
 
   const confirmRejectOffer = (offer: Offer) => {
-    Alert.alert('Reject offer', 'Reject this contractor offer?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reject',
-        style: 'destructive',
-        onPress: () => rejectOfferMutation.mutate(offer.id),
-      },
-    ]);
+    setBusinessModal({
+      title: 'Reject Offer',
+      body: 'Reject this contractor offer?',
+      icon: XCircle,
+      actions: [
+        { label: 'Cancel', onPress: () => setBusinessModal(null) },
+        {
+          label: 'Reject',
+          variant: 'danger',
+          onPress: () => {
+            setBusinessModal(null);
+            rejectOfferMutation.mutate(offer.id);
+          },
+        },
+      ],
+    });
   };
 
   const confirmCancelSelection = (offer: Offer) => {
-    Alert.alert('Cancel selection', 'This will reject the selected offer and make the job available to contractors again.', [
-      { text: 'Keep selected', style: 'cancel' },
-      {
-        text: 'Cancel Selection',
-        style: 'destructive',
-        onPress: () => cancelSelectionMutation.mutate(offer.id),
-      },
-    ]);
+    setBusinessModal({
+      title: 'Cancel Selection',
+      body: 'This will reject the selected offer and make the job available to contractors again.',
+      icon: XCircle,
+      actions: [
+        { label: 'Keep Selected', onPress: () => setBusinessModal(null) },
+        {
+          label: 'Cancel Selection',
+          variant: 'danger',
+          onPress: () => {
+            setBusinessModal(null);
+            cancelSelectionMutation.mutate(offer.id);
+          },
+        },
+      ],
+    });
   };
 
   if (query.isLoading) {
@@ -212,7 +254,20 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   const expiresAt = formatDate(job.expiresAt);
 
   return (
-    <Screen>
+    <Screen
+      refreshing={query.isRefetching || offersQuery.isRefetching || myOffersQuery.isRefetching}
+      onRefresh={() => {
+        if (!query.isFetching) {
+          void query.refetch({ cancelRefetch: false });
+        }
+        if (canManage && !offersQuery.isFetching) {
+          void offersQuery.refetch({ cancelRefetch: false });
+        }
+        if (isContractor && !myOffersQuery.isFetching) {
+          void myOffersQuery.refetch({ cancelRefetch: false });
+        }
+      }}
+    >
       {job.images.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.images}>
           {job.images.map((image, index) => (
@@ -235,6 +290,14 @@ export function JobDetailsScreen({ route, navigation }: Props) {
         initialIndex={viewerIndex}
         visible={viewerOpen}
         onClose={() => setViewerOpen(false)}
+      />
+      <AppModal
+        visible={Boolean(businessModal)}
+        title={businessModal?.title ?? ''}
+        body={businessModal?.body ?? ''}
+        icon={businessModal?.icon}
+        actions={businessModal?.actions ?? []}
+        onRequestClose={() => setBusinessModal(null)}
       />
 
       <Card>
@@ -289,11 +352,7 @@ export function JobDetailsScreen({ route, navigation }: Props) {
               <Text style={[styles.offerPrice, { color: theme.colors.text }]}>
                 EUR {myOffer.estimatedPrice} / {myOffer.estimatedCompletionDays} days
               </Text>
-              {myOffer.message ? (
-                <Text numberOfLines={3} style={[styles.description, { color: theme.colors.textMuted }]}>
-                  {myOffer.message}
-                </Text>
-              ) : null}
+              {myOffer.message ? <ExpandableOfferMessage message={myOffer.message} /> : null}
               <Button
                 title={myOffer.status === 'SELECTED' && myOffer.unlockStatus !== 'UNLOCKED' ? 'Open Work Details / Unlock Contact' : 'Open Work Details'}
                 icon={MessageCircle}
@@ -389,6 +448,30 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   );
 }
 
+function ExpandableOfferMessage({ message }: { message: string }) {
+  const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const canToggle = message.length > 140;
+
+  return (
+    <View style={styles.expandableMessage}>
+      <Text
+        numberOfLines={expanded ? undefined : 3}
+        style={[styles.description, { color: theme.colors.textMuted }]}
+      >
+        {message}
+      </Text>
+      {canToggle ? (
+        <Pressable accessibilityRole="button" onPress={() => setExpanded((current) => !current)} hitSlop={8}>
+          <Text style={[styles.messageToggle, { color: theme.colors.success }]}>
+            {expanded ? 'Show less' : 'Read full message'}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function EmployerOfferCard({
   offer,
   canSelect,
@@ -426,10 +509,21 @@ function EmployerOfferCard({
   const canCancelSelection = canSelect && offer.status === 'SELECTED' && !isUnlocked;
   const [portfolioViewerIndex, setPortfolioViewerIndex] = useState(0);
   const [portfolioViewerOpen, setPortfolioViewerOpen] = useState(false);
+  const [verifiedInfoOpen, setVerifiedInfoOpen] = useState(false);
   const portfolioImages = offer.portfolioImages ?? [];
 
   return (
-    <Card>
+    <Card
+      style={
+        offer.status === 'REJECTED'
+          ? {
+              backgroundColor: theme.colors.surfaceMuted,
+              borderColor: theme.colors.danger,
+              opacity: 0.72,
+            }
+          : undefined
+      }
+    >
       <View style={styles.offerTop}>
         <View style={styles.offerIdentity}>
           <Text style={[styles.offerTitle, { color: theme.colors.text }]}>
@@ -444,7 +538,7 @@ function EmployerOfferCard({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Verified contractor information"
-                onPress={showVerifiedContractorInfo}
+                onPress={() => setVerifiedInfoOpen(true)}
                 hitSlop={8}
               >
                 <ShieldCheck color={theme.colors.success} size={16} />
@@ -457,26 +551,25 @@ function EmployerOfferCard({
       <Text style={[styles.offerPrice, { color: theme.colors.text }]}>
         EUR {offer.estimatedPrice} / {offer.estimatedCompletionDays} days
       </Text>
-      {offer.message ? (
-        <Text numberOfLines={3} style={[styles.description, { color: theme.colors.textMuted }]}>
-          {offer.message}
-        </Text>
-      ) : null}
+      {offer.message ? <ExpandableOfferMessage message={offer.message} /> : null}
       {portfolioImages.length ? (
-        <View style={styles.portfolioPreview}>
-          {portfolioImages.slice(0, 3).map((image, index) => (
-            <Pressable
-              accessibilityRole="imagebutton"
-              accessibilityLabel={`Open portfolio image ${index + 1}`}
-              key={image.id}
-              onPress={() => {
-                setPortfolioViewerIndex(index);
-                setPortfolioViewerOpen(true);
-              }}
-            >
-              <Image source={{ uri: image.url }} style={styles.portfolioThumb} />
-            </Pressable>
-          ))}
+        <View style={styles.portfolioBlock}>
+          <Text style={[styles.portfolioLabel, { color: theme.colors.text }]}>Portfolio</Text>
+          <View style={styles.portfolioPreview}>
+            {portfolioImages.slice(0, 3).map((image, index) => (
+              <Pressable
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Open portfolio image ${index + 1}`}
+                key={image.id}
+                onPress={() => {
+                  setPortfolioViewerIndex(index);
+                  setPortfolioViewerOpen(true);
+                }}
+              >
+                <Image source={{ uri: image.url }} style={styles.portfolioThumb} />
+              </Pressable>
+            ))}
+          </View>
         </View>
       ) : null}
       <ImageViewerModal
@@ -484,6 +577,14 @@ function EmployerOfferCard({
         initialIndex={portfolioViewerIndex}
         visible={portfolioViewerOpen}
         onClose={() => setPortfolioViewerOpen(false)}
+      />
+      <AppModal
+        visible={verifiedInfoOpen}
+        title="Verified Contractor"
+        body="This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team."
+        icon={ShieldCheck}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setVerifiedInfoOpen(false) }]}
+        onRequestClose={() => setVerifiedInfoOpen(false)}
       />
       {isUnlocked && offer.contractor ? (
         <View style={styles.contactInfo}>
@@ -547,13 +648,6 @@ function EmployerOfferCard({
   );
 }
 
-function showVerifiedContractorInfo() {
-  Alert.alert(
-    'Verified Contractor',
-    'This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team.',
-  );
-}
-
 function EmployerOfferCompletionActions({
   offer,
   onStatusChange,
@@ -568,6 +662,7 @@ function EmployerOfferCompletionActions({
   const contactId = offer.unlockStatus === 'UNLOCKED' ? offer.contactId ?? undefined : undefined;
   const completionQuery = useCompletionStatus(contactId);
   const confirmMutation = useConfirmCompletion();
+  const [completionConfirmedOpen, setCompletionConfirmedOpen] = useState(false);
   const completion = completionQuery.data;
   const status = completion?.status ?? offer.completionStatus ?? null;
   const canReview = Boolean(completion?.canReview && !completion.review);
@@ -582,7 +677,7 @@ function EmployerOfferCompletionActions({
       onSuccess: async () => {
         await completionQuery.refetch({ cancelRefetch: false });
         onStatusChange();
-        Alert.alert('Completion confirmed', 'Review is now available.');
+        setCompletionConfirmedOpen(true);
       },
       onError: (error) => {
         Alert.alert('Could not confirm completion', error instanceof Error ? error.message : 'Please try again.');
@@ -592,6 +687,14 @@ function EmployerOfferCompletionActions({
 
   return (
     <View style={styles.completionActions}>
+      <AppModal
+        visible={completionConfirmedOpen}
+        title="Completion Confirmed"
+        body="Review is now available."
+        icon={CheckCircle2}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setCompletionConfirmedOpen(false) }]}
+        onRequestClose={() => setCompletionConfirmedOpen(false)}
+      />
       {status ? <Badge status={status} /> : null}
       {status === 'PENDING_EMPLOYER_CONFIRMATION' ? (
         <Button
@@ -633,6 +736,13 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 15,
     lineHeight: 23,
+  },
+  expandableMessage: {
+    gap: 6,
+  },
+  messageToggle: {
+    fontSize: 13,
+    fontWeight: '900',
   },
   metaRow: {
     flexDirection: 'row',
@@ -701,6 +811,13 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 10,
     paddingTop: 10,
+  },
+  portfolioBlock: {
+    gap: 8,
+  },
+  portfolioLabel: {
+    fontSize: 14,
+    fontWeight: '900',
   },
   portfolioPreview: {
     flexDirection: 'row',

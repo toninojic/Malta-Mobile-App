@@ -2,6 +2,10 @@ export type UserRole = 'EMPLOYER' | 'CONTRACTOR' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'SUSPENDED';
 export type JobStatus = 'ACTIVE' | 'IN_PROGRESS' | 'EXPIRED' | 'COMPLETED' | 'CLOSED';
 export type OfferStatus = 'PENDING' | 'SELECTED' | 'REJECTED' | 'WITHDRAWN' | 'COMPLETED';
+export type OfferRejectionReason =
+  | 'AUTO_REJECTED_BY_SELECTION'
+  | 'MANUALLY_REJECTED_BY_EMPLOYER'
+  | 'SELECTION_CANCELLED_BY_EMPLOYER';
 export type TokenTransactionType = 'PURCHASE' | 'SPEND' | 'REFUND';
 export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
@@ -109,6 +113,7 @@ export type Offer = {
   message?: string | null;
   status: OfferStatus;
   selectedByEmployer: boolean;
+  rejectionReason?: OfferRejectionReason | null;
   unlockStatus?: UnlockStatus;
   contactId?: string | null;
   completionStatus?: JobCompletionStatus | null;
@@ -122,6 +127,7 @@ export type Offer = {
   jobRequest?: JobRequest;
   employer?: AuthUser;
   contractor?: AuthUser;
+  employerRatingSummary?: EmployerRatingSummary;
 };
 
 export type AuthResponse = {
@@ -391,14 +397,56 @@ export type ContractorRatingSummary = {
   updatedAt?: string | null;
 };
 
+export type EmployerRatingSummary = {
+  id?: string | null;
+  employerId: string;
+  averageRating: string;
+  totalReviews: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type EmployerReview = {
+  id: string;
+  jobRequestId: string;
+  offerId: string;
+  contactUnlockId?: string | null;
+  employerId: string;
+  contractorId: string;
+  rating: number;
+  comment?: string | null;
+  status: ReviewStatus;
+  removedByAdminId?: string | null;
+  removedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  jobRequest?: JobRequest;
+  offer?: Pick<
+    Offer,
+    | 'id'
+    | 'estimatedPrice'
+    | 'startDate'
+    | 'estimatedCompletionDays'
+    | 'message'
+    | 'status'
+    | 'selectedByEmployer'
+    | 'createdAt'
+    | 'updatedAt'
+  >;
+  employer?: AuthUser;
+  contractor?: AuthUser;
+};
+
 export type CompletionStatusResponse = {
   contactId: string;
   jobRequestId: string;
   offerId: string;
   status?: JobCompletionStatus | null;
   canReview: boolean;
+  canReviewEmployer?: boolean;
   completion?: JobCompletion | null;
   review?: Review | null;
+  employerReview?: EmployerReview | null;
 };
 
 export type ChatMessage = {
@@ -465,8 +513,10 @@ export type OfferWorkDetails = {
   > | null;
   completion?: JobCompletion | null;
   review?: Review | null;
+  employerReview?: EmployerReview | null;
   conversation?: Pick<Conversation, 'id' | 'contactUnlockId' | 'lastMessageAt' | 'createdAt' | 'updatedAt'> | null;
   employer?: AuthUser | null;
+  employerRatingSummary?: EmployerRatingSummary;
   contractor?: Pick<AuthUser, 'id' | 'email' | 'status'> & {
     profile?: Partial<UserProfile> | null;
     ratingSummary?: Pick<ContractorRatingSummary, 'averageRating' | 'totalReviews'> | null;

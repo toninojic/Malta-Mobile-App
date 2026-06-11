@@ -1,5 +1,6 @@
 import { useColorScheme } from 'react-native';
 import { darkColors, lightColors } from './colors';
+import { useAppearanceStore } from '../store/appearance.store';
 
 export const spacing = {
   xs: 4,
@@ -27,13 +28,15 @@ export const typography = {
 
 export function useTheme() {
   const colorScheme = useColorScheme();
-  const colors = colorScheme === 'dark' ? darkColors : lightColors;
+  const mode = useAppearanceStore((state) => state.mode);
+  const effectiveScheme = mode === 'system' ? colorScheme : mode;
+  const colors = effectiveScheme === 'dark' ? darkColors : lightColors;
 
   return {
     colors,
     spacing,
     radii,
     typography,
-    isDark: colorScheme === 'dark',
+    isDark: effectiveScheme === 'dark',
   };
 }

@@ -44,6 +44,13 @@ export class ContactsController {
     return this.contactsService.findContacts(user, query);
   }
 
+  @Get('contacts/reviews-to-leave')
+  @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 180, ttl: 60_000 } })
+  contactsReadyForReview(@CurrentUser() user: AuthenticatedUser, @Query() query: PaginationQueryDto) {
+    return this.contactsService.findContactsReadyForReview(user, query);
+  }
+
   @Get('contacts/:contactId')
   @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR)
   @Throttle({ default: { limit: 180, ttl: 60_000 } })

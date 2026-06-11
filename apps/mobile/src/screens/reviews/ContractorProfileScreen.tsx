@@ -1,9 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Building2, Mail, MapPin, Phone, RefreshCw, ShieldCheck, Star } from 'lucide-react-native';
 import { ComponentType, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useContractorProfile, useContractorReviews } from '../../api/reviewHooks';
 import { EmptyState } from '../../components/EmptyState';
+import { AppModal } from '../../components/AppModal';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { RatingSummaryCard } from '../../components/reviews/RatingSummaryCard';
 import { ReviewCard } from '../../components/reviews/ReviewCard';
@@ -19,12 +20,20 @@ export function ContractorProfileScreen({ route, navigation }: Props) {
   const reviewsQuery = useContractorReviews(route.params.contractorId);
   const [portfolioViewerIndex, setPortfolioViewerIndex] = useState(0);
   const [portfolioViewerOpen, setPortfolioViewerOpen] = useState(false);
+  const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
+  const [verifiedInfoOpen, setVerifiedInfoOpen] = useState(false);
   const contractor = profileQuery.data;
   const profile = contractor?.profile;
   const displayName = profile?.displayName ?? (contractor?.canSeePrivateDetails ? contractor.email : 'Contractor');
 
   return (
-    <Screen>
+    <Screen
+      refreshing={profileQuery.isRefetching || reviewsQuery.isRefetching}
+      onRefresh={() => {
+        if (!profileQuery.isFetching) void profileQuery.refetch({ cancelRefetch: false });
+        if (!reviewsQuery.isFetching) void reviewsQuery.refetch({ cancelRefetch: false });
+      }}
+    >
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Contractor profile</Text>
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
@@ -53,12 +62,20 @@ export function ContractorProfileScreen({ route, navigation }: Props) {
       {contractor ? (
         <View style={[styles.profileCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.identityRow}>
-            {profile?.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} /> : null}
+            {profile?.avatarUrl ? (
+              <Pressable
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Preview contractor avatar"
+                onPress={() => setAvatarViewerOpen(true)}
+              >
+                <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+              </Pressable>
+            ) : null}
             <View style={styles.identityCopy}>
               <View style={styles.nameRow}>
                 <Text style={[styles.name, { color: theme.colors.text }]}>{displayName}</Text>
                 {contractor.verificationStatus === 'VERIFIED' ? (
-                  <Pressable accessibilityRole="button" accessibilityLabel="Verified contractor information" hitSlop={8} onPress={showVerifiedContractorInfo}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Verified contractor information" hitSlop={8} onPress={() => setVerifiedInfoOpen(true)}>
                     <ShieldCheck color={theme.colors.success} size={18} />
                   </Pressable>
                 ) : null}
@@ -79,6 +96,20 @@ export function ContractorProfileScreen({ route, navigation }: Props) {
           ) : null}
         </View>
       ) : null}
+      <ImageViewerModal
+        images={profile?.avatarUrl ? [{ id: 'avatar', url: profile.avatarUrl }] : []}
+        initialIndex={0}
+        visible={avatarViewerOpen}
+        onClose={() => setAvatarViewerOpen(false)}
+      />
+      <AppModal
+        visible={verifiedInfoOpen}
+        title="Verified Contractor"
+        body="This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team."
+        icon={ShieldCheck}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setVerifiedInfoOpen(false) }]}
+        onRequestClose={() => setVerifiedInfoOpen(false)}
+      />
 
       <RatingSummaryCard summary={contractor?.ratingSummary ?? undefined} />
 
@@ -150,13 +181,6 @@ function InfoLine({ icon: Icon, text }: { icon: ComponentType<{ color?: string; 
       <Icon color={theme.colors.textMuted} size={16} />
       <Text style={[styles.infoText, { color: theme.colors.textMuted }]}>{text}</Text>
     </View>
-  );
-}
-
-function showVerifiedContractorInfo() {
-  Alert.alert(
-    'Verified Contractor',
-    'This contractor has submitted verification documents that were reviewed and approved by the MaltaPro admin team.',
   );
 }
 
