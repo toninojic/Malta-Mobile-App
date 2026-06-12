@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PORT: 3000
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-30d}
+      APP_ORIGIN: ${APP_ORIGIN:-*}
+      APP_BASE_URL: ${APP_BASE_URL}
+      MOBILE_DEEP_LINK_SCHEME: ${MOBILE_DEEP_LINK_SCHEME:-maltapro}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      AWS_REGION: ${AWS_REGION}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-}
+      REVENUECAT_WEBHOOK_SECRET: ${REVENUECAT_WEBHOOK_SECRET}
+      REVENUECAT_API_KEY: ${REVENUECAT_API_KEY}
+      ALLOW_MOCK_PURCHASES: ${ALLOW_MOCK_PURCHASES:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # Add a reverse proxy here when TLS/domain termination is managed in Docker.
+  # For managed platforms, terminate TLS at the platform load balancer instead.
+
+volumes:
+  postgres_data:

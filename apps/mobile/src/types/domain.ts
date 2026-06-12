@@ -8,7 +8,9 @@ export type OfferRejectionReason =
   | 'SELECTION_CANCELLED_BY_EMPLOYER';
 export type TokenTransactionType = 'PURCHASE' | 'SPEND' | 'REFUND';
 export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | 'IGNORED';
+export type PaymentProvider = 'MOCK' | 'REVENUECAT' | 'LEGACY_STRIPE';
+export type StorePlatform = 'IOS' | 'ANDROID' | 'REVENUECAT';
 export type UnlockStatus = 'LOCKED' | 'PENDING' | 'UNLOCKED';
 export type JobCompletionStatus = 'PENDING_EMPLOYER_CONFIRMATION' | 'CONFIRMED' | 'DISPUTED' | 'CANCELLED';
 export type ReviewStatus = 'ACTIVE' | 'REMOVED';
@@ -257,8 +259,11 @@ export type Payment = {
   id: string;
   userId: string;
   tokenPackageId: string;
-  stripeCheckoutSessionId?: string | null;
-  stripePaymentIntentId?: string | null;
+  provider?: PaymentProvider;
+  platform?: StorePlatform | null;
+  platformProductId?: string | null;
+  revenueCatEventId?: string | null;
+  revenueCatTransactionId?: string | null;
   amount: string;
   currency: string;
   status: PaymentStatus;
@@ -268,17 +273,13 @@ export type Payment = {
   updatedAt: string;
 };
 
-export type CreateCheckoutSessionResponse = {
-  checkoutUrl: string;
-  paymentId: string;
-  status: PaymentStatus;
-};
-
 export type PaymentConfig = {
-  mode: 'MOCK' | 'STRIPE';
+  mode: 'MOCK' | 'REVENUECAT' | 'UNCONFIGURED';
   allowMockPurchases?: boolean;
   mockPurchasesEnabled: boolean;
-  stripeConfigured: boolean;
+  revenueCatConfigured?: boolean;
+  purchasesConfigured?: boolean;
+  provider?: 'REVENUECAT';
 };
 
 export type UnlockStatusResponse = {

@@ -7,7 +7,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NotificationType, Prisma, RefundStatus, TokenTransactionType, UserRole } from '@prisma/client';
+import {
+  NotificationType,
+  PaymentProvider,
+  PaymentStatus,
+  Prisma,
+  RefundStatus,
+  TokenTransactionType,
+  UserRole,
+} from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
@@ -213,7 +221,7 @@ export class TokensService {
 
   async mockPurchase(user: AuthenticatedUser, dto: MockPurchaseDto) {
     if (!parseBooleanEnv(this.config.get<string>('ALLOW_MOCK_PURCHASES'))) {
-      throw new GoneException('Mock purchases have been replaced by Stripe Checkout.');
+      throw new GoneException('Mock purchases are disabled.');
     }
 
     const tokenPackage = await this.prisma.tokenPackage.findUnique({
@@ -249,6 +257,17 @@ export class TokensService {
           description: `Mock purchase: ${tokenPackage.title}`,
         },
         include: { package: true },
+      });
+
+      await tx.payment.create({
+        data: {
+          userId: user.id,
+          tokenPackageId: tokenPackage.id,
+          provider: PaymentProvider.MOCK,
+          amount: tokenPackage.price,
+          currency: tokenPackage.currency,
+          status: PaymentStatus.COMPLETED,
+        },
       });
 
       return { wallet, transaction };

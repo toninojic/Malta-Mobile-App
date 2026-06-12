@@ -55,8 +55,22 @@ enum RefundStatus {
 enum PaymentStatus {
   PENDING
   PAID
+  COMPLETED
   FAILED
   REFUNDED
+  IGNORED
+}
+
+enum PaymentProvider {
+  MOCK
+  REVENUECAT
+  LEGACY_STRIPE
+}
+
+enum StorePlatform {
+  IOS
+  ANDROID
+  REVENUECAT
 }
 
 enum ContactUnlockStatus {
@@ -454,14 +468,35 @@ model TokenPackage {
   isActive      Boolean            @default(true)
   transactions  TokenTransaction[]
   payments      Payment[]
+  storeProducts StoreProduct[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+}
+
+model StoreProduct {
+  id                String        @id @default(uuid()) @db.Uuid
+  platformProductId String        @db.VarChar(180)
+  tokenPackageId    String        @db.Uuid
+  platform          StorePlatform @default(REVENUECAT)
+  isActive          Boolean       @default(true)
+  tokenPackage      TokenPackage  @relation(fields: [tokenPackageId], references: [id], onDelete: Cascade)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([platform, platformProductId])
+  @@index([tokenPackageId])
+  @@index([platform, isActive])
 }
 
 model Payment {
   id                      String        @id @default(uuid()) @db.Uuid
   userId                  String        @db.Uuid
   tokenPackageId          String        @db.Uuid
+  provider                PaymentProvider @default(LEGACY_STRIPE)
+  platform                StorePlatform?
+  platformProductId       String?       @db.VarChar(180)
+  revenueCatEventId       String?       @unique @db.VarChar(255)
+  revenueCatTransactionId String?       @db.VarChar(255)
   stripeCheckoutSessionId String?       @unique @db.VarChar(255)
   stripePaymentIntentId   String?       @unique @db.VarChar(255)
   amount                  Decimal       @db.Decimal(12, 2)
@@ -476,6 +511,9 @@ model Payment {
   @@index([userId, createdAt])
   @@index([tokenPackageId])
   @@index([status, createdAt])
+  @@index([provider, status, createdAt])
+  @@index([platformProductId])
+  @@index([revenueCatTransactionId])
 }
 
 model UserTokenBalance {

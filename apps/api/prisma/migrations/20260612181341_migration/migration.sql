@@ -1,0 +1,2 @@
+-- No-op migration retained to avoid applying an unsafe UUID default removal.
+-- The Prisma schema keeps UUID defaults on these primary keys.

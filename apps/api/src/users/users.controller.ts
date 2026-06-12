@@ -60,7 +60,7 @@ export class UsersController {
       },
     }),
   )
-  uploadAvatar(
+  async uploadAvatar(
     @CurrentUser() user: AuthenticatedUser,
     @UploadedFile() file: UploadedImageFile | undefined,
     @Req() request: { protocol: string; get: (header: string) => string | undefined },
@@ -69,7 +69,7 @@ export class UsersController {
     const protocol = forwardedProto?.split(',')[0]?.trim() || request.protocol;
     const host = request.get('host');
     const baseUrl = `${protocol}://${host}/api/v1`;
-    const avatar = this.uploadsService.storeAvatar(file, baseUrl);
+    const avatar = await this.uploadsService.storeAvatar(file, user.id, baseUrl);
     return this.usersService.updateAvatar(user.id, avatar.avatarUrl);
   }
 }

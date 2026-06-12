@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { Coins, CreditCard, ReceiptText, RefreshCw, RotateCcw } from 'lucide-react-native';
 import { ComponentType, ReactNode, useCallback, useState } from 'react';
-import { Alert, ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
+import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   useAdminRefunds,
   useMyRefunds,
@@ -10,7 +10,7 @@ import {
   useTokenPackages,
   useTokenTransactions,
 } from '../../api/tokenHooks';
-import { useCreateCheckoutSession, useMockPurchase, usePaymentConfig, usePayments } from '../../api/paymentHooks';
+import { useMockPurchase, usePaymentConfig, usePayments, useRevenueCatPurchase } from '../../api/paymentHooks';
 import { BalanceCard } from '../../components/wallet/BalanceCard';
 import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
@@ -23,6 +23,7 @@ import { TransactionCard } from '../../components/wallet/TransactionCard';
 import { useTheme } from '../../design/theme';
 import { WalletStackParamList } from '../../navigation/types';
 import { useAuthStore } from '../../store/auth.store';
+import { TokenPackage } from '../../types/domain';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'WalletHome'>;
 
@@ -44,12 +45,13 @@ export function WalletScreen({ navigation }: Props) {
   const paymentsQuery = usePayments();
   const paymentConfigQuery = usePaymentConfig();
   const adminRefundsQuery = useAdminRefunds(isAdmin);
-  const checkoutMutation = useCreateCheckoutSession();
+  const revenueCatPurchaseMutation = useRevenueCatPurchase();
   const mockPurchaseMutation = useMockPurchase();
   const isMockMode =
     paymentConfigQuery.data?.allowMockPurchases === true ||
     paymentConfigQuery.data?.mockPurchasesEnabled === true ||
     paymentConfigQuery.data?.mode === 'MOCK';
+  const isRevenueCatMode = paymentConfigQuery.data?.mode === 'REVENUECAT';
 
   useFocusEffect(
     useCallback(() => {
@@ -74,7 +76,7 @@ export function WalletScreen({ navigation }: Props) {
     ]),
   );
 
-  const handleBuy = async (tokenPackageId: string) => {
+  const handleBuy = async (tokenPackage: TokenPackage) => {
     const latestConfigResult = await paymentConfigQuery.refetch({ cancelRefetch: false });
     const paymentConfig = latestConfigResult.data ?? paymentConfigQuery.data;
     const shouldUseMock =
@@ -83,7 +85,7 @@ export function WalletScreen({ navigation }: Props) {
       paymentConfig?.mode === 'MOCK';
 
     if (shouldUseMock) {
-      mockPurchaseMutation.mutate(tokenPackageId, {
+      mockPurchaseMutation.mutate(tokenPackage.id, {
         onSuccess: (result) => {
           setInfoDialog({
             title: 'Package Added',
@@ -98,29 +100,29 @@ export function WalletScreen({ navigation }: Props) {
       return;
     }
 
-    if (paymentConfig && !paymentConfig.stripeConfigured) {
+    if (!paymentConfig?.purchasesConfigured || paymentConfig.mode === 'UNCONFIGURED') {
       setInfoDialog({
-        title: 'Payments Not Configured',
-        body: 'Mock purchases are disabled and Stripe is not configured.',
+        title: 'Purchases Not Configured',
+        body: 'Purchases are not configured.',
         icon: CreditCard,
       });
       return;
     }
 
-    checkoutMutation.mutate(tokenPackageId, {
-      onSuccess: async (result) => {
-        try {
-          await Linking.openURL(result.checkoutUrl);
-        } catch {
-          setInfoDialog({
-            title: 'Checkout Ready',
-            body: 'Stripe checkout could not be opened on this device.',
-            icon: CreditCard,
-          });
-        }
+    revenueCatPurchaseMutation.mutate(tokenPackage, {
+      onSuccess: () => {
+        setInfoDialog({
+          title: 'Purchase Processing',
+          body: 'Your tokens will appear shortly after the purchase is verified.',
+          icon: CreditCard,
+        });
       },
       onError: (error) => {
-        Alert.alert('Could not open checkout', error instanceof Error ? error.message : 'Payments are not configured.');
+        setInfoDialog({
+          title: 'Purchase Unavailable',
+          body: error instanceof Error ? error.message : 'Purchases are not configured.',
+          icon: CreditCard,
+        });
       },
     });
   };
@@ -176,7 +178,9 @@ export function WalletScreen({ navigation }: Props) {
         <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
           {isMockMode
             ? 'Mock purchase mode is enabled. Packages add tokens instantly for development testing.'
-            : 'Stripe test checkout opens in the browser. Tokens are added after the webhook confirms payment.'}
+            : isRevenueCatMode
+              ? 'Native purchases are verified by RevenueCat. Tokens appear after the backend receives the webhook.'
+              : 'Purchases are not configured. Enable mock purchases for development or configure RevenueCat for store builds.'}
         </Text>
       </View>
 
@@ -212,16 +216,16 @@ export function WalletScreen({ navigation }: Props) {
           <PackageCard
             key={tokenPackage.id}
             tokenPackage={tokenPackage}
-            loading={checkoutMutation.isPending || mockPurchaseMutation.isPending}
-            modeLabel={isMockMode ? 'MOCK MODE' : 'TEST MODE'}
-            onBuy={() => handleBuy(tokenPackage.id)}
+            loading={revenueCatPurchaseMutation.isPending || mockPurchaseMutation.isPending}
+            modeLabel={isMockMode ? 'MOCK MODE' : isRevenueCatMode ? 'NATIVE PURCHASE' : 'NOT CONFIGURED'}
+            onBuy={() => handleBuy(tokenPackage)}
           />
         ))}
       </Section>
 
-      <Section title="Payment history">
+      <Section title="Purchase history">
         {paymentsQuery.data?.data.length === 0 ? (
-          <EmptyState icon={CreditCard} title="No payments" message="Stripe checkout attempts will appear here." />
+          <EmptyState icon={CreditCard} title="No purchases" message="Token purchases will appear here." />
         ) : null}
         {paymentsQuery.data?.data.map((payment) => (
           <PaymentCard key={payment.id} payment={payment} />

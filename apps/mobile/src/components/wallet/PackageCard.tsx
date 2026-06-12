@@ -8,7 +8,7 @@ import { Card } from '../Card';
 export function PackageCard({
   tokenPackage,
   loading,
-  modeLabel = 'TEST MODE',
+  modeLabel = 'NATIVE PURCHASE',
   onBuy,
 }: {
   tokenPackage: TokenPackage;

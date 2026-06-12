@@ -33,8 +33,21 @@ services:
       ACCESS_TOKEN_TTL: 15m
       REFRESH_TOKEN_TTL: 30d
       APP_ORIGIN: "*"
+      APP_BASE_URL: http://localhost:${API_PORT:-3000}/api/v1
+      MOBILE_DEEP_LINK_SCHEME: maltapro
+      STORAGE_DRIVER: local
+      UPLOAD_DIR: uploads
+      ALLOW_MOCK_PURCHASES: "true"
+      LOG_LEVEL: debug
     ports:
       - "${API_PORT:-3000}:3000"
+    volumes:
+      - ./uploads:/app/apps/api/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

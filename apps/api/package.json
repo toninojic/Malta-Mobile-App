@@ -6,6 +6,7 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
     "start:dev": "nest start --watch",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
@@ -23,6 +24,7 @@
     "smoke:milestone6": "node scripts/milestone6-smoke.mjs",
     "smoke:milestone7": "node scripts/milestone7-smoke.mjs",
     "smoke:milestone8": "node scripts/milestone8-smoke.mjs",
+    "smoke:milestone8b": "node scripts/milestone8b-smoke.mjs",
     "smoke:qa-mobile-ux": "node scripts/qa-mobile-ux-smoke.mjs",
     "smoke:qa-fixes": "node scripts/qa-fixes-smoke.mjs",
     "smoke:flow-refactor": "node scripts/flow-refactor-smoke.mjs",

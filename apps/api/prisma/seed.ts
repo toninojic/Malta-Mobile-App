@@ -110,6 +110,43 @@ async function main() {
     }),
   ]);
 
+  const tokenPackages = await prisma.tokenPackage.findMany({
+    where: { title: { in: ['Starter', 'Professional', 'Business'] } },
+  });
+  const tokenPackageByTitle = new Map(tokenPackages.map((tokenPackage) => [tokenPackage.title, tokenPackage]));
+  const storeProductMappings = [
+    { title: 'Starter', platformProductId: 'maltapro_tokens_5' },
+    { title: 'Professional', platformProductId: 'maltapro_tokens_20' },
+    { title: 'Business', platformProductId: 'maltapro_tokens_50' },
+  ];
+
+  for (const mapping of storeProductMappings) {
+    const tokenPackage = tokenPackageByTitle.get(mapping.title);
+
+    if (!tokenPackage) {
+      continue;
+    }
+
+    await prisma.storeProduct.upsert({
+      where: {
+        platform_platformProductId: {
+          platform: 'REVENUECAT',
+          platformProductId: mapping.platformProductId,
+        },
+      },
+      create: {
+        platform: 'REVENUECAT',
+        platformProductId: mapping.platformProductId,
+        tokenPackageId: tokenPackage.id,
+        isActive: true,
+      },
+      update: {
+        tokenPackageId: tokenPackage.id,
+        isActive: true,
+      },
+    });
+  }
+
   const employer = await upsertUser({
     email: 'employer@malta.test',
     role: UserRole.EMPLOYER,

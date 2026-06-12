@@ -65,7 +65,7 @@ const MessagesStack = createNativeStackNavigator<MessagesStackParamList>();
 const Tabs = createBottomTabNavigator<AppTabParamList>();
 
 const linking: LinkingOptions<AppTabParamList> = {
-  prefixes: ['maltacraftsman://'],
+  prefixes: ['maltapro://'],
   config: {
     screens: {
       ActivityTab: {

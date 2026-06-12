@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ActivityModule } from './activity/activity.module';
 import { AdminModule } from './admin/admin.module';
@@ -19,6 +19,8 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { TokensModule } from './tokens/tokens.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
+import { ErrorTrackingService } from './common/error-tracking.service';
+import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 
 @Module({
   imports: [
@@ -55,6 +57,11 @@ import { UsersModule } from './users/users.module';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestLoggingInterceptor,
+    },
+    ErrorTrackingService,
   ],
 })
 export class AppModule {}

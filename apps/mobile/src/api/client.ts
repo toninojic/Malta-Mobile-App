@@ -13,7 +13,6 @@ import {
   ContractorRatingSummary,
   ContractorVerification,
   Conversation,
-  CreateCheckoutSessionResponse,
   EmployerRatingSummary,
   EmployerReview,
   InAppNotification,
@@ -422,12 +421,6 @@ export const api = {
   },
   paymentConfig() {
     return request<PaymentConfig>('/payments/config');
-  },
-  createCheckoutSession(tokenPackageId: string) {
-    return request<CreateCheckoutSessionResponse>('/payments/create-checkout-session', {
-      method: 'POST',
-      body: { tokenPackageId },
-    });
   },
   payments(input: { page?: number; limit?: number } = {}) {
     return request<PaginatedResponse<Payment>>(

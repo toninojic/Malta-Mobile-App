@@ -194,11 +194,11 @@ export class AdminService {
       this.prisma.refundRequest.count({ where: { status: RefundStatus.APPROVED } }),
       this.prisma.refundRequest.count({ where: { status: RefundStatus.REJECTED } }),
       this.prisma.payment.count(),
-      this.prisma.payment.count({ where: { status: PaymentStatus.PAID } }),
+      this.prisma.payment.count({ where: { status: { in: [PaymentStatus.COMPLETED, PaymentStatus.PAID] } } }),
       this.prisma.payment.count({ where: { status: PaymentStatus.FAILED } }),
       this.prisma.payment.count({ where: { status: PaymentStatus.PENDING } }),
       this.prisma.payment.aggregate({
-        where: { status: PaymentStatus.PAID },
+        where: { status: { in: [PaymentStatus.COMPLETED, PaymentStatus.PAID] } },
         _sum: { amount: true },
       }),
     ]);

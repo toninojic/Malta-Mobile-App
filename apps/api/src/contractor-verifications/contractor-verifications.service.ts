@@ -43,7 +43,7 @@ export class ContractorVerificationsService {
       throw new BadRequestException('You can upload up to 10 portfolio images.');
     }
 
-    const uploaded = this.uploadsService.storePortfolioImages(files, baseUrl).images;
+    const uploaded = (await this.uploadsService.storePortfolioImages(files, user.id, baseUrl)).images;
     const created = await this.prisma.$transaction(
       uploaded.map((image, index) =>
         this.prisma.contractorPortfolioImage.create({
@@ -101,7 +101,7 @@ export class ContractorVerificationsService {
       throw new BadRequestException('Your contractor account is already verified.');
     }
 
-    const stored = this.uploadsService.storeVerificationDocument(file, baseUrl);
+    const stored = await this.uploadsService.storeVerificationDocument(file, user.id, baseUrl);
     const verification = await this.prisma.contractorVerification.create({
       data: {
         contractorId: user.id,

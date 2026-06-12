@@ -19,8 +19,8 @@ export function PaymentSuccessScreen({ navigation }: NativeStackScreenProps<Wall
     <PaymentStatusView
       config={{
         icon: CheckCircle2,
-        title: 'Payment received',
-        message: 'Your token balance will refresh after Stripe sends the confirmation webhook.',
+        title: 'Purchase processing',
+        message: 'Your token balance will refresh after the purchase is verified.',
         tone: 'primary',
       }}
       onDone={() => navigation.navigate('WalletHome')}
@@ -48,7 +48,7 @@ export function PaymentPendingScreen({ navigation }: NativeStackScreenProps<Wall
       config={{
         icon: Clock3,
         title: 'Payment pending',
-        message: 'Checkout was not completed yet. Your wallet will stay unchanged until payment succeeds.',
+        message: 'The purchase has not completed yet. Your wallet will stay unchanged until verification succeeds.',
         tone: 'warning',
       }}
       onDone={() => navigation.navigate('WalletHome')}

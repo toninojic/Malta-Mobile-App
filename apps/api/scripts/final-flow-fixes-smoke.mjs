@@ -102,7 +102,7 @@ async function createOffer(contractor, jobId, price = 150) {
 async function buyStarterTokens(contractor) {
   const config = await request('/payments/config', { token: contractor.accessToken });
   assert(config.allowMockPurchases === true || config.mockPurchasesEnabled === true || config.mode === 'MOCK', 'ALLOW_MOCK_PURCHASES must be true for this smoke test.');
-  assert(config.stripeConfigured === false || config.mode === 'MOCK', 'Stripe must not be required in mock mode.');
+  assert(config.mode === 'MOCK', 'Store purchase configuration must not be required in mock mode.');
 
   const packages = await request('/tokens/packages', { token: contractor.accessToken });
   const starter = packages.find((item) => item.title === 'Starter') ?? packages[0];

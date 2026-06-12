@@ -130,6 +130,43 @@ async function seedTokenPackages() {
     ],
     skipDuplicates: true,
   });
+
+  const tokenPackages = await prisma.tokenPackage.findMany({
+    where: { title: { in: ['Starter', 'Professional', 'Business'] } },
+  });
+  const byTitle = new Map(tokenPackages.map((tokenPackage) => [tokenPackage.title, tokenPackage]));
+  const mappings = [
+    ['Starter', 'maltapro_tokens_5'],
+    ['Professional', 'maltapro_tokens_20'],
+    ['Business', 'maltapro_tokens_50'],
+  ];
+
+  for (const [title, platformProductId] of mappings) {
+    const tokenPackage = byTitle.get(title);
+
+    if (!tokenPackage) {
+      continue;
+    }
+
+    await prisma.storeProduct.upsert({
+      where: {
+        platform_platformProductId: {
+          platform: 'REVENUECAT',
+          platformProductId,
+        },
+      },
+      create: {
+        platform: 'REVENUECAT',
+        platformProductId,
+        tokenPackageId: tokenPackage.id,
+        isActive: true,
+      },
+      update: {
+        tokenPackageId: tokenPackage.id,
+        isActive: true,
+      },
+    });
+  }
 }
 
 async function main() {

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import { invalidateQueryKey, invalidateQueryKeys } from './invalidation';
+import { invalidateQueryKeys } from './invalidation';
+import { purchaseTokenPackageWithRevenueCat } from '../services/revenueCatPurchases';
+import { TokenPackage } from '../types/domain';
 
 export function usePayments() {
   return useQuery({
@@ -18,17 +20,6 @@ export function usePaymentConfig() {
   });
 }
 
-export function useCreateCheckoutSession() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: api.createCheckoutSession,
-    onSuccess: async () => {
-      await invalidateQueryKey(queryClient, ['payments']);
-    },
-  });
-}
-
 export function useMockPurchase() {
   const queryClient = useQueryClient();
 
@@ -39,6 +30,21 @@ export function useMockPurchase() {
         ['tokens', 'balance'],
         ['tokens', 'transactions'],
         ['tokens', 'refunds'],
+        ['payments'],
+      ]);
+    },
+  });
+}
+
+export function useRevenueCatPurchase() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (tokenPackage: TokenPackage) => purchaseTokenPackageWithRevenueCat(tokenPackage),
+    onSuccess: async () => {
+      await invalidateQueryKeys(queryClient, [
+        ['tokens', 'balance'],
+        ['tokens', 'transactions'],
         ['payments'],
       ]);
     },

@@ -192,7 +192,7 @@ async function main() {
   console.info('OK token package seed data exists');
 
   const paymentConfig = await request('/payments/config', { token: contractor.accessToken });
-  if (!['MOCK', 'STRIPE'].includes(paymentConfig.mode)) {
+  if (!['MOCK', 'REVENUECAT', 'UNCONFIGURED'].includes(paymentConfig.mode)) {
     throw new Error(`Payment config returned invalid mode: ${JSON.stringify(paymentConfig)}`);
   }
   console.info(`OK payment config endpoint (${paymentConfig.mode})`);
@@ -220,16 +220,13 @@ async function main() {
       }),
     );
 
-    if (!paymentConfig.stripeConfigured) {
-      await expectStatus('Stripe checkout reports clear missing config error', 503, () =>
-        requestMaybe('/payments/create-checkout-session', {
-          method: 'POST',
-          token: contractor.accessToken,
-          body: { tokenPackageId: starter.id },
-        }), 'Payments are not configured.',
-      );
+    if (paymentConfig.mode === 'UNCONFIGURED') {
+      if (paymentConfig.purchasesConfigured !== false) {
+        throw new Error('Unconfigured purchase mode must report purchasesConfigured=false.');
+      }
+      console.info('OK purchase config reports purchases not configured when mock mode and RevenueCat are disabled');
     } else {
-      console.info('OK Stripe mode is active; missing-config assertion skipped because Stripe keys are configured');
+      console.info('OK RevenueCat purchase mode is configured');
     }
   }
 

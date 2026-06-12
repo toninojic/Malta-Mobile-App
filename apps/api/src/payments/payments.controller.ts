@@ -48,7 +48,31 @@ export class PaymentsController {
 
   @Post('webhook')
   @HttpCode(200)
-  webhook(@Headers('stripe-signature') signature: string | undefined, @Req() request: RequestWithRawBody) {
-    return this.paymentsService.handleWebhook(signature, request.rawBody ?? Buffer.from([]));
+  webhook() {
+    return this.paymentsService.handleDeprecatedStripeWebhook();
+  }
+}
+
+@Controller({
+  path: 'purchases',
+  version: '1',
+})
+export class PurchasesController {
+  constructor(private readonly paymentsService: PaymentsService) {}
+
+  @Post('revenuecat/webhook')
+  @HttpCode(200)
+  revenueCatWebhook(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-revenuecat-signature') revenueCatSignature: string | undefined,
+    @Headers('x-webhook-secret') webhookSecret: string | undefined,
+    @Req() request: RequestWithRawBody,
+  ) {
+    return this.paymentsService.handleRevenueCatWebhook({
+      authorization,
+      revenueCatSignature,
+      webhookSecret,
+      rawBody: request.rawBody ?? Buffer.from([]),
+    });
   }
 }

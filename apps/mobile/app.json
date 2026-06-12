@@ -4,7 +4,7 @@
     "slug": "malta-craftsman-marketplace",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "maltacraftsman",
+    "scheme": "maltapro",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -34,6 +34,9 @@
     "extra": {
       "apiUrl": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",
       "apiDebug": false,
+      "revenueCatApiKeyAndroid": "",
+      "revenueCatApiKeyIos": "",
+      "allowMockPurchases": true,
       "eas": {
         "projectId": "783f09f3-8378-4d15-b699-9bdfc2b4842f"
       }

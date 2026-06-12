@@ -1,13 +1,13 @@
 import {
   BadRequestException,
   ForbiddenException,
+  GoneException,
   Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
+  Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentStatus, Prisma, TokenTransactionType, UserRole } from '@prisma/client';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { PaymentProvider, PaymentStatus, Prisma, StorePlatform, TokenTransactionType, UserRole } from '@prisma/client';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,40 +17,22 @@ const paymentInclude = {
   tokenPackage: true,
 };
 
-const LOCAL_WEBHOOK_SECRET = 'whsec_milestone8_local_dev';
-const STRIPE_CHECKOUT_SESSION_URL = 'https://api.stripe.com/v1/checkout/sessions';
+const REVENUECAT_PURCHASE_EVENT_TYPES = new Set(['INITIAL_PURCHASE', 'NON_RENEWING_PURCHASE']);
 
 type PaymentWithPackage = Prisma.PaymentGetPayload<{ include: typeof paymentInclude }>;
 
-type StripeCheckoutSessionResponse = {
-  id?: unknown;
-  url?: unknown;
-  payment_intent?: unknown;
-  error?: {
-    message?: unknown;
-  };
+type RevenueCatWebhookPayload = {
+  event?: Record<string, unknown>;
 };
 
-type StripeEvent = {
-  id?: unknown;
-  type?: unknown;
-  data?: {
-    object?: unknown;
-  };
-};
-
-type StripeCheckoutSessionEvent = {
-  id?: unknown;
-  payment_intent?: unknown;
-  metadata?: Record<string, string>;
-};
-
-type StripePaymentIntentEvent = {
-  id?: unknown;
-  metadata?: Record<string, string>;
-  last_payment_error?: {
-    message?: unknown;
-  } | null;
+type RevenueCatEvent = {
+  eventId: string;
+  type: string;
+  appUserId: string;
+  productId: string;
+  transactionId?: string;
+  amount?: Prisma.Decimal;
+  currency?: string;
 };
 
 function parseBooleanEnv(value: string | undefined) {
@@ -59,6 +41,8 @@ function parseBooleanEnv(value: string | undefined) {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -66,77 +50,25 @@ export class PaymentsService {
 
   getConfig() {
     const mockPurchasesEnabled = this.isMockPurchasesEnabled();
-    const stripeConfigured = this.isStripeConfigured();
+    const revenueCatConfigured = this.isRevenueCatConfigured();
+    const purchasesConfigured = mockPurchasesEnabled || revenueCatConfigured;
 
     return {
-      mode: mockPurchasesEnabled ? 'MOCK' : 'STRIPE',
+      mode: mockPurchasesEnabled ? 'MOCK' : revenueCatConfigured ? 'REVENUECAT' : 'UNCONFIGURED',
       allowMockPurchases: mockPurchasesEnabled,
       mockPurchasesEnabled,
-      stripeConfigured,
+      revenueCatConfigured,
+      purchasesConfigured,
+      provider: 'REVENUECAT',
     };
   }
 
-  async createCheckoutSession(user: AuthenticatedUser, dto: CreateCheckoutSessionDto) {
+  async createCheckoutSession(user: AuthenticatedUser, _dto: CreateCheckoutSessionDto) {
     if (user.role !== UserRole.CONTRACTOR) {
       throw new ForbiddenException('Only contractors can purchase token packages.');
     }
 
-    const secretKey = this.getStripeSecretKey();
-    const tokenPackage = await this.prisma.tokenPackage.findUnique({
-      where: { id: dto.tokenPackageId },
-    });
-
-    if (!tokenPackage) {
-      throw new NotFoundException('Token package not found.');
-    }
-
-    if (!tokenPackage.isActive) {
-      throw new BadRequestException('Token package is inactive.');
-    }
-
-    const payment = await this.prisma.payment.create({
-      data: {
-        userId: user.id,
-        tokenPackageId: tokenPackage.id,
-        amount: tokenPackage.price,
-        currency: tokenPackage.currency,
-        status: PaymentStatus.PENDING,
-      },
-      include: paymentInclude,
-    });
-
-    try {
-      const checkoutSession = await this.createStripeCheckoutSession(secretKey, user, payment, tokenPackage);
-      const checkoutSessionId = this.stringValue(checkoutSession.id);
-      const checkoutUrl = this.stringValue(checkoutSession.url);
-
-      if (!checkoutSessionId || !checkoutUrl) {
-        throw new BadRequestException('Stripe did not return a checkout session URL.');
-      }
-
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          stripeCheckoutSessionId: checkoutSessionId,
-        },
-      });
-
-      return {
-        checkoutUrl,
-        paymentId: payment.id,
-        status: payment.status,
-      };
-    } catch (error) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: PaymentStatus.FAILED,
-          failureReason: error instanceof Error ? error.message : 'Could not create Stripe checkout session.',
-        },
-      });
-
-      throw error;
-    }
+    throw new GoneException('Stripe Checkout is no longer active. Use RevenueCat in-app purchases or development mock purchases.');
   }
 
   async findMine(
@@ -162,302 +94,245 @@ export class PaymentsService {
     };
   }
 
-  async handleWebhook(signature: string | undefined, rawBody: Buffer) {
-    this.verifyWebhookSignature(signature, rawBody);
-
-    const event = this.parseEvent(rawBody);
-
-    if (event.type === 'checkout.session.completed') {
-      await this.handleCheckoutSessionCompleted(event.data?.object);
-    }
-
-    if (event.type === 'payment_intent.payment_failed') {
-      await this.handlePaymentIntentFailed(event.data?.object);
-    }
-
-    return { received: true };
+  handleDeprecatedStripeWebhook() {
+    throw new GoneException('Stripe webhook is deprecated and is not an active payment path.');
   }
 
-  private async createStripeCheckoutSession(
-    secretKey: string,
-    user: AuthenticatedUser,
-    payment: PaymentWithPackage,
-    tokenPackage: PaymentWithPackage['tokenPackage'],
-  ) {
-    const successUrl = this.config.get<string>('STRIPE_SUCCESS_URL') ?? `maltacraftsman://payment-success?paymentId=${payment.id}`;
-    const cancelUrl = this.config.get<string>('STRIPE_CANCEL_URL') ?? `maltacraftsman://payment-pending?paymentId=${payment.id}`;
-    const metadata = {
-      paymentId: payment.id,
-      userId: user.id,
-      tokenPackageId: tokenPackage.id,
-    };
+  async handleRevenueCatWebhook(input: {
+    authorization?: string;
+    revenueCatSignature?: string;
+    webhookSecret?: string;
+    rawBody: Buffer;
+  }) {
+    this.verifyRevenueCatWebhookSecret(input);
 
-    const params = new URLSearchParams();
-    params.append('mode', 'payment');
-    params.append('success_url', successUrl);
-    params.append('cancel_url', cancelUrl);
-    params.append('line_items[0][price_data][currency]', tokenPackage.currency.toLowerCase());
-    params.append('line_items[0][price_data][unit_amount]', String(this.toMinorUnits(tokenPackage.price)));
-    params.append('line_items[0][price_data][product_data][name]', `${tokenPackage.title} token package`);
-    params.append('line_items[0][quantity]', '1');
+    const payload = this.parseRevenueCatPayload(input.rawBody);
+    const event = this.extractRevenueCatEvent(payload);
 
-    Object.entries(metadata).forEach(([key, value]) => {
-      params.append(`metadata[${key}]`, value);
-      params.append(`payment_intent_data[metadata][${key}]`, value);
-    });
+    if (!event) {
+      this.logger.warn('Ignored malformed RevenueCat webhook payload.');
+      return { received: true, ignored: true, reason: 'MALFORMED_EVENT' };
+    }
 
-    const response = await fetch(STRIPE_CHECKOUT_SESSION_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${secretKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+    if (!REVENUECAT_PURCHASE_EVENT_TYPES.has(event.type)) {
+      return { received: true, ignored: true, reason: 'UNSUPPORTED_EVENT_TYPE', eventType: event.type };
+    }
+
+    const result = await this.processRevenueCatPurchase(event);
+    return { received: true, ...result };
+  }
+
+  private async processRevenueCatPurchase(event: RevenueCatEvent) {
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: {
+        OR: [
+          { revenueCatEventId: event.eventId },
+          ...(event.transactionId ? [{ revenueCatTransactionId: event.transactionId }] : []),
+        ],
       },
-      body: params.toString(),
-    });
-    const payload = (await response.json().catch(() => ({}))) as StripeCheckoutSessionResponse;
-
-    if (!response.ok) {
-      throw new BadRequestException(this.stringValue(payload.error?.message) ?? 'Stripe checkout session failed.');
-    }
-
-    return payload;
-  }
-
-  private async handleCheckoutSessionCompleted(object: unknown) {
-    const session = object as StripeCheckoutSessionEvent;
-    const checkoutSessionId = this.stringValue(session.id);
-    const paymentId = this.uuidValue(session.metadata?.paymentId);
-    const stripePaymentIntentId = this.stringValue(session.payment_intent);
-
-    if (!checkoutSessionId && !paymentId) {
-      throw new BadRequestException('Stripe checkout session is missing payment metadata.');
-    }
-
-    const payment = await this.findWebhookPayment({
-      paymentId,
-      checkoutSessionId,
     });
 
-    if (!payment) {
-      throw new NotFoundException('Payment not found for Stripe checkout session.');
+    if (existingPayment?.status === PaymentStatus.COMPLETED || existingPayment?.status === PaymentStatus.PAID) {
+      return { duplicate: true, paymentId: existingPayment.id };
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      const update = await tx.payment.updateMany({
+    const user = await this.prisma.user.findUnique({
+      where: { id: event.appUserId },
+      select: { id: true, role: true, status: true },
+    });
+
+    if (!user) {
+      this.logger.warn(`Ignored RevenueCat purchase for unknown appUserID ${event.appUserId}.`);
+      return { ignored: true, reason: 'UNKNOWN_USER' };
+    }
+
+    if (user.role !== UserRole.CONTRACTOR) {
+      this.logger.warn(`Ignored RevenueCat purchase for non-contractor user ${event.appUserId}.`);
+      return { ignored: true, reason: 'INVALID_USER_ROLE' };
+    }
+
+    const storeProduct = await this.prisma.storeProduct.findFirst({
+      where: {
+        platformProductId: event.productId,
+        platform: StorePlatform.REVENUECAT,
+        isActive: true,
+        tokenPackage: { isActive: true },
+      },
+      include: { tokenPackage: true },
+    });
+
+    if (!storeProduct) {
+      this.logger.warn(`Ignored RevenueCat purchase for unknown product ${event.productId}.`);
+      return { ignored: true, reason: 'UNKNOWN_PRODUCT' };
+    }
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const existingInsideTransaction = await tx.payment.findFirst({
         where: {
-          id: payment.id,
-          status: { in: [PaymentStatus.PENDING, PaymentStatus.FAILED] },
-        },
-        data: {
-          status: PaymentStatus.PAID,
-          stripeCheckoutSessionId: checkoutSessionId ?? payment.stripeCheckoutSessionId,
-          stripePaymentIntentId: stripePaymentIntentId ?? payment.stripePaymentIntentId,
-          failureReason: null,
+          OR: [
+            { revenueCatEventId: event.eventId },
+            ...(event.transactionId ? [{ revenueCatTransactionId: event.transactionId }] : []),
+          ],
         },
       });
 
-      if (update.count !== 1) {
-        return;
+      if (
+        existingInsideTransaction?.status === PaymentStatus.COMPLETED ||
+        existingInsideTransaction?.status === PaymentStatus.PAID
+      ) {
+        return existingInsideTransaction;
       }
 
-      await this.ensureWallet(payment.userId, tx);
-      const wallet = await tx.userTokenBalance.update({
-        where: { userId: payment.userId },
+      const createdPayment = await tx.payment.create({
         data: {
-          balance: { increment: payment.tokenPackage.tokenCount },
+          userId: user.id,
+          tokenPackageId: storeProduct.tokenPackageId,
+          provider: PaymentProvider.REVENUECAT,
+          platform: StorePlatform.REVENUECAT,
+          platformProductId: event.productId,
+          revenueCatEventId: event.eventId,
+          revenueCatTransactionId: event.transactionId,
+          amount: event.amount ?? storeProduct.tokenPackage.price,
+          currency: event.currency ?? storeProduct.tokenPackage.currency,
+          status: PaymentStatus.COMPLETED,
+        },
+        include: paymentInclude,
+      });
+
+      await this.ensureWallet(user.id, tx);
+      const wallet = await tx.userTokenBalance.update({
+        where: { userId: user.id },
+        data: {
+          balance: { increment: storeProduct.tokenPackage.tokenCount },
           version: { increment: 1 },
         },
       });
 
       await tx.tokenTransaction.create({
         data: {
-          userId: payment.userId,
-          packageId: payment.tokenPackageId,
+          userId: user.id,
+          packageId: storeProduct.tokenPackageId,
           type: TokenTransactionType.PURCHASE,
-          amount: payment.tokenPackage.tokenCount,
+          amount: storeProduct.tokenPackage.tokenCount,
           balanceAfter: wallet.balance,
-          description: `Stripe purchase: ${payment.tokenPackage.title}`,
-          externalRef: checkoutSessionId ?? payment.id,
+          description: `RevenueCat purchase: ${storeProduct.tokenPackage.title}`,
+          externalRef: event.eventId,
         },
       });
+
+      return createdPayment;
     });
+
+    return {
+      granted: payment.status === PaymentStatus.COMPLETED,
+      paymentId: payment.id,
+      tokenPackageId: storeProduct.tokenPackageId,
+      tokensGranted: storeProduct.tokenPackage.tokenCount,
+    };
   }
 
-  private async handlePaymentIntentFailed(object: unknown) {
-    const paymentIntent = object as StripePaymentIntentEvent;
-    const stripePaymentIntentId = this.stringValue(paymentIntent.id);
-    const paymentId = this.uuidValue(paymentIntent.metadata?.paymentId);
+  private verifyRevenueCatWebhookSecret(input: {
+    authorization?: string;
+    revenueCatSignature?: string;
+    webhookSecret?: string;
+  }) {
+    const configuredSecret = this.config.get<string>('REVENUECAT_WEBHOOK_SECRET')?.trim();
 
-    if (!stripePaymentIntentId && !paymentId) {
-      throw new BadRequestException('Stripe payment intent is missing payment metadata.');
-    }
-
-    const payment = await this.findWebhookPayment({
-      paymentId,
-      paymentIntentId: stripePaymentIntentId,
-    });
-
-    if (!payment) {
-      throw new NotFoundException('Payment not found for Stripe payment intent.');
-    }
-
-    if (payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.REFUNDED) {
+    if (!configuredSecret) {
       return;
     }
 
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: PaymentStatus.FAILED,
-        stripePaymentIntentId: stripePaymentIntentId ?? payment.stripePaymentIntentId,
-        failureReason: this.stringValue(paymentIntent.last_payment_error?.message) ?? 'Stripe payment failed.',
-      },
-    });
+    const acceptedHeaderValues = [
+      input.authorization?.replace(/^Bearer\s+/i, '').trim(),
+      input.authorization?.trim(),
+      input.revenueCatSignature?.trim(),
+      input.webhookSecret?.trim(),
+    ].filter(Boolean);
+
+    if (!acceptedHeaderValues.includes(configuredSecret)) {
+      throw new UnauthorizedException('Invalid RevenueCat webhook secret.');
+    }
   }
 
-  private async findWebhookPayment(input: {
-    paymentId?: string;
-    checkoutSessionId?: string;
-    paymentIntentId?: string;
-  }) {
-    const or: Prisma.PaymentWhereInput[] = [];
-
-    if (input.paymentId) {
-      or.push({ id: input.paymentId });
+  private parseRevenueCatPayload(rawBody: Buffer): RevenueCatWebhookPayload {
+    try {
+      return JSON.parse(rawBody.toString('utf8')) as RevenueCatWebhookPayload;
+    } catch {
+      throw new BadRequestException('Invalid RevenueCat webhook payload.');
     }
+  }
 
-    if (input.checkoutSessionId) {
-      or.push({ stripeCheckoutSessionId: input.checkoutSessionId });
-    }
+  private extractRevenueCatEvent(payload: RevenueCatWebhookPayload): RevenueCatEvent | null {
+    const event = payload.event ?? (payload as Record<string, unknown>);
+    const eventId =
+      this.stringValue(event.id) ??
+      this.stringValue(event.event_id) ??
+      this.stringValue(event.eventId) ??
+      this.stringValue(event.transaction_id) ??
+      this.stringValue(event.store_transaction_id);
+    const type = this.stringValue(event.type);
+    const appUserId =
+      this.uuidValue(event.app_user_id) ??
+      this.uuidValue(event.appUserId) ??
+      this.uuidValue(event.original_app_user_id) ??
+      this.uuidValue(event.originalAppUserId);
+    const productId =
+      this.stringValue(event.product_id) ??
+      this.stringValue(event.productId) ??
+      this.stringValue(event.product_identifier) ??
+      this.stringValue(event.productIdentifier);
 
-    if (input.paymentIntentId) {
-      or.push({ stripePaymentIntentId: input.paymentIntentId });
-    }
-
-    if (!or.length) {
+    if (!eventId || !type || !appUserId || !productId) {
       return null;
     }
 
-    return this.prisma.payment.findFirst({
-      where: { OR: or },
-      include: paymentInclude,
-    });
+    const amount = this.decimalValue(event.price ?? event.price_in_purchased_currency ?? event.amount);
+
+    return {
+      eventId,
+      type,
+      appUserId,
+      productId,
+      transactionId:
+        this.stringValue(event.transaction_id) ??
+        this.stringValue(event.store_transaction_id) ??
+        this.stringValue(event.original_transaction_id),
+      amount,
+      currency: this.currencyValue(event.currency ?? event.currency_code ?? event.currencyCode),
+    };
   }
 
-  private verifyWebhookSignature(signature: string | undefined, rawBody: Buffer) {
-    if (!signature) {
-      throw new BadRequestException('Missing Stripe webhook signature.');
-    }
-
-    const timestamp = this.signaturePart(signature, 't');
-    const signatures = this.signatureParts(signature, 'v1');
-    const parsedTimestamp = Number(timestamp);
-
-    if (!timestamp || !Number.isFinite(parsedTimestamp) || signatures.length === 0) {
-      throw new BadRequestException('Invalid Stripe webhook signature.');
-    }
-
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    if (Math.abs(nowInSeconds - parsedTimestamp) > 300) {
-      throw new BadRequestException('Expired Stripe webhook signature.');
-    }
-
-    const secret = this.getStripeWebhookSecret();
-    const expected = createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex');
-    const matches = signatures.some((candidate) => this.safeCompareHex(expected, candidate));
-
-    if (!matches) {
-      throw new BadRequestException('Invalid Stripe webhook signature.');
-    }
-  }
-
-  private parseEvent(rawBody: Buffer): StripeEvent {
-    try {
-      return JSON.parse(rawBody.toString('utf8')) as StripeEvent;
-    } catch {
-      throw new BadRequestException('Invalid Stripe webhook payload.');
-    }
-  }
-
-  private signaturePart(signature: string, key: string) {
-    return this.signatureParts(signature, key)[0];
-  }
-
-  private signatureParts(signature: string, key: string) {
-    return signature.split(',').flatMap((part) => {
-      const separatorIndex = part.indexOf('=');
-
-      if (separatorIndex === -1) {
-        return [];
-      }
-
-      const partKey = part.slice(0, separatorIndex);
-      const value = part.slice(separatorIndex + 1);
-      return partKey === key && value ? [value] : [];
-    });
-  }
-
-  private safeCompareHex(expected: string, candidate: string) {
-    const expectedBuffer = Buffer.from(expected, 'hex');
-    const candidateBuffer = Buffer.from(candidate, 'hex');
-
-    return expectedBuffer.length === candidateBuffer.length && timingSafeEqual(expectedBuffer, candidateBuffer);
-  }
-
-  private getStripeSecretKey(): string {
-    const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
-
-    if (!this.isUsableStripeSecretKey(secretKey)) {
-      throw new ServiceUnavailableException('Payments are not configured.');
-    }
-
-    return secretKey;
-  }
-
-  private isStripeConfigured() {
-    const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
-    return this.isUsableStripeSecretKey(secretKey);
+  private isRevenueCatConfigured() {
+    return Boolean(this.config.get<string>('REVENUECAT_API_KEY')?.trim());
   }
 
   private isMockPurchasesEnabled() {
     return parseBooleanEnv(this.config.get<string>('ALLOW_MOCK_PURCHASES'));
   }
 
-  private isUsableStripeSecretKey(secretKey: string | undefined): secretKey is string {
-    return Boolean(secretKey?.startsWith('sk_test_') && secretKey !== 'sk_test_replace_me');
-  }
-
-  private getStripeWebhookSecret() {
-    const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
-
-    if (webhookSecret) {
-      if (!webhookSecret.startsWith('whsec_')) {
-        throw new ServiceUnavailableException('Stripe webhook secret is invalid.');
-      }
-
-      return webhookSecret;
-    }
-
-    if (this.config.get<string>('NODE_ENV') !== 'production') {
-      return LOCAL_WEBHOOK_SECRET;
-    }
-
-    throw new ServiceUnavailableException('Stripe webhook secret is not configured.');
-  }
-
-  private toMinorUnits(amount: Prisma.Decimal) {
-    return Math.round(Number(amount) * 100);
-  }
-
   private stringValue(value: unknown) {
-    return typeof value === 'string' && value.trim() ? value : undefined;
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
 
   private uuidValue(value: unknown) {
     const text = this.stringValue(value);
-    return text && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+    return text && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(text)
       ? text
       : undefined;
+  }
+
+  private decimalValue(value: unknown) {
+    if (typeof value !== 'number' && typeof value !== 'string') {
+      return undefined;
+    }
+
+    const amount = Number(value);
+    return Number.isFinite(amount) && amount >= 0 ? new Prisma.Decimal(amount) : undefined;
+  }
+
+  private currencyValue(value: unknown) {
+    const currency = this.stringValue(value)?.toUpperCase();
+    return currency && /^[A-Z]{3}$/.test(currency) ? currency : undefined;
   }
 
   private async ensureWallet(userId: string, tx: Prisma.TransactionClient | PrismaService = this.prisma) {
@@ -476,8 +351,11 @@ export class PaymentsService {
       id: payment.id,
       userId: payment.userId,
       tokenPackageId: payment.tokenPackageId,
-      stripeCheckoutSessionId: payment.stripeCheckoutSessionId,
-      stripePaymentIntentId: payment.stripePaymentIntentId,
+      provider: payment.provider,
+      platform: payment.platform,
+      platformProductId: payment.platformProductId,
+      revenueCatEventId: payment.revenueCatEventId,
+      revenueCatTransactionId: payment.revenueCatTransactionId,
       amount: payment.amount.toString(),
       currency: payment.currency,
       status: payment.status,
