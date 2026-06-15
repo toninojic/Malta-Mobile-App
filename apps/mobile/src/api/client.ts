@@ -54,6 +54,9 @@ type RequestOptions = {
   debugLabel?: 'login';
 };
 
+type UploadableFile = { uri: string; name: string; type: string };
+type StorageFolder = 'avatars' | 'portfolio' | 'jobs' | 'verification';
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -307,14 +310,32 @@ export const api = {
       body: input,
     });
   },
-  uploadAvatar(image: { uri: string; name: string; type: string }) {
-    const formData = new FormData();
-    formData.append('avatar', image as unknown as Blob);
-
-    return request<UserProfile>('/users/me/avatar', {
+  storageUploadUrl(input: {
+    folder: StorageFolder;
+    fileName: string;
+    contentType: string;
+    jobId?: string;
+  }) {
+    return request<{ key: string; uploadUrl: string }>('/storage/upload-url', {
       method: 'POST',
-      formData,
+      body: input,
     });
+  },
+  storageViewUrl(key: string) {
+    return request<{ url: string }>(`/storage/view-url${queryString({ key })}`);
+  },
+  deleteStorageObject(key: string) {
+    return request<{ success: true }>('/storage', {
+      method: 'DELETE',
+      body: { key },
+    });
+  },
+  async uploadAvatar(image: UploadableFile) {
+    const uploaded = await uploadFileToS3('avatars', image);
+    return {
+      avatarKey: uploaded.key,
+      avatarUrl: uploaded.key,
+    };
   },
   jobsMine() {
     return request<JobRequest[]>('/jobs/mine');
@@ -726,15 +747,13 @@ export const api = {
   portfolioImages() {
     return request<ContractorPortfolioImage[]>('/users/me/portfolio-images');
   },
-  uploadPortfolioImages(images: Array<{ uri: string; name: string; type: string }>) {
-    const formData = new FormData();
-    images.forEach((image) => {
-      formData.append('images', image as unknown as Blob);
-    });
-
+  async uploadPortfolioImages(images: UploadableFile[]) {
+    const uploaded = await Promise.all(images.map((image) => uploadFileToS3('portfolio', image)));
     return request<ContractorPortfolioImage[]>('/users/me/portfolio-images', {
       method: 'POST',
-      formData,
+      body: {
+        imageKeys: uploaded.map((image) => image.key),
+      },
     });
   },
   removePortfolioImage(imageId: string) {
@@ -745,13 +764,14 @@ export const api = {
   contractorVerification() {
     return request<ContractorVerification>('/users/me/contractor-verification');
   },
-  uploadContractorVerification(document: { uri: string; name: string; type: string }) {
-    const formData = new FormData();
-    formData.append('document', document as unknown as Blob);
-
+  async uploadContractorVerification(document: UploadableFile) {
+    const uploaded = await uploadFileToS3('verification', document);
     return request<ContractorVerification>('/users/me/contractor-verification', {
       method: 'POST',
-      formData,
+      body: {
+        documentKey: uploaded.key,
+        documentMimeType: document.type,
+      },
     });
   },
   adminContractorVerifications(input: { page?: number; limit?: number } = {}) {
@@ -773,15 +793,44 @@ export const api = {
       body: { adminNote },
     });
   },
-  uploadJobImages(images: Array<{ uri: string; name: string; type: string }>) {
-    const formData = new FormData();
-    images.forEach((image) => {
-      formData.append('images', image as unknown as Blob);
-    });
-
-    return request<{ images: UploadedJobImage[] }>('/uploads/job-images', {
-      method: 'POST',
-      formData,
-    });
+  async uploadJobImages(images: UploadableFile[], jobId: string) {
+    const uploaded = await Promise.all(images.map((image) => uploadFileToS3('jobs', image, { jobId })));
+    return {
+      images: uploaded.map((image) => ({
+        key: image.key,
+        url: image.key,
+        fileName: image.key.split('/').pop() ?? image.key,
+        size: image.size,
+        mimeType: image.contentType,
+      })),
+    };
   },
 };
+
+async function uploadFileToS3(folder: StorageFolder, file: UploadableFile, options: { jobId?: string } = {}) {
+  const upload = await api.storageUploadUrl({
+    folder,
+    fileName: file.name,
+    contentType: file.type,
+    jobId: options.jobId,
+  });
+  const fileResponse = await fetch(file.uri);
+  const blob = await fileResponse.blob();
+  const response = await fetch(upload.uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type,
+    },
+    body: blob,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(`Could not upload ${file.name} to storage.`, response.status);
+  }
+
+  return {
+    key: upload.key,
+    size: blob.size,
+    contentType: file.type,
+  };
+}

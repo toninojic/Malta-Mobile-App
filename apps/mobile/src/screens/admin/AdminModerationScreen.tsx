@@ -124,7 +124,7 @@ function VerificationsSection() {
       return;
     }
 
-    const url = documentUrlWithToken(verification.documentUrl);
+    const url = signedStorageUrl(verification.documentUrl) ? verification.documentUrl : documentUrlWithToken(verification.documentUrl);
     const supported = await Linking.canOpenURL(url);
     if (!supported) {
       Alert.alert('Could not open document', 'No app is available to open this document.');
@@ -160,7 +160,7 @@ function VerificationsSection() {
                 {
                   id: previewDocument.id ?? previewDocument.documentUrl,
                   url: previewDocument.documentUrl,
-                  headers: authHeaders,
+                  headers: signedStorageUrl(previewDocument.documentUrl) ? undefined : authHeaders,
                 },
               ]
             : []
@@ -485,6 +485,10 @@ function documentUrlWithToken(url: string) {
 
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}token=${encodeURIComponent(accessToken)}`;
+}
+
+function signedStorageUrl(url: string) {
+  return url.includes('X-Amz-Signature=');
 }
 
 function accessTokenHeaders() {

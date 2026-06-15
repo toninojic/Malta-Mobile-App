@@ -4,7 +4,6 @@ import {
   IsArray,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
 } from 'class-validator';
 
@@ -42,9 +41,22 @@ export class UpdateProfileDto {
     const trimmed = String(value).trim();
     return trimmed ? trimmed : undefined;
   })
-  @IsUrl()
+  @IsString()
   @MaxLength(2048)
   avatarUrl?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : undefined;
+  })
+  @IsString()
+  @MaxLength(512)
+  avatarKey?: string;
 
   @IsOptional()
   @IsString()

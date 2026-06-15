@@ -9,6 +9,7 @@ import {
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
+import { isStorageKey } from '../modules/storage/storage.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadedImageFile, UploadsService } from '../uploads/uploads.service';
@@ -50,6 +51,36 @@ export class ContractorVerificationsService {
           data: {
             contractorId: user.id,
             url: image.url,
+            sortOrder: existingCount + index,
+          },
+        }),
+      ),
+    );
+
+    return created.map((image) => this.toPortfolioImage(image));
+  }
+
+  async addPortfolioImageKeys(user: AuthenticatedUser, imageKeys: string[]) {
+    this.assertContractor(user);
+
+    if (!imageKeys.length) {
+      throw new BadRequestException('Select at least one portfolio image.');
+    }
+    imageKeys.forEach((key) => this.assertPortfolioKey(user, key));
+
+    const existingCount = await this.prisma.contractorPortfolioImage.count({
+      where: { contractorId: user.id },
+    });
+    if (existingCount + imageKeys.length > 10) {
+      throw new BadRequestException('You can upload up to 10 portfolio images.');
+    }
+
+    const created = await this.prisma.$transaction(
+      imageKeys.map((key, index) =>
+        this.prisma.contractorPortfolioImage.create({
+          data: {
+            contractorId: user.id,
+            url: key,
             sortOrder: existingCount + index,
           },
         }),
@@ -107,6 +138,32 @@ export class ContractorVerificationsService {
         contractorId: user.id,
         documentUrl: stored.documentUrl,
         documentMimeType: stored.mimeType,
+        status: ContractorVerificationStatus.PENDING_REVIEW,
+      },
+      include: verificationInclude,
+    });
+
+    return this.toVerification(verification, false);
+  }
+
+  async submitVerificationKey(user: AuthenticatedUser, documentKey: string, documentMimeType: string) {
+    this.assertContractor(user);
+    this.assertVerificationKey(user, documentKey);
+    this.assertVerificationMimeType(documentMimeType);
+
+    const latest = await this.latestVerification(user.id);
+    if (latest?.status === ContractorVerificationStatus.PENDING_REVIEW) {
+      throw new BadRequestException('Your verification document is already pending review.');
+    }
+    if (latest?.status === ContractorVerificationStatus.VERIFIED) {
+      throw new BadRequestException('Your contractor account is already verified.');
+    }
+
+    const verification = await this.prisma.contractorVerification.create({
+      data: {
+        contractorId: user.id,
+        documentUrl: documentKey,
+        documentMimeType,
         status: ContractorVerificationStatus.PENDING_REVIEW,
       },
       include: verificationInclude,
@@ -281,6 +338,7 @@ export class ContractorVerificationsService {
     return {
       id: image.id,
       contractorId: image.contractorId,
+      key: image.url,
       url: image.url,
       sortOrder: image.sortOrder,
       createdAt: image.createdAt,
@@ -291,6 +349,7 @@ export class ContractorVerificationsService {
     return {
       id: verification.id,
       contractorId: verification.contractorId,
+      documentKey: admin ? verification.documentUrl : undefined,
       documentUrl: admin ? verification.documentUrl : undefined,
       documentMimeType: admin ? verification.documentMimeType : undefined,
       status: verification.status,
@@ -302,6 +361,24 @@ export class ContractorVerificationsService {
       contractor: admin ? verification.contractor : undefined,
       reviewedByAdmin: admin ? verification.reviewedByAdmin : undefined,
     };
+  }
+
+  private assertPortfolioKey(user: AuthenticatedUser, key: string) {
+    if (!isStorageKey(key) || !key.startsWith(`portfolio/${user.id}/`)) {
+      throw new BadRequestException('Invalid portfolio image key.');
+    }
+  }
+
+  private assertVerificationKey(user: AuthenticatedUser, key: string) {
+    if (!isStorageKey(key) || !key.startsWith(`verification/${user.id}/`)) {
+      throw new BadRequestException('Invalid verification document key.');
+    }
+  }
+
+  private assertVerificationMimeType(documentMimeType: string) {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(documentMimeType)) {
+      throw new BadRequestException('Only jpg, jpeg, png, webp, and pdf documents are allowed.');
+    }
   }
 }
 

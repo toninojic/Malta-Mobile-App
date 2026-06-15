@@ -5,7 +5,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -51,7 +50,14 @@ export class UpdateJobDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(8)
-  @IsUrl({}, { each: true })
+  @IsString({ each: true })
   @MaxLength(2048, { each: true })
   imageUrls?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @IsString({ each: true })
+  @MaxLength(512, { each: true })
+  imageKeys?: string[];
 }

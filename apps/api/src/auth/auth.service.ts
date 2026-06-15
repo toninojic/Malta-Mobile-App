@@ -48,7 +48,7 @@ export class AuthService {
             displayName,
             phone: dto.phone,
             location: dto.location,
-            avatarUrl: dto.avatarUrl,
+            avatarUrl: dto.avatarKey ?? dto.avatarUrl,
             companyName: dto.companyName,
             tradeCategories: dto.tradeCategories ?? [],
           },

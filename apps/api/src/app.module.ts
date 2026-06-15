@@ -21,6 +21,8 @@ import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 import { ErrorTrackingService } from './common/error-tracking.service';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
+import { StorageModule } from './modules/storage/storage.module';
+import { StorageResponseInterceptor } from './modules/storage/storage-response.interceptor';
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
       },
     ]),
     PrismaModule,
+    StorageModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -60,6 +63,10 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
     {
       provide: APP_INTERCEPTOR,
       useClass: RequestLoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: StorageResponseInterceptor,
     },
     ErrorTrackingService,
   ],

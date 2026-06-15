@@ -46,6 +46,7 @@ export type UserProfile = {
   phone?: string | null;
   location?: string | null;
   bio?: string | null;
+  avatarKey?: string | null;
   avatarUrl?: string | null;
   companyName?: string | null;
   tradeCategories: string[];
@@ -73,6 +74,7 @@ export type AdminUser = AuthUser & {
 export type JobImage = {
   id: string;
   jobRequestId: string;
+  key?: string;
   url: string;
   sortOrder: number;
   createdAt: string;
@@ -145,9 +147,11 @@ export type JobFormValues = {
   subcategory: string;
   location: string;
   imageUrls: string[];
+  imageKeys?: string[];
 };
 
 export type UploadedJobImage = {
+  key: string;
   url: string;
   fileName: string;
   size: number;
@@ -174,6 +178,7 @@ export type OfferFormValues = {
 export type ContractorPortfolioImage = {
   id: string;
   contractorId: string;
+  key?: string;
   url: string;
   sortOrder: number;
   createdAt: string;
@@ -182,6 +187,7 @@ export type ContractorPortfolioImage = {
 export type ContractorVerification = {
   id?: string;
   contractorId?: string;
+  documentKey?: string;
   documentUrl?: string;
   documentMimeType?: string;
   status: ContractorVerificationStatus;

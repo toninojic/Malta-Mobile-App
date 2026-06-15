@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -21,6 +22,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { UploadedImageFile } from '../uploads/uploads.service';
+import { AddPortfolioImageKeysDto } from './dto/add-portfolio-image-keys.dto';
+import { SubmitVerificationKeyDto } from './dto/submit-verification-key.dto';
 import { ContractorVerificationsService } from './contractor-verifications.service';
 
 @Controller({
@@ -56,10 +59,15 @@ export class ContractorVerificationsController {
   )
   addPortfolioImages(
     @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AddPortfolioImageKeysDto,
     @UploadedFiles() files: UploadedImageFile[],
     @Req() request: { protocol: string; get: (header: string) => string | undefined },
     @Headers('x-forwarded-proto') forwardedProto?: string,
   ) {
+    if (dto?.imageKeys?.length) {
+      return this.contractorVerificationsService.addPortfolioImageKeys(user, dto.imageKeys);
+    }
+
     return this.contractorVerificationsService.addPortfolioImages(user, files ?? [], baseUrl(request, forwardedProto));
   }
 
@@ -92,10 +100,15 @@ export class ContractorVerificationsController {
   )
   submitVerification(
     @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SubmitVerificationKeyDto,
     @UploadedFile() file: UploadedImageFile | undefined,
     @Req() request: { protocol: string; get: (header: string) => string | undefined },
     @Headers('x-forwarded-proto') forwardedProto?: string,
   ) {
+    if (dto?.documentKey && dto.documentMimeType) {
+      return this.contractorVerificationsService.submitVerificationKey(user, dto.documentKey, dto.documentMimeType);
+    }
+
     return this.contractorVerificationsService.submitVerification(user, file, baseUrl(request, forwardedProto));
   }
 }

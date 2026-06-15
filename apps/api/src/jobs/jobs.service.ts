@@ -95,7 +95,7 @@ export class JobsService {
         subcategory: dto.subcategory,
         location: dto.location,
         expiresAt,
-        images: this.toImageCreate(dto.imageUrls),
+        images: this.toImageCreate(dto.imageKeys ?? dto.imageUrls),
       },
       include: jobInclude,
     });
@@ -158,12 +158,12 @@ export class JobsService {
     assertValidServiceCategory(dto.category ?? job.category, dto.subcategory ?? job.subcategory);
 
     const imageMutation =
-      dto.imageUrls === undefined
+      dto.imageUrls === undefined && dto.imageKeys === undefined
         ? {}
         : {
             images: {
               deleteMany: {},
-              create: dto.imageUrls.map((url, sortOrder) => ({
+              create: (dto.imageKeys ?? dto.imageUrls ?? []).map((url, sortOrder) => ({
                 url,
                 sortOrder,
               })),

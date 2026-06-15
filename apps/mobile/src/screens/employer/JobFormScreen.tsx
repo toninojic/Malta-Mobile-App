@@ -17,6 +17,7 @@ import { JobFormValues } from '../../types/domain';
 type Props = NativeStackScreenProps<JobsStackParamList, 'JobForm'>;
 type SelectedImage = {
   uri: string;
+  key?: string;
   name: string;
   type: string;
   size?: number;
@@ -63,6 +64,7 @@ export function JobFormScreen({ route, navigation }: Props) {
     setImages(
       query.data.images.map((image) => ({
         uri: image.url,
+        key: image.key ?? image.url,
         name: image.url.split('/').pop() ?? image.id,
         type: mimeTypeFromUri(image.url),
         uploaded: true,
@@ -77,7 +79,8 @@ export function JobFormScreen({ route, navigation }: Props) {
       category,
       subcategory,
       location,
-      imageUrls: images.filter((image) => image.uploaded).map((image) => image.uri),
+      imageUrls: images.filter((image) => image.uploaded).map((image) => image.key ?? image.uri),
+      imageKeys: images.filter((image) => image.uploaded).map((image) => image.key ?? image.uri),
     }),
     [category, description, images, location, subcategory, title],
   );
@@ -86,13 +89,34 @@ export function JobFormScreen({ route, navigation }: Props) {
     mutationFn: async () => {
       const uploadedImages = images.filter((image) => image.uploaded);
       const localImages = images.filter((image) => !image.uploaded);
-      const uploadedUrls = localImages.length ? (await api.uploadJobImages(localImages)).images.map((image) => image.url) : [];
+      const existingImageKeys = uploadedImages.map((image) => image.key ?? image.uri);
+
+      if (!jobId) {
+        const createdJob = await api.createJob({
+          ...values,
+          imageUrls: existingImageKeys,
+          imageKeys: existingImageKeys,
+        });
+        if (!localImages.length) {
+          return createdJob;
+        }
+
+        const uploadedKeys = (await api.uploadJobImages(localImages, createdJob.id)).images.map((image) => image.key);
+        return api.updateJob(createdJob.id, {
+          ...values,
+          imageUrls: [...existingImageKeys, ...uploadedKeys],
+          imageKeys: [...existingImageKeys, ...uploadedKeys],
+        });
+      }
+
+      const uploadedKeys = localImages.length ? (await api.uploadJobImages(localImages, jobId)).images.map((image) => image.key) : [];
       const payload = {
         ...values,
-        imageUrls: [...uploadedImages.map((image) => image.uri), ...uploadedUrls],
+        imageUrls: [...existingImageKeys, ...uploadedKeys],
+        imageKeys: [...existingImageKeys, ...uploadedKeys],
       };
 
-      return jobId ? api.updateJob(jobId, payload) : api.createJob(payload);
+      return api.updateJob(jobId, payload);
     },
     onSuccess: async (job) => {
       cacheJob(queryClient, job);

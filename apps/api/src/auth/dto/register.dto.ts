@@ -6,7 +6,6 @@ import {
   IsIn,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -44,9 +43,14 @@ export class RegisterDto {
   location?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   @MaxLength(2048)
   avatarUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  avatarKey?: string;
 
   @IsOptional()
   @IsString()

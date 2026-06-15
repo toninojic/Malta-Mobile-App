@@ -47,6 +47,7 @@ export function ProfileEditScreen() {
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
   const [bio, setBio] = useState('');
+  const [avatarKey, setAvatarKey] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [avatarImage, setAvatarImage] = useState<SelectedAvatar | null>(null);
   const [companyName, setCompanyName] = useState('');
@@ -75,6 +76,7 @@ export function ProfileEditScreen() {
     setPhone(profile.phone ?? '');
     setLocation(profile.location ?? '');
     setBio(profile.bio ?? '');
+    setAvatarKey(profile.avatarKey ?? stableAvatarReference(profile.avatarUrl));
     setAvatarUrl(profile.avatarUrl ?? '');
     setAvatarImage(null);
     setCompanyName(profile.companyName ?? '');
@@ -83,21 +85,21 @@ export function ProfileEditScreen() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      let nextAvatarUrl = avatarUrl;
+      let nextAvatarKey = avatarKey;
 
       if (avatarImage && !avatarImage.uploaded) {
         const uploadedProfile = await api.uploadAvatar(avatarImage);
-        nextAvatarUrl = uploadedProfile.avatarUrl ?? '';
+        nextAvatarKey = uploadedProfile.avatarKey ?? uploadedProfile.avatarUrl ?? '';
       }
 
-      const trimmedAvatarUrl = nextAvatarUrl.trim();
+      const trimmedAvatarKey = nextAvatarKey.trim();
 
       return api.updateProfile({
         displayName,
         phone,
         location,
         bio,
-        ...(trimmedAvatarUrl ? { avatarUrl: trimmedAvatarUrl } : {}),
+        ...(trimmedAvatarKey ? { avatarKey: trimmedAvatarKey } : {}),
         companyName,
         tradeCategories: tradeCategories
           .split(',')
@@ -111,6 +113,7 @@ export function ProfileEditScreen() {
         profile: profile as UserProfile,
       };
       await updateUser(nextUser);
+      setAvatarKey(profile.avatarKey ?? stableAvatarReference(profile.avatarUrl));
       setAvatarUrl(profile.avatarUrl ?? '');
       setAvatarImage(null);
       await queryClient.invalidateQueries({ queryKey: ['users', 'me'] });
@@ -528,4 +531,12 @@ function mimeTypeFromUri(uri: string) {
 
 function extensionFromMimeType(type: string) {
   return type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
+}
+
+function stableAvatarReference(value: string | null | undefined) {
+  if (!value || value.includes('X-Amz-Signature=')) {
+    return '';
+  }
+
+  return value;
 }
