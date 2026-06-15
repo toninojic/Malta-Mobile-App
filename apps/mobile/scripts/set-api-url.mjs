@@ -75,9 +75,24 @@ function syncEasJson(apiUrl) {
     easJson.build[profile].env = easJson.build[profile].env ?? {};
     easJson.build[profile].env.EXPO_PUBLIC_API_URL = apiUrl;
     easJson.build[profile].env.EXPO_PUBLIC_API_LOGGING = 'true';
+    removeEmptyEnvValues(easJson.build[profile].env);
+  }
+
+  for (const profileConfig of Object.values(easJson.build)) {
+    if (profileConfig?.env) {
+      removeEmptyEnvValues(profileConfig.env);
+    }
   }
 
   writeFileSync(easJsonPath, `${JSON.stringify(easJson, null, 2)}\n`);
+}
+
+function removeEmptyEnvValues(env) {
+  for (const [key, value] of Object.entries(env)) {
+    if (value === '') {
+      delete env[key];
+    }
+  }
 }
 
 function assertPublicHttpsApiUrl(apiUrl) {

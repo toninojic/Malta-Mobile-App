@@ -30,13 +30,18 @@ const contentType = response.headers.get('content-type') ?? '';
 const responseText = await response.text();
 const payload = contentType.includes('application/json') ? parseJson(responseText) : null;
 
-if (!response.ok || payload?.status !== 'ok') {
+if (!response.ok || !isUsableHealthPayload(payload)) {
   console.error(`API health check failed for ${healthUrl} with status ${response.status}`);
   console.error(payload ? JSON.stringify(payload, null, 2) : responseText.slice(0, 500));
   process.exit(1);
 }
 
-console.info(`API is reachable: ${healthUrl}`);
+if (payload?.status === 'degraded') {
+  console.warn(`API is reachable but health is degraded: ${healthUrl}`);
+  console.warn(JSON.stringify(payload, null, 2));
+} else {
+  console.info(`API is reachable: ${healthUrl}`);
+}
 
 function readApiUrlFromEnvFile() {
   const envPath = resolve(process.cwd(), '.env');
@@ -66,6 +71,18 @@ function parseJson(value) {
   } catch {
     return null;
   }
+}
+
+function isUsableHealthPayload(payload) {
+  if (!payload) {
+    return false;
+  }
+
+  if (payload.status === 'ok') {
+    return true;
+  }
+
+  return payload.status === 'degraded' && payload.database === 'ok';
 }
 
 function assertPublicHttpsApiUrl(apiUrl) {

@@ -14,7 +14,8 @@ export class StorageService {
     s3StorageProvider: S3StorageProvider,
   ) {
     const driver = parseStorageDriver(config.get<string>('STORAGE_DRIVER'));
-    this.provider = driver === 's3' ? s3StorageProvider : localStorageProvider;
+    const shouldUseS3 = driver === 's3' && (isProduction(config) || hasCompleteS3Config(config));
+    this.provider = shouldUseS3 ? s3StorageProvider : localStorageProvider;
   }
 
   get driver(): StorageDriver {
@@ -36,4 +37,14 @@ export class StorageService {
   checkHealth(): Promise<StorageHealth> {
     return this.provider.checkHealth();
   }
+}
+
+function isProduction(config: ConfigService) {
+  return config.get<string>('NODE_ENV') === 'production';
+}
+
+function hasCompleteS3Config(config: ConfigService) {
+  return ['AWS_REGION', 'AWS_S3_BUCKET', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_S3_PUBLIC_BASE_URL'].every(
+    (key) => Boolean(config.get<string>(key)?.trim()),
+  );
 }
