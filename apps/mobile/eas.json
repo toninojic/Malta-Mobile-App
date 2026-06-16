@@ -1,13 +1,14 @@
 {
   "cli": {
-    "version": ">= 13.0.0"
+    "version": ">= 13.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",
+        "EXPO_PUBLIC_API_URL": "https://maltapro-api.onrender.com/api/v1",
         "EXPO_PUBLIC_API_LOGGING": "true",
         "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true"
       }
@@ -15,7 +16,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",
+        "EXPO_PUBLIC_API_URL": "https://maltapro-api.onrender.com/api/v1",
         "EXPO_PUBLIC_API_LOGGING": "true",
         "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true"
       },

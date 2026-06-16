@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "783f09f3-8378-4d15-b699-9bdfc2b4842f"
+      }
+    },
+    "android": {
+      "package": "mt.marketplace.craftsman"
+    }
+  }
+}

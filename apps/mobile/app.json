@@ -32,7 +32,7 @@
       "expo-image-picker"
     ],
     "extra": {
-      "apiUrl": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",
+      "apiUrl": "https://maltapro-api.onrender.com/api/v1",
       "apiDebug": false,
       "revenueCatApiKeyAndroid": "",
       "revenueCatApiKeyIos": "",
