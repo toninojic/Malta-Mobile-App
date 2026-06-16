@@ -22,6 +22,9 @@
     "android": {
       "package": "mt.marketplace.craftsman",
       "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "com.android.vending.BILLING"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"

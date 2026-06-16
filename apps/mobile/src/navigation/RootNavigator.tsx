@@ -17,6 +17,7 @@ import { useContractorVerification } from '../api/offerWorkHooks';
 import { useContractorRatingSummary, useEmployerRatingSummary } from '../api/reviewHooks';
 import { AppModal } from '../components/AppModal';
 import { useTheme } from '../design/theme';
+import { configureRevenueCatForCurrentUser } from '../services/revenueCatPurchases';
 import { useActivityUiStore } from '../store/activity.store';
 import { useAppearanceStore } from '../store/appearance.store';
 import { useAuthStore } from '../store/auth.store';
@@ -91,6 +92,12 @@ export function RootNavigator() {
     void hydrate();
     void hydrateAppearance();
   }, [hydrate, hydrateAppearance]);
+
+  useEffect(() => {
+    if (hydrated && user) {
+      void configureRevenueCatForCurrentUser();
+    }
+  }, [hydrated, user?.id]);
 
   const navTheme: Theme = {
     ...(theme.isDark ? DarkTheme : DefaultTheme),
