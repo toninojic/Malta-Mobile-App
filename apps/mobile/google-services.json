@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "917698803138",
+    "project_id": "maltapro-66413",
+    "storage_bucket": "maltapro-66413.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:917698803138:android:660ea783030db0e32d525b",
+        "android_client_info": {
+          "package_name": "mt.marketplace.craftsman"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKoY6bpKHWWcnmAaajg8KRUekCIO4YSU4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -21,6 +21,7 @@
     },
     "android": {
       "package": "mt.marketplace.craftsman",
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "com.android.vending.BILLING",
