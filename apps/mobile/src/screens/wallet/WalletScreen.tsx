@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { Coins, CreditCard, ReceiptText, RefreshCw, RotateCcw } from 'lucide-react-native';
-import { ComponentType, ReactNode, useCallback, useEffect, useState } from 'react';
+import { ComponentType, ReactNode, useCallback, useState } from 'react';
 import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   useAdminRefunds,
@@ -13,7 +13,6 @@ import {
 import { useMockPurchase, usePaymentConfig, usePayments, useRevenueCatPurchase } from '../../api/paymentHooks';
 import { BalanceCard } from '../../components/wallet/BalanceCard';
 import { AppModal } from '../../components/AppModal';
-import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { PackageCard } from '../../components/wallet/PackageCard';
 import { PaymentCard } from '../../components/wallet/PaymentCard';
@@ -23,12 +22,7 @@ import { TransactionCard } from '../../components/wallet/TransactionCard';
 import { purchaseConfig } from '../../config/purchaseConfig';
 import { useTheme } from '../../design/theme';
 import { WalletStackParamList } from '../../navigation/types';
-import {
-  configureRevenueCatForCurrentUser,
-  getRevenueCatDiagnosticsSnapshot,
-  RevenueCatDiagnostics,
-  subscribeToRevenueCatDiagnostics,
-} from '../../services/revenueCatPurchases';
+import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 import { TokenPackage } from '../../types/domain';
 
@@ -44,7 +38,6 @@ export function WalletScreen({ navigation }: Props) {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const [infoDialog, setInfoDialog] = useState<InfoDialog | null>(null);
-  const [revenueCatDiagnostics, setRevenueCatDiagnostics] = useState(getRevenueCatDiagnosticsSnapshot);
   const isAdmin = user?.role === 'ADMIN';
   const packagesQuery = useTokenPackages();
   const balanceQuery = useTokenBalance();
@@ -61,8 +54,6 @@ export function WalletScreen({ navigation }: Props) {
     paymentConfigQuery.data?.mode === 'MOCK';
   const isMockMode = purchaseConfig.allowMockPurchases && backendAllowsMock;
   const isRevenueCatMode = paymentConfigQuery.data?.mode === 'REVENUECAT';
-
-  useEffect(() => subscribeToRevenueCatDiagnostics(setRevenueCatDiagnostics), []);
 
   useFocusEffect(
     useCallback(() => {
@@ -198,15 +189,6 @@ export function WalletScreen({ navigation }: Props) {
         </Text>
       </View>
 
-      <RevenueCatDebugPanel
-        diagnostics={revenueCatDiagnostics}
-        backendMode={paymentConfigQuery.data?.mode ?? 'LOADING'}
-        backendAllowsMock={backendAllowsMock}
-        onRefresh={() => {
-          void configureRevenueCatForCurrentUser({ forceDiagnostics: true });
-        }}
-      />
-
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.primary} />
@@ -315,72 +297,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function RevenueCatDebugPanel({
-  diagnostics,
-  backendMode,
-  backendAllowsMock,
-  onRefresh,
-}: {
-  diagnostics: RevenueCatDiagnostics;
-  backendMode: string;
-  backendAllowsMock: boolean;
-  onRefresh: () => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <View style={[styles.debugPanel, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-      <View style={styles.debugHeader}>
-        <View style={styles.debugTitleGroup}>
-          <Text style={[styles.debugTitle, { color: theme.colors.text }]}>RevenueCat debug</Text>
-          <Text style={[styles.debugSubtitle, { color: theme.colors.textMuted }]}>
-            Runtime values from this installed build.
-          </Text>
-        </View>
-        <Button title="Refresh" variant="secondary" onPress={onRefresh} style={styles.debugButton} />
-      </View>
-      <DebugRow label="Android key present" value={formatDebugBoolean(diagnostics.androidApiKeyPresent)} />
-      <DebugRow label="Android key starts goog_" value={formatDebugBoolean(diagnostics.androidApiKeyLooksLikeGoogle)} />
-      <DebugRow label="Mobile mock allowed" value={formatDebugBoolean(diagnostics.mockPurchasesAllowed)} />
-      <DebugRow label="Backend mode" value={backendMode} />
-      <DebugRow label="Backend mock allowed" value={formatDebugBoolean(backendAllowsMock)} />
-      <DebugRow label="Backend user.id present" value={formatDebugBoolean(diagnostics.appUserIdPresent)} />
-      <DebugRow label="appUserID passed" value={diagnostics.configuredAppUserId ?? diagnostics.appUserId ?? 'missing'} />
-      <DebugRow label="configure called" value={formatDebugBoolean(diagnostics.configureCalled)} />
-      <DebugRow label="getCustomerInfo" value={formatNullableBoolean(diagnostics.customerInfoSucceeded)} />
-      <DebugRow label="Customer appUserID" value={diagnostics.customerInfoAppUserId ?? 'not loaded'} />
-      <DebugRow label="getOfferings" value={formatNullableBoolean(diagnostics.offeringsSucceeded)} />
-      <DebugRow label="Default offering" value={formatNullableBoolean(diagnostics.defaultOfferingPresent)} />
-      <DebugRow label="Current offering" value={diagnostics.currentOfferingIdentifier ?? 'none'} />
-      <DebugRow label="Last event" value={diagnostics.lastEvent} />
-      {diagnostics.lastError ? <DebugRow label="Last error" value={diagnostics.lastError} danger /> : null}
-    </View>
-  );
-}
-
-function DebugRow({ label, value, danger = false }: { label: string; value: string; danger?: boolean }) {
-  const theme = useTheme();
-
-  return (
-    <View style={styles.debugRow}>
-      <Text style={[styles.debugLabel, { color: theme.colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.debugValue, { color: danger ? theme.colors.danger : theme.colors.text }]}>{value}</Text>
-    </View>
-  );
-}
-
-function formatDebugBoolean(value: boolean) {
-  return value ? 'yes' : 'no';
-}
-
-function formatNullableBoolean(value: boolean | null) {
-  if (value === null) {
-    return 'not checked';
-  }
-
-  return value ? 'success' : 'failed';
-}
-
 const styles = StyleSheet.create({
   header: {
     gap: 8,
@@ -392,51 +308,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     lineHeight: 21,
-  },
-  debugPanel: {
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
-    padding: 12,
-  },
-  debugHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  debugTitleGroup: {
-    flex: 1,
-    gap: 2,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  debugSubtitle: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  debugButton: {
-    minHeight: 36,
-    paddingHorizontal: 12,
-  },
-  debugRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  debugLabel: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  debugValue: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'right',
   },
   center: {
     paddingVertical: 24,

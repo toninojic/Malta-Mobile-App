@@ -205,6 +205,7 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
     details.job.status === 'COMPLETED';
   const isSelectedActive = details.offer.status === 'SELECTED' && details.offer.unlockStatus !== 'UNLOCKED' && !isCompleted;
   const showSelectedHistory = details.offer.selectedByEmployer && !isSelectedActive;
+  const canShowContractorPortfolio = user?.role !== 'CONTRACTOR' && Boolean(details.contractor?.portfolioImages?.length);
   const headlineStatus = isCompleted
     ? 'COMPLETED'
     : details.offer.completionStatus ?? (details.offer.unlockStatus === 'UNLOCKED' ? details.job.status : details.offer.status);
@@ -346,7 +347,7 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
         </Card>
       ) : null}
 
-      {details.contractor?.portfolioImages?.length ? (
+      {canShowContractorPortfolio && details.contractor?.portfolioImages?.length ? (
         <Card>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Portfolio</Text>
           <View style={styles.portfolio}>
