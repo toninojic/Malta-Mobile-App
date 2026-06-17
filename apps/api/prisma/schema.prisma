@@ -496,7 +496,7 @@ model Payment {
   platform                StorePlatform?
   platformProductId       String?       @db.VarChar(180)
   revenueCatEventId       String?       @unique @db.VarChar(255)
-  revenueCatTransactionId String?       @db.VarChar(255)
+  revenueCatTransactionId String?       @unique @db.VarChar(255)
   stripeCheckoutSessionId String?       @unique @db.VarChar(255)
   stripePaymentIntentId   String?       @unique @db.VarChar(255)
   amount                  Decimal       @db.Decimal(12, 2)

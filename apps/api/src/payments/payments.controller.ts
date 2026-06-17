@@ -13,6 +13,7 @@ import { PaymentsService } from './payments.service';
 
 type RequestWithRawBody = Request & {
   rawBody?: Buffer;
+  body?: unknown;
 };
 
 @Controller({
@@ -72,7 +73,7 @@ export class PurchasesController {
       authorization,
       revenueCatSignature,
       webhookSecret,
-      rawBody: request.rawBody ?? Buffer.from([]),
+      rawBody: request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {}), 'utf8'),
     });
   }
 }

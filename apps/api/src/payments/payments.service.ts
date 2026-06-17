@@ -18,6 +18,11 @@ const paymentInclude = {
 };
 
 const REVENUECAT_PURCHASE_EVENT_TYPES = new Set(['INITIAL_PURCHASE', 'NON_RENEWING_PURCHASE']);
+const REVENUECAT_PRODUCT_TOKEN_COUNTS: Record<string, number> = {
+  maltapro_tokens_5: 5,
+  maltapro_tokens_20: 20,
+  maltapro_tokens_50: 50,
+};
 
 type PaymentWithPackage = Prisma.PaymentGetPayload<{ include: typeof paymentInclude }>;
 
@@ -33,6 +38,8 @@ type RevenueCatEvent = {
   transactionId?: string;
   amount?: Prisma.Decimal;
   currency?: string;
+  store?: string;
+  environment?: string;
 };
 
 function parseBooleanEnv(value: string | undefined) {
@@ -114,7 +121,14 @@ export class PaymentsService {
       return { received: true, ignored: true, reason: 'MALFORMED_EVENT' };
     }
 
+    this.logger.log(
+      `RevenueCat webhook event received type=${event.type} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} app_user_id=${event.appUserId} store=${event.store ?? 'unknown'} environment=${event.environment ?? 'unknown'}`,
+    );
+
     if (!REVENUECAT_PURCHASE_EVENT_TYPES.has(event.type)) {
+      this.logger.log(
+        `RevenueCat webhook ignored unsupported event type=${event.type} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} app_user_id=${event.appUserId}`,
+      );
       return { received: true, ignored: true, reason: 'UNSUPPORTED_EVENT_TYPE', eventType: event.type };
     }
 
@@ -132,8 +146,26 @@ export class PaymentsService {
       },
     });
 
-    if (existingPayment?.status === PaymentStatus.COMPLETED || existingPayment?.status === PaymentStatus.PAID) {
-      return { duplicate: true, paymentId: existingPayment.id };
+    if (existingPayment) {
+      this.logger.log(
+        `RevenueCat duplicate detected yes transaction_id=${event.transactionId ?? 'missing'} event_id=${event.eventId} payment_id=${existingPayment.id} status=${existingPayment.status}`,
+      );
+      return {
+        duplicate: true,
+        paymentId: existingPayment.id,
+        granted: existingPayment.status === PaymentStatus.COMPLETED || existingPayment.status === PaymentStatus.PAID,
+      };
+    }
+
+    this.logger.log(
+      `RevenueCat duplicate detected no transaction_id=${event.transactionId ?? 'missing'} event_id=${event.eventId}`,
+    );
+
+    if (!this.isUuidValue(event.appUserId)) {
+      this.logger.warn(
+        `Ignored RevenueCat purchase for app_user_id that is not a backend UUID app_user_id=${event.appUserId} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}.`,
+      );
+      return { ignored: true, reason: 'UNKNOWN_USER' };
     }
 
     const user = await this.prisma.user.findUnique({
@@ -142,86 +174,119 @@ export class PaymentsService {
     });
 
     if (!user) {
-      this.logger.warn(`Ignored RevenueCat purchase for unknown appUserID ${event.appUserId}.`);
+      this.logger.warn(`Ignored RevenueCat purchase for unknown app_user_id=${event.appUserId} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}.`);
       return { ignored: true, reason: 'UNKNOWN_USER' };
     }
 
+    this.logger.log(
+      `RevenueCat matched user yes user_id=${user.id} role=${user.role} status=${user.status} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}`,
+    );
+
     if (user.role !== UserRole.CONTRACTOR) {
-      this.logger.warn(`Ignored RevenueCat purchase for non-contractor user ${event.appUserId}.`);
+      this.logger.warn(`Ignored RevenueCat purchase for non-contractor user_id=${event.appUserId} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}.`);
       return { ignored: true, reason: 'INVALID_USER_ROLE' };
     }
 
-    const storeProduct = await this.prisma.storeProduct.findFirst({
-      where: {
-        platformProductId: event.productId,
-        platform: StorePlatform.REVENUECAT,
-        isActive: true,
-        tokenPackage: { isActive: true },
-      },
-      include: { tokenPackage: true },
-    });
+    const storeProduct = await this.resolveRevenueCatStoreProduct(event.productId);
 
     if (!storeProduct) {
-      this.logger.warn(`Ignored RevenueCat purchase for unknown product ${event.productId}.`);
+      this.logger.warn(`Ignored RevenueCat purchase for unknown product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} app_user_id=${event.appUserId}.`);
       return { ignored: true, reason: 'UNKNOWN_PRODUCT' };
     }
 
-    const payment = await this.prisma.$transaction(async (tx) => {
-      const existingInsideTransaction = await tx.payment.findFirst({
-        where: {
-          OR: [
-            { revenueCatEventId: event.eventId },
-            ...(event.transactionId ? [{ revenueCatTransactionId: event.transactionId }] : []),
-          ],
-        },
-      });
+    let payment: PaymentWithPackage;
 
-      if (
-        existingInsideTransaction?.status === PaymentStatus.COMPLETED ||
-        existingInsideTransaction?.status === PaymentStatus.PAID
-      ) {
-        return existingInsideTransaction;
+    try {
+      payment = await this.prisma.$transaction(async (tx) => {
+        const existingInsideTransaction = await tx.payment.findFirst({
+          where: {
+            OR: [
+              { revenueCatEventId: event.eventId },
+              ...(event.transactionId ? [{ revenueCatTransactionId: event.transactionId }] : []),
+            ],
+          },
+          include: paymentInclude,
+        });
+
+        if (existingInsideTransaction) {
+          return existingInsideTransaction;
+        }
+
+        const createdPayment = await tx.payment.create({
+          data: {
+            userId: user.id,
+            tokenPackageId: storeProduct.tokenPackageId,
+            provider: PaymentProvider.REVENUECAT,
+            platform: StorePlatform.REVENUECAT,
+            platformProductId: event.productId,
+            revenueCatEventId: event.eventId,
+            revenueCatTransactionId: event.transactionId,
+            amount: event.amount ?? storeProduct.tokenPackage.price,
+            currency: event.currency ?? storeProduct.tokenPackage.currency,
+            status: PaymentStatus.COMPLETED,
+          },
+          include: paymentInclude,
+        });
+
+        await this.ensureWallet(user.id, tx);
+        const wallet = await tx.userTokenBalance.update({
+          where: { userId: user.id },
+          data: {
+            balance: { increment: storeProduct.tokenPackage.tokenCount },
+            version: { increment: 1 },
+          },
+        });
+
+        await tx.tokenTransaction.create({
+          data: {
+            userId: user.id,
+            packageId: storeProduct.tokenPackageId,
+            type: TokenTransactionType.PURCHASE,
+            amount: storeProduct.tokenPackage.tokenCount,
+            balanceAfter: wallet.balance,
+            description: `RevenueCat purchase: ${storeProduct.tokenPackage.title}`,
+            externalRef: event.eventId,
+          },
+        });
+
+        return createdPayment;
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        const duplicatePayment = await this.prisma.payment.findFirst({
+          where: {
+            OR: [
+              { revenueCatEventId: event.eventId },
+              ...(event.transactionId ? [{ revenueCatTransactionId: event.transactionId }] : []),
+            ],
+          },
+          include: paymentInclude,
+        });
+
+        if (duplicatePayment) {
+          this.logger.log(
+            `RevenueCat duplicate detected yes transaction_id=${event.transactionId ?? 'missing'} event_id=${event.eventId} payment_id=${duplicatePayment.id} status=${duplicatePayment.status}`,
+          );
+          return {
+            duplicate: true,
+            granted: duplicatePayment.status === PaymentStatus.COMPLETED || duplicatePayment.status === PaymentStatus.PAID,
+            paymentId: duplicatePayment.id,
+          };
+        }
       }
 
-      const createdPayment = await tx.payment.create({
-        data: {
-          userId: user.id,
-          tokenPackageId: storeProduct.tokenPackageId,
-          provider: PaymentProvider.REVENUECAT,
-          platform: StorePlatform.REVENUECAT,
-          platformProductId: event.productId,
-          revenueCatEventId: event.eventId,
-          revenueCatTransactionId: event.transactionId,
-          amount: event.amount ?? storeProduct.tokenPackage.price,
-          currency: event.currency ?? storeProduct.tokenPackage.currency,
-          status: PaymentStatus.COMPLETED,
-        },
-        include: paymentInclude,
-      });
+      throw error;
+    }
 
-      await this.ensureWallet(user.id, tx);
-      const wallet = await tx.userTokenBalance.update({
-        where: { userId: user.id },
-        data: {
-          balance: { increment: storeProduct.tokenPackage.tokenCount },
-          version: { increment: 1 },
-        },
-      });
-
-      await tx.tokenTransaction.create({
-        data: {
-          userId: user.id,
-          packageId: storeProduct.tokenPackageId,
-          type: TokenTransactionType.PURCHASE,
-          amount: storeProduct.tokenPackage.tokenCount,
-          balanceAfter: wallet.balance,
-          description: `RevenueCat purchase: ${storeProduct.tokenPackage.title}`,
-          externalRef: event.eventId,
-        },
-      });
-
-      return createdPayment;
-    });
+    if (payment.status === PaymentStatus.COMPLETED) {
+      this.logger.log(
+        `RevenueCat credited tokens user_id=${user.id} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} amount=${storeProduct.tokenPackage.tokenCount} payment_id=${payment.id}`,
+      );
+    } else {
+      this.logger.log(
+        `RevenueCat duplicate transaction returned existing payment user_id=${user.id} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} payment_id=${payment.id} status=${payment.status}`,
+      );
+    }
 
     return {
       granted: payment.status === PaymentStatus.COMPLETED,
@@ -263,19 +328,25 @@ export class PaymentsService {
   }
 
   private extractRevenueCatEvent(payload: RevenueCatWebhookPayload): RevenueCatEvent | null {
-    const event = payload.event ?? (payload as Record<string, unknown>);
+    const event = this.objectValue(payload.event) ?? (payload as Record<string, unknown>);
+    const transactionId =
+      this.stringValue(event.transaction_id) ??
+      this.stringValue(event.store_transaction_id) ??
+      this.stringValue(event.original_transaction_id) ??
+      this.stringValue(event.transactionId) ??
+      this.stringValue(event.originalTransactionId);
     const eventId =
       this.stringValue(event.id) ??
       this.stringValue(event.event_id) ??
       this.stringValue(event.eventId) ??
-      this.stringValue(event.transaction_id) ??
-      this.stringValue(event.store_transaction_id);
+      transactionId;
     const type = this.stringValue(event.type);
     const appUserId =
-      this.uuidValue(event.app_user_id) ??
-      this.uuidValue(event.appUserId) ??
-      this.uuidValue(event.original_app_user_id) ??
-      this.uuidValue(event.originalAppUserId);
+      this.stringValue(event.app_user_id) ??
+      this.stringValue(event.appUserId) ??
+      this.stringValue(event.original_app_user_id) ??
+      this.stringValue(event.originalAppUserId) ??
+      this.firstStringValue(event.aliases);
     const productId =
       this.stringValue(event.product_id) ??
       this.stringValue(event.productId) ??
@@ -283,6 +354,9 @@ export class PaymentsService {
       this.stringValue(event.productIdentifier);
 
     if (!eventId || !type || !appUserId || !productId) {
+      this.logger.warn(
+        `Malformed RevenueCat event missing required fields has_event=${Boolean(payload.event)} event_id_present=${Boolean(eventId)} type_present=${Boolean(type)} app_user_id_present=${Boolean(appUserId)} product_id_present=${Boolean(productId)} keys=${Object.keys(event).join(',')}`,
+      );
       return null;
     }
 
@@ -293,13 +367,76 @@ export class PaymentsService {
       type,
       appUserId,
       productId,
-      transactionId:
-        this.stringValue(event.transaction_id) ??
-        this.stringValue(event.store_transaction_id) ??
-        this.stringValue(event.original_transaction_id),
+      transactionId,
       amount,
       currency: this.currencyValue(event.currency ?? event.currency_code ?? event.currencyCode),
+      store: this.stringValue(event.store),
+      environment: this.stringValue(event.environment),
     };
+  }
+
+  private async resolveRevenueCatStoreProduct(productId: string) {
+    const existingStoreProduct = await this.prisma.storeProduct.findFirst({
+      where: {
+        platformProductId: productId,
+        platform: StorePlatform.REVENUECAT,
+        isActive: true,
+        tokenPackage: { isActive: true },
+      },
+      include: { tokenPackage: true },
+    });
+
+    if (existingStoreProduct) {
+      this.logger.log(
+        `RevenueCat product mapping found product_id=${productId} token_package_id=${existingStoreProduct.tokenPackageId} tokens=${existingStoreProduct.tokenPackage.tokenCount}`,
+      );
+      return existingStoreProduct;
+    }
+
+    const tokenCount = REVENUECAT_PRODUCT_TOKEN_COUNTS[productId];
+
+    if (!tokenCount) {
+      return null;
+    }
+
+    const tokenPackage = await this.prisma.tokenPackage.findFirst({
+      where: {
+        tokenCount,
+        isActive: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!tokenPackage) {
+      this.logger.warn(`RevenueCat product mapping missing token package product_id=${productId} expected_tokens=${tokenCount}.`);
+      return null;
+    }
+
+    const storeProduct = await this.prisma.storeProduct.upsert({
+      where: {
+        platform_platformProductId: {
+          platform: StorePlatform.REVENUECAT,
+          platformProductId: productId,
+        },
+      },
+      create: {
+        platform: StorePlatform.REVENUECAT,
+        platformProductId: productId,
+        tokenPackageId: tokenPackage.id,
+        isActive: true,
+      },
+      update: {
+        tokenPackageId: tokenPackage.id,
+        isActive: true,
+      },
+      include: { tokenPackage: true },
+    });
+
+    this.logger.log(
+      `RevenueCat product mapping repaired product_id=${productId} token_package_id=${storeProduct.tokenPackageId} tokens=${storeProduct.tokenPackage.tokenCount}`,
+    );
+
+    return storeProduct;
   }
 
   private isRevenueCatConfigured() {
@@ -314,11 +451,32 @@ export class PaymentsService {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
 
-  private uuidValue(value: unknown) {
-    const text = this.stringValue(value);
-    return text && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(text)
-      ? text
-      : undefined;
+  private objectValue(value: unknown) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  }
+
+  private firstStringValue(value: unknown) {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    for (const item of value) {
+      const text = this.stringValue(item);
+
+      if (text) {
+        return text;
+      }
+    }
+
+    return undefined;
+  }
+
+  private isUuidValue(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+  }
+
+  private isUniqueConstraintError(error: unknown) {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
   }
 
   private decimalValue(value: unknown) {

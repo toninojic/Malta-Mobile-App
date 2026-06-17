@@ -29,7 +29,8 @@
     "smoke:qa-fixes": "node scripts/qa-fixes-smoke.mjs",
     "smoke:flow-refactor": "node scripts/flow-refactor-smoke.mjs",
     "smoke:ux-consolidation": "node scripts/ux-consolidation-smoke.mjs",
-    "smoke:final-flow-fixes": "node scripts/final-flow-fixes-smoke.mjs"
+    "smoke:final-flow-fixes": "node scripts/final-flow-fixes-smoke.mjs",
+    "smoke:revenuecat-webhook": "node scripts/revenuecat-webhook-smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",
