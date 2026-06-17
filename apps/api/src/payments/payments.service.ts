@@ -7,7 +7,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentProvider, PaymentStatus, Prisma, StorePlatform, TokenTransactionType, UserRole } from '@prisma/client';
+import {
+  PaymentProvider,
+  PaymentStatus,
+  Prisma,
+  StorePlatform,
+  TokenTransactionType,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { PrismaService } from '../prisma/prisma.service';
@@ -23,6 +31,7 @@ const REVENUECAT_PRODUCT_TOKEN_COUNTS: Record<string, number> = {
   maltapro_tokens_20: 20,
   maltapro_tokens_50: 50,
 };
+const REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION = '2026-06-17-user-lookup-v2';
 
 type PaymentWithPackage = Prisma.PaymentGetPayload<{ include: typeof paymentInclude }>;
 
@@ -34,12 +43,39 @@ type RevenueCatEvent = {
   eventId: string;
   type: string;
   appUserId: string;
+  originalAppUserId?: string;
+  aliases: string[];
   productId: string;
   transactionId?: string;
   amount?: Prisma.Decimal;
   currency?: string;
   store?: string;
   environment?: string;
+  subscriberEmail?: string;
+};
+
+type RevenueCatWebhookUser = {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+};
+
+type RevenueCatUserLookupDiagnostics = {
+  diagnosticVersion: string;
+  appUserId: string;
+  originalAppUserId?: string;
+  aliases: string[];
+  subscriberEmail?: string;
+  queryUsed: string[];
+  userFound: boolean;
+  matchedBy?: string;
+  matchedUserId?: string;
+  matchedUserEmail?: string;
+  productId: string;
+  eventType: string;
+  currentDatabase?: string;
+  currentSchema?: string;
 };
 
 function parseBooleanEnv(value: string | undefined) {
@@ -118,22 +154,33 @@ export class PaymentsService {
 
     if (!event) {
       this.logger.warn('Ignored malformed RevenueCat webhook payload.');
-      return { received: true, ignored: true, reason: 'MALFORMED_EVENT' };
+      return {
+        received: true,
+        ignored: true,
+        reason: 'MALFORMED_EVENT',
+        diagnosticVersion: REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION,
+      };
     }
 
     this.logger.log(
-      `RevenueCat webhook event received type=${event.type} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} app_user_id=${event.appUserId} store=${event.store ?? 'unknown'} environment=${event.environment ?? 'unknown'}`,
+      `RevenueCat webhook event received diagnostic_version=${REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION} type=${event.type} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} app_user_id=${event.appUserId} original_app_user_id=${event.originalAppUserId ?? 'missing'} aliases=${event.aliases.join('|') || 'none'} subscriber_email_present=${Boolean(event.subscriberEmail)} store=${event.store ?? 'unknown'} environment=${event.environment ?? 'unknown'}`,
     );
 
     if (!REVENUECAT_PURCHASE_EVENT_TYPES.has(event.type)) {
       this.logger.log(
         `RevenueCat webhook ignored unsupported event type=${event.type} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'} app_user_id=${event.appUserId}`,
       );
-      return { received: true, ignored: true, reason: 'UNSUPPORTED_EVENT_TYPE', eventType: event.type };
+      return {
+        received: true,
+        ignored: true,
+        reason: 'UNSUPPORTED_EVENT_TYPE',
+        eventType: event.type,
+        diagnosticVersion: REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION,
+      };
     }
 
     const result = await this.processRevenueCatPurchase(event);
-    return { received: true, ...result };
+    return { received: true, diagnosticVersion: REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION, ...result };
   }
 
   private async processRevenueCatPurchase(event: RevenueCatEvent) {
@@ -161,25 +208,21 @@ export class PaymentsService {
       `RevenueCat duplicate detected no transaction_id=${event.transactionId ?? 'missing'} event_id=${event.eventId}`,
     );
 
-    if (!this.isUuidValue(event.appUserId)) {
-      this.logger.warn(
-        `Ignored RevenueCat purchase for app_user_id that is not a backend UUID app_user_id=${event.appUserId} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}.`,
-      );
-      return { ignored: true, reason: 'UNKNOWN_USER' };
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: event.appUserId },
-      select: { id: true, role: true, status: true },
-    });
+    const userLookup = await this.resolveRevenueCatUser(event);
+    const user = userLookup.user;
+    this.logger.log(
+      `RevenueCat user lookup diagnostics diagnostic_version=${userLookup.diagnostics.diagnosticVersion} app_user_id=${userLookup.diagnostics.appUserId} user_found=${userLookup.diagnostics.userFound} matched_by=${userLookup.diagnostics.matchedBy ?? 'none'} product_id=${userLookup.diagnostics.productId} event_type=${userLookup.diagnostics.eventType} query_used=${userLookup.diagnostics.queryUsed.join(' -> ') || 'none'} current_database=${userLookup.diagnostics.currentDatabase ?? 'unknown'} current_schema=${userLookup.diagnostics.currentSchema ?? 'unknown'}`,
+    );
 
     if (!user) {
-      this.logger.warn(`Ignored RevenueCat purchase for unknown app_user_id=${event.appUserId} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}.`);
-      return { ignored: true, reason: 'UNKNOWN_USER' };
+      this.logger.warn(
+        `RevenueCat user lookup failed diagnostic_version=${userLookup.diagnostics.diagnosticVersion} app_user_id=${event.appUserId} original_app_user_id=${event.originalAppUserId ?? 'missing'} product_id=${event.productId} event_type=${event.type} query_used=${userLookup.diagnostics.queryUsed.join(' -> ')} current_database=${userLookup.diagnostics.currentDatabase ?? 'unknown'} current_schema=${userLookup.diagnostics.currentSchema ?? 'unknown'}`,
+      );
+      return { ignored: true, reason: 'UNKNOWN_USER', diagnostics: userLookup.diagnostics };
     }
 
     this.logger.log(
-      `RevenueCat matched user yes user_id=${user.id} role=${user.role} status=${user.status} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}`,
+      `RevenueCat matched user yes diagnostic_version=${userLookup.diagnostics.diagnosticVersion} matched_by=${userLookup.diagnostics.matchedBy ?? 'unknown'} user_id=${user.id} email=${user.email} role=${user.role} status=${user.status} product_id=${event.productId} transaction_id=${event.transactionId ?? 'missing'}`,
     );
 
     if (user.role !== UserRole.CONTRACTOR) {
@@ -341,12 +384,15 @@ export class PaymentsService {
       this.stringValue(event.eventId) ??
       transactionId;
     const type = this.stringValue(event.type);
+    const aliases = this.stringArrayValue(event.aliases);
+    const originalAppUserId =
+      this.stringValue(event.original_app_user_id) ??
+      this.stringValue(event.originalAppUserId);
     const appUserId =
       this.stringValue(event.app_user_id) ??
       this.stringValue(event.appUserId) ??
-      this.stringValue(event.original_app_user_id) ??
-      this.stringValue(event.originalAppUserId) ??
-      this.firstStringValue(event.aliases);
+      originalAppUserId ??
+      aliases[0];
     const productId =
       this.stringValue(event.product_id) ??
       this.stringValue(event.productId) ??
@@ -366,13 +412,121 @@ export class PaymentsService {
       eventId,
       type,
       appUserId,
+      originalAppUserId,
+      aliases,
       productId,
       transactionId,
       amount,
       currency: this.currencyValue(event.currency ?? event.currency_code ?? event.currencyCode),
       store: this.stringValue(event.store),
       environment: this.stringValue(event.environment),
+      subscriberEmail: this.revenueCatSubscriberEmail(event),
     };
+  }
+
+  private async resolveRevenueCatUser(event: RevenueCatEvent) {
+    const diagnostics: RevenueCatUserLookupDiagnostics = {
+      diagnosticVersion: REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION,
+      appUserId: event.appUserId,
+      originalAppUserId: event.originalAppUserId,
+      aliases: event.aliases,
+      subscriberEmail: event.subscriberEmail,
+      queryUsed: [],
+      userFound: false,
+      productId: event.productId,
+      eventType: event.type,
+    };
+
+    const databaseContext = await this.databaseContext();
+    diagnostics.currentDatabase = databaseContext.currentDatabase;
+    diagnostics.currentSchema = databaseContext.currentSchema;
+
+    const candidateIds = [event.appUserId, event.originalAppUserId, ...event.aliases]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const uniqueCandidateIds = [...new Set(candidateIds)];
+
+    for (const candidateId of uniqueCandidateIds) {
+      if (!this.isUuidValue(candidateId)) {
+        diagnostics.queryUsed.push(`skipped non-uuid candidate ${candidateId}`);
+        continue;
+      }
+
+      diagnostics.queryUsed.push(`Prisma User.id = ${candidateId}`);
+      const prismaUser = await this.prisma.user.findUnique({
+        where: { id: candidateId },
+        select: { id: true, email: true, role: true, status: true },
+      });
+
+      if (prismaUser) {
+        this.markUserFound(diagnostics, 'prisma_user_id', prismaUser);
+        return { user: prismaUser, diagnostics };
+      }
+
+      diagnostics.queryUsed.push(`SQL "User"."id" = ${candidateId}::uuid`);
+      const rawUser = await this.findUserByIdRaw(candidateId);
+
+      if (rawUser) {
+        this.markUserFound(diagnostics, 'raw_sql_user_id', rawUser);
+        return { user: rawUser, diagnostics };
+      }
+    }
+
+    if (event.subscriberEmail) {
+      diagnostics.queryUsed.push(`Prisma User.email = ${event.subscriberEmail}`);
+      const emailUser = await this.prisma.user.findUnique({
+        where: { email: event.subscriberEmail },
+        select: { id: true, email: true, role: true, status: true },
+      });
+
+      if (emailUser) {
+        this.markUserFound(diagnostics, 'subscriber_email', emailUser);
+        return { user: emailUser, diagnostics };
+      }
+    }
+
+    return { user: null, diagnostics };
+  }
+
+  private markUserFound(
+    diagnostics: RevenueCatUserLookupDiagnostics,
+    matchedBy: string,
+    user: RevenueCatWebhookUser,
+  ) {
+    diagnostics.userFound = true;
+    diagnostics.matchedBy = matchedBy;
+    diagnostics.matchedUserId = user.id;
+    diagnostics.matchedUserEmail = user.email;
+  }
+
+  private async findUserByIdRaw(userId: string) {
+    const users = await this.prisma.$queryRaw<RevenueCatWebhookUser[]>`
+      SELECT
+        "id"::text AS "id",
+        "email",
+        "role"::text AS "role",
+        "status"::text AS "status"
+      FROM "User"
+      WHERE "id" = ${userId}::uuid
+      LIMIT 1
+    `;
+
+    return users[0] ?? null;
+  }
+
+  private async databaseContext(): Promise<{ currentDatabase?: string; currentSchema?: string }> {
+    try {
+      const rows = await this.prisma.$queryRaw<Array<{ currentDatabase: string; currentSchema: string }>>`
+        SELECT
+          current_database() AS "currentDatabase",
+          current_schema() AS "currentSchema"
+      `;
+
+      return rows[0] ?? {};
+    } catch {
+      return {};
+    }
   }
 
   private async resolveRevenueCatStoreProduct(productId: string) {
@@ -455,20 +609,52 @@ export class PaymentsService {
     return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
   }
 
-  private firstStringValue(value: unknown) {
+  private stringArrayValue(value: unknown) {
     if (!Array.isArray(value)) {
-      return undefined;
+      return [];
     }
+
+    const values: string[] = [];
 
     for (const item of value) {
       const text = this.stringValue(item);
 
       if (text) {
-        return text;
+        values.push(text);
       }
     }
 
-    return undefined;
+    return values;
+  }
+
+  private revenueCatSubscriberEmail(event: Record<string, unknown>) {
+    const directEmail =
+      this.stringValue(event.email) ??
+      this.stringValue(event.subscriber_email) ??
+      this.stringValue(event.subscriberEmail) ??
+      this.stringValue(event.customer_email) ??
+      this.stringValue(event.customerEmail);
+
+    if (directEmail) {
+      return this.emailValue(directEmail);
+    }
+
+    const subscriberAttributes =
+      this.objectValue(event.subscriber_attributes) ??
+      this.objectValue(event.subscriberAttributes);
+    const emailAttribute =
+      this.objectValue(subscriberAttributes?.$email) ??
+      this.objectValue(subscriberAttributes?.email);
+    const attributeEmail =
+      this.stringValue(emailAttribute?.value) ??
+      this.stringValue(emailAttribute);
+
+    return attributeEmail ? this.emailValue(attributeEmail) : undefined;
+  }
+
+  private emailValue(value: string) {
+    const email = value.trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
   }
 
   private isUuidValue(value: string) {

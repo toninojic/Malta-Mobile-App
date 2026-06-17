@@ -32,6 +32,27 @@ const EXACT_REVENUECAT_PAYLOAD = {
     currency: 'RSD',
   },
 };
+const EMAIL_FALLBACK_REVENUECAT_PAYLOAD = {
+  api_version: '1.0',
+  event: {
+    app_user_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    original_app_user_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    product_id: 'maltapro_tokens_5',
+    transaction_id: 'GPA.EMAIL-FALLBACK-9532-13423',
+    original_transaction_id: 'GPA.EMAIL-FALLBACK-9532-13423',
+    type: 'NON_RENEWING_PURCHASE',
+    store: 'PLAY_STORE',
+    environment: 'PRODUCTION',
+    price: 0.98,
+    price_in_purchased_currency: 99,
+    currency: 'RSD',
+    subscriber_attributes: {
+      $email: {
+        value: 'revenuecat-smoke@malta.test',
+      },
+    },
+  },
+};
 
 function assert(condition, message) {
   if (!condition) {
@@ -107,21 +128,27 @@ async function ensureRevenueCatProducts() {
 
 async function prepareExactPayloadUser() {
   const userId = EXACT_REVENUECAT_PAYLOAD.event.app_user_id;
-  const transactionId = EXACT_REVENUECAT_PAYLOAD.event.transaction_id;
+  const transactionIds = [
+    EXACT_REVENUECAT_PAYLOAD.event.transaction_id,
+    EMAIL_FALLBACK_REVENUECAT_PAYLOAD.event.transaction_id,
+  ];
 
   await prisma.payment.deleteMany({
     where: {
-      OR: [{ revenueCatEventId: transactionId }, { revenueCatTransactionId: transactionId }],
+      OR: [
+        { revenueCatEventId: { in: transactionIds } },
+        { revenueCatTransactionId: { in: transactionIds } },
+      ],
     },
   });
   await prisma.tokenTransaction.deleteMany({
     where: {
       userId,
-      externalRef: transactionId,
+      externalRef: { in: transactionIds },
     },
   });
 
-  await prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { id: userId },
     create: {
       id: userId,
@@ -134,7 +161,10 @@ async function prepareExactPayloadUser() {
       role: 'CONTRACTOR',
       status: 'ACTIVE',
     },
+    select: { email: true },
   });
+
+  EMAIL_FALLBACK_REVENUECAT_PAYLOAD.event.subscriber_attributes.$email.value = user.email;
 
   await prisma.userTokenBalance.upsert({
     where: { userId },
@@ -186,6 +216,20 @@ async function main() {
   assert(payment?.userId === EXACT_REVENUECAT_PAYLOAD.event.app_user_id, 'Payment should be linked to backend User.id.');
   assert(payment?.platformProductId === 'maltapro_tokens_5', 'Payment should store the RevenueCat product id.');
   console.info('OK RevenueCat app_user_id maps to backend User.id and product mapping is stored');
+
+  const beforeFallback = await getBalance();
+  const fallback = await request('/purchases/revenuecat/webhook', {
+    method: 'POST',
+    body: EMAIL_FALLBACK_REVENUECAT_PAYLOAD,
+  });
+  const afterFallback = await getBalance();
+
+  assert(fallback.received === true, 'Email fallback webhook should be received.');
+  assert(fallback.ignored !== true, `Email fallback webhook should not be ignored: ${JSON.stringify(fallback)}`);
+  assert(fallback.granted === true, `Email fallback webhook should grant tokens: ${JSON.stringify(fallback)}`);
+  assert(fallback.tokensGranted === 5, `Email fallback maltapro_tokens_5 should credit 5 tokens: ${JSON.stringify(fallback)}`);
+  assert(afterFallback === beforeFallback + 5, `Email fallback should increase wallet by 5 tokens. Before=${beforeFallback} After=${afterFallback}`);
+  console.info('OK RevenueCat subscriber email fallback credits the matched backend user');
 }
 
 main()
