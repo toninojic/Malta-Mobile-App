@@ -2,12 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { ImagePlus, LogOut, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
+import { useNotificationPreferences, useUpdateNotificationPreferences } from '../../api/notificationHooks';
 import {
   useContractorVerification,
+  useContractorServiceAreas,
+  useContractorServiceCategories,
   usePortfolioImages,
   useRemovePortfolioImage,
+  useUpdateContractorServiceAreas,
+  useUpdateContractorServiceCategories,
   useUploadContractorVerification,
   useUploadPortfolioImages,
 } from '../../api/offerWorkHooks';
@@ -19,10 +24,13 @@ import { Card } from '../../components/Card';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
+import { MALTA_SERVICE_LOCATIONS } from '../../config/maltaLocations';
+import { SERVICE_CATEGORIES, serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
 import { AppearanceMode, useAppearanceStore } from '../../store/appearance.store';
 import { useAuthStore } from '../../store/auth.store';
-import { AuthUser, UserProfile } from '../../types/domain';
+import { deactivateCurrentDevicePushToken } from '../../services/pushNotifications';
+import { AuthUser, NotificationPreferences, UserProfile } from '../../types/domain';
 
 type SelectedAvatar = {
   uri: string;
@@ -31,6 +39,18 @@ type SelectedAvatar = {
   size?: number;
   uploaded: boolean;
 };
+
+type PreferenceToggleKey = keyof Pick<
+  NotificationPreferences,
+  | 'messages'
+  | 'offerUpdates'
+  | 'jobCompletion'
+  | 'reviews'
+  | 'paymentsRefunds'
+  | 'newJobsNearMe'
+  | 'systemAlerts'
+  | 'adminAlerts'
+>;
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -54,6 +74,8 @@ export function ProfileEditScreen() {
   const [tradeCategories, setTradeCategories] = useState('');
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [profileSavedOpen, setProfileSavedOpen] = useState(false);
+  const [serviceAreasExpanded, setServiceAreasExpanded] = useState(false);
+  const [serviceCategoriesExpanded, setServiceCategoriesExpanded] = useState(false);
 
   const query = useQuery({
     queryKey: ['users', 'me'],
@@ -61,6 +83,12 @@ export function ProfileEditScreen() {
   });
   const portfolioQuery = usePortfolioImages(currentUser?.role === 'CONTRACTOR');
   const verificationQuery = useContractorVerification(currentUser?.role === 'CONTRACTOR');
+  const notificationPreferencesQuery = useNotificationPreferences(Boolean(currentUser));
+  const updateNotificationPreferencesMutation = useUpdateNotificationPreferences();
+  const serviceAreasQuery = useContractorServiceAreas(currentUser?.role === 'CONTRACTOR');
+  const serviceCategoriesQuery = useContractorServiceCategories(currentUser?.role === 'CONTRACTOR');
+  const updateServiceAreasMutation = useUpdateContractorServiceAreas();
+  const updateServiceCategoriesMutation = useUpdateContractorServiceCategories();
   const employerRatingQuery = useEmployerRatingSummary(currentUser?.role === 'EMPLOYER' ? currentUser.id : undefined);
   const uploadPortfolioMutation = useUploadPortfolioImages();
   const removePortfolioMutation = useRemovePortfolioImage();
@@ -127,6 +155,7 @@ export function ProfileEditScreen() {
   const logoutMutation = useMutation({
     mutationFn: api.logout,
     onSettled: async () => {
+      await deactivateCurrentDevicePushToken();
       await clearSession();
       queryClient.clear();
     },
@@ -137,6 +166,9 @@ export function ProfileEditScreen() {
   const avatarPreviewUri = avatarImage?.uri ?? avatarUrl;
   const isContractor = role === 'CONTRACTOR';
   const isEmployer = role === 'EMPLOYER';
+  const selectedLocationKeys = serviceAreasQuery.data?.locations.map((locationItem) => locationItem.locationKey) ?? [];
+  const selectedCategoryKeys =
+    serviceCategoriesQuery.data?.categories.map((item) => `${item.categoryKey}:${item.subcategoryKey ?? ''}`) ?? [];
 
   const pickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -180,6 +212,42 @@ export function ProfileEditScreen() {
       size: asset.fileSize,
       uploaded: false,
     });
+  };
+
+  const updatePreference = (key: PreferenceToggleKey, value: boolean) => {
+    updateNotificationPreferencesMutation.mutate({ [key]: value });
+  };
+
+  const toggleServiceLocation = (locationKey: string) => {
+    const current = new Set(selectedLocationKeys);
+    if (current.has(locationKey)) {
+      current.delete(locationKey);
+    } else {
+      current.add(locationKey);
+    }
+    updateServiceAreasMutation.mutate([...current]);
+  };
+
+  const toggleServiceCategory = (categoryKey: string, subcategoryKey?: string | null) => {
+    const id = `${categoryKey}:${subcategoryKey ?? ''}`;
+    const current = new Set(selectedCategoryKeys);
+    if (current.has(id)) {
+      current.delete(id);
+    } else {
+      current.add(id);
+    }
+    updateServiceCategoriesMutation.mutate(
+      [...current].flatMap((value) => {
+        const [nextCategoryKey, nextSubcategoryKey] = value.split(':');
+        if (!nextCategoryKey) {
+          return [];
+        }
+        return {
+          categoryKey: nextCategoryKey,
+          subcategoryKey: nextSubcategoryKey || null,
+        };
+      }),
+    );
   };
 
   const pickPortfolioImages = async () => {
@@ -272,12 +340,23 @@ export function ProfileEditScreen() {
   return (
     <Screen
       contentTopPadding={44}
-      refreshing={query.isRefetching || portfolioQuery.isRefetching || verificationQuery.isRefetching || employerRatingQuery.isRefetching}
+      refreshing={
+        query.isRefetching ||
+        portfolioQuery.isRefetching ||
+        verificationQuery.isRefetching ||
+        employerRatingQuery.isRefetching ||
+        notificationPreferencesQuery.isRefetching ||
+        serviceAreasQuery.isRefetching ||
+        serviceCategoriesQuery.isRefetching
+      }
       onRefresh={() => {
         void query.refetch();
+        void notificationPreferencesQuery.refetch();
         if (isContractor) {
           void portfolioQuery.refetch();
           void verificationQuery.refetch();
+          void serviceAreasQuery.refetch();
+          void serviceCategoriesQuery.refetch();
         }
         if (isEmployer) {
           void employerRatingQuery.refetch();
@@ -369,6 +448,146 @@ export function ProfileEditScreen() {
           ))}
         </View>
       </Card>
+
+      <Card>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Notification Settings</Text>
+        <View style={styles.preferenceList}>
+          {notificationPreferenceOptions(role).map((option) => (
+            <View key={option.key} style={styles.preferenceRow}>
+              <View style={styles.preferenceText}>
+                <Text style={[styles.preferenceTitle, { color: theme.colors.text }]}>{option.label}</Text>
+                <Text style={[styles.preferenceDescription, { color: theme.colors.textMuted }]}>{option.description}</Text>
+              </View>
+              <Switch
+                value={Boolean(notificationPreferencesQuery.data?.[option.key])}
+                disabled={notificationPreferencesQuery.isLoading || updateNotificationPreferencesMutation.isPending}
+                trackColor={{ false: theme.colors.border, true: theme.colors.success }}
+                thumbColor="#FFFFFF"
+                onValueChange={(value) => updatePreference(option.key, value)}
+              />
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {isContractor ? (
+        <Card>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Service Locations</Text>
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+                Used for nearby job alerts.
+              </Text>
+            </View>
+            <Button
+              title={serviceAreasExpanded ? 'Done' : `${selectedLocationKeys.length} Selected`}
+              variant="secondary"
+              onPress={() => setServiceAreasExpanded((value) => !value)}
+            />
+          </View>
+          {serviceAreasExpanded ? (
+            <View style={styles.choiceGrid}>
+              {MALTA_SERVICE_LOCATIONS.map((locationItem) => {
+                const selected = selectedLocationKeys.includes(locationItem.key);
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={locationItem.key}
+                    onPress={() => toggleServiceLocation(locationItem.key)}
+                    style={[
+                      styles.choicePill,
+                      {
+                        backgroundColor: selected ? theme.colors.success : theme.colors.surfaceMuted,
+                        borderColor: selected ? theme.colors.success : theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.choiceText, { color: selected ? '#FFFFFF' : theme.colors.text }]}>
+                      {locationItem.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {isContractor ? (
+        <Card>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Service Categories</Text>
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+                Match only the work types you want.
+              </Text>
+            </View>
+            <Button
+              title={serviceCategoriesExpanded ? 'Done' : `${selectedCategoryKeys.length} Selected`}
+              variant="secondary"
+              onPress={() => setServiceCategoriesExpanded((value) => !value)}
+            />
+          </View>
+          {serviceCategoriesExpanded ? (
+            <View style={styles.categoryList}>
+              {SERVICE_CATEGORIES.map((category) => (
+                <View key={category.key} style={styles.categoryGroup}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => toggleServiceCategory(category.key)}
+                    style={[
+                      styles.choicePill,
+                      {
+                        alignSelf: 'flex-start',
+                        backgroundColor: selectedCategoryKeys.includes(`${category.key}:`)
+                          ? theme.colors.success
+                          : theme.colors.surfaceMuted,
+                        borderColor: selectedCategoryKeys.includes(`${category.key}:`)
+                          ? theme.colors.success
+                          : theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        {
+                          color: selectedCategoryKeys.includes(`${category.key}:`) ? '#FFFFFF' : theme.colors.text,
+                        },
+                      ]}
+                    >
+                      All {serviceCategoryLabel(category.key)}
+                    </Text>
+                  </Pressable>
+                  <View style={styles.choiceGrid}>
+                    {category.subcategories.map((subcategory) => {
+                      const selected = selectedCategoryKeys.includes(`${category.key}:${subcategory.key}`);
+                      return (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={subcategory.key}
+                          onPress={() => toggleServiceCategory(category.key, subcategory.key)}
+                          style={[
+                            styles.choicePill,
+                            {
+                              backgroundColor: selected ? theme.colors.success : theme.colors.surfaceMuted,
+                              borderColor: selected ? theme.colors.success : theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.choiceText, { color: selected ? '#FFFFFF' : theme.colors.text }]}>
+                            {serviceSubcategoryLabel(category.key, subcategory.key)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
 
       {isContractor ? (
         <Card>
@@ -510,6 +729,48 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
   },
+  preferenceList: {
+    gap: 14,
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  preferenceText: {
+    flex: 1,
+    gap: 3,
+  },
+  preferenceTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  preferenceDescription: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  choiceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  choicePill: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  choiceText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  categoryList: {
+    gap: 14,
+  },
+  categoryGroup: {
+    gap: 8,
+  },
 });
 
 const appearanceOptions: Array<{ label: string; value: AppearanceMode }> = [
@@ -517,6 +778,63 @@ const appearanceOptions: Array<{ label: string; value: AppearanceMode }> = [
   { label: 'Light', value: 'light' },
   { label: 'Dark', value: 'dark' },
 ];
+
+function notificationPreferenceOptions(role: string | undefined): Array<{
+  key: PreferenceToggleKey;
+  label: string;
+  description: string;
+}> {
+  const base: Array<{ key: PreferenceToggleKey; label: string; description: string }> = [
+    {
+      key: 'messages',
+      label: 'Messages',
+      description: 'Chat notifications without private message content.',
+    },
+    {
+      key: 'offerUpdates',
+      label: 'Offer updates',
+      description: 'New offers, selected offers, and contact unlock updates.',
+    },
+    {
+      key: 'jobCompletion',
+      label: 'Job completion',
+      description: 'Completion requests and confirmations.',
+    },
+    {
+      key: 'reviews',
+      label: 'Reviews',
+      description: 'Review received, replied, or moderated alerts.',
+    },
+    {
+      key: 'paymentsRefunds',
+      label: 'Payments and refunds',
+      description: 'Wallet and refund request updates.',
+    },
+    {
+      key: 'systemAlerts',
+      label: 'System alerts',
+      description: 'Account and verification status changes.',
+    },
+  ];
+
+  if (role === 'CONTRACTOR') {
+    base.splice(1, 0, {
+      key: 'newJobsNearMe',
+      label: 'Nearby job alerts',
+      description: 'New jobs matching your service locations and categories.',
+    });
+  }
+
+  if (role === 'ADMIN') {
+    base.push({
+      key: 'adminAlerts',
+      label: 'Admin queue alerts',
+      description: 'Refunds, verification requests, and moderation items.',
+    });
+  }
+
+  return base;
+}
 
 function mimeTypeFromUri(uri: string) {
   const lower = uri.toLowerCase();

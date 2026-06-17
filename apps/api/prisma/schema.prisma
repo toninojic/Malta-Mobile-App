@@ -100,18 +100,24 @@ enum ContractorVerificationStatus {
 enum NotificationType {
   ACCOUNT_SUSPENDED
   ACCOUNT_ACTIVATED
+  NEW_JOB_NEARBY
   NEW_OFFER
   OFFER_SELECTED
   NEW_MESSAGE
   CONTACT_UNLOCKED
   REFUND_APPROVED
   REFUND_DENIED
+  REFUND_REJECTED
   JOB_COMPLETED
   REVIEW_RECEIVED
   REVIEW_REPLIED
   REVIEW_REMOVED
   CONTRACTOR_VERIFICATION_APPROVED
   CONTRACTOR_VERIFICATION_REJECTED
+  SYSTEM_ALERT
+  NEW_REPORT
+  NEW_VERIFICATION_REQUEST
+  NEW_REFUND_REQUEST
 }
 
 enum MessageType {
@@ -135,6 +141,8 @@ model User {
   tokenTransactions TokenTransaction[]
   payments         Payment[]
   notifications    Notification[]
+  pushTokens       PushToken[]
+  notificationPreference NotificationPreference?
   refundRequests   RefundRequest[]    @relation("RefundRequester")
   reviewedRefunds  RefundRequest[]    @relation("RefundReviewer")
   sentMessages      Message[]
@@ -156,12 +164,73 @@ model User {
   ratingSummary      ContractorRatingSummary? @relation("ContractorRatingSummary")
   employerRatingSummary EmployerRatingSummary? @relation("EmployerRatingSummary")
   portfolioImages    ContractorPortfolioImage[] @relation("ContractorPortfolioImages")
+  serviceLocations    ContractorServiceLocation[] @relation("ContractorServiceLocations")
+  serviceCategories   ContractorServiceCategory[] @relation("ContractorServiceCategories")
   verificationRequests ContractorVerification[] @relation("ContractorVerifications")
   reviewedVerifications ContractorVerification[] @relation("VerificationReviews")
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   @@index([role, status])
+}
+
+model PushToken {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expoPushToken String   @unique @db.VarChar(255)
+  platform      String   @db.VarChar(20)
+  deviceId      String?  @db.VarChar(180)
+  deviceName    String?  @db.VarChar(180)
+  isActive      Boolean  @default(true)
+  lastUsedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@index([platform, isActive])
+  @@index([lastUsedAt])
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @unique @db.Uuid
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newJobsNearMe   Boolean  @default(false)
+  offerUpdates    Boolean  @default(true)
+  messages        Boolean  @default(true)
+  reviews         Boolean  @default(true)
+  paymentsRefunds Boolean  @default(true)
+  systemAlerts    Boolean  @default(true)
+  adminAlerts     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ContractorServiceLocation {
+  id            String   @id @default(uuid()) @db.Uuid
+  contractorId  String   @db.Uuid
+  contractor    User     @relation("ContractorServiceLocations", fields: [contractorId], references: [id], onDelete: Cascade)
+  locationKey   String   @db.VarChar(120)
+  locationLabel String   @db.VarChar(160)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([contractorId, locationKey])
+  @@index([locationKey])
+}
+
+model ContractorServiceCategory {
+  id             String   @id @default(uuid()) @db.Uuid
+  contractorId   String   @db.Uuid
+  contractor     User     @relation("ContractorServiceCategories", fields: [contractorId], references: [id], onDelete: Cascade)
+  categoryKey    String   @db.VarChar(100)
+  subcategoryKey String?  @db.VarChar(100)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([contractorId, categoryKey, subcategoryKey])
+  @@index([categoryKey, subcategoryKey])
 }
 
 model UserProfile {

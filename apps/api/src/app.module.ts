@@ -6,6 +6,7 @@ import { ActivityModule } from './activity/activity.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
+import { ContractorsModule } from './contractors/contractors.module';
 import { ContractorVerificationsModule } from './contractor-verifications/contractor-verifications.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { HealthModule } from './health/health.module';
@@ -14,6 +15,7 @@ import { MessagesModule } from './messages/messages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OffersModule } from './offers/offers.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PushModule } from './push/push.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { TokensModule } from './tokens/tokens.module';
@@ -47,8 +49,10 @@ import { StorageResponseInterceptor } from './modules/storage/storage-response.i
     TokensModule,
     ActivityModule,
     ContactsModule,
+    ContractorsModule,
     ContractorVerificationsModule,
     NotificationsModule,
+    PushModule,
     ConversationsModule,
     MessagesModule,
     ReviewsModule,

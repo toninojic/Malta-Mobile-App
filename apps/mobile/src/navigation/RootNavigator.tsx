@@ -4,6 +4,7 @@ import {
   LinkingOptions,
   NavigationContainer,
   Theme,
+  createNavigationContainerRef,
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -11,6 +12,7 @@ import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle,
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../api/activityHooks';
+import { useQueryClient } from '@tanstack/react-query';
 import { useConversations } from '../api/messageHooks';
 import { useUnreadNotificationCount } from '../api/notificationHooks';
 import { useContractorVerification } from '../api/offerWorkHooks';
@@ -18,6 +20,12 @@ import { useContractorRatingSummary, useEmployerRatingSummary } from '../api/rev
 import { AppModal } from '../components/AppModal';
 import { useTheme } from '../design/theme';
 import { configureRevenueCatForCurrentUser } from '../services/revenueCatPurchases';
+import {
+  PushNotificationData,
+  invalidateAfterPush,
+  registerExpoPushTokenForUser,
+  subscribeToPushNotifications,
+} from '../services/pushNotifications';
 import { useActivityUiStore } from '../store/activity.store';
 import { useAppearanceStore } from '../store/appearance.store';
 import { useAuthStore } from '../store/auth.store';
@@ -64,6 +72,7 @@ const JobsStack = createNativeStackNavigator<JobsStackParamList>();
 const ActivityStack = createNativeStackNavigator<ActivityStackParamList>();
 const MessagesStack = createNativeStackNavigator<MessagesStackParamList>();
 const Tabs = createBottomTabNavigator<AppTabParamList>();
+const navigationRef = createNavigationContainerRef<AppTabParamList>();
 
 const linking: LinkingOptions<AppTabParamList> = {
   prefixes: ['maltapro://'],
@@ -83,6 +92,7 @@ const linking: LinkingOptions<AppTabParamList> = {
 
 export function RootNavigator() {
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const hydrated = useAuthStore((state) => state.hydrated);
   const user = useAuthStore((state) => state.user);
   const hydrate = useAuthStore((state) => state.hydrate);
@@ -96,8 +106,25 @@ export function RootNavigator() {
   useEffect(() => {
     if (hydrated && user) {
       void configureRevenueCatForCurrentUser();
+      void registerExpoPushTokenForUser(user);
     }
   }, [hydrated, user?.id]);
+
+  useEffect(() => {
+    if (!hydrated || !user) {
+      return undefined;
+    }
+
+    return subscribeToPushNotifications({
+      onReceive: (data) => {
+        void invalidateAfterPush(queryClient, data);
+      },
+      onOpen: (data) => {
+        void invalidateAfterPush(queryClient, data);
+        navigateFromPush(data);
+      },
+    });
+  }, [hydrated, queryClient, user?.id]);
 
   const navTheme: Theme = {
     ...(theme.isDark ? DarkTheme : DefaultTheme),
@@ -121,10 +148,58 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme} linking={linking}>
+    <NavigationContainer ref={navigationRef} theme={navTheme} linking={linking}>
       {user ? <AuthenticatedTabs /> : <AuthRoutes />}
     </NavigationContainer>
   );
+}
+
+function navigateFromPush(data: PushNotificationData) {
+  if (!navigationRef.isReady()) {
+    return;
+  }
+
+  if (data.conversationId) {
+    navigationRef.navigate('MessagesTab', {
+      screen: 'ConversationThread',
+      params: { conversationId: data.conversationId },
+    });
+    return;
+  }
+
+  if (data.offerId) {
+    navigationRef.navigate('JobsTab', {
+      screen: 'OfferWorkDetails',
+      params: { offerId: data.offerId },
+    });
+    return;
+  }
+
+  if (data.jobId) {
+    navigationRef.navigate('JobsTab', {
+      screen: 'JobDetails',
+      params: { jobId: data.jobId },
+    });
+    return;
+  }
+
+  if (data.reviewId) {
+    navigationRef.navigate('ActivityTab', {
+      screen: 'ReviewDetails',
+      params: { reviewId: data.reviewId },
+    });
+    return;
+  }
+
+  if (data.refundId) {
+    navigationRef.navigate('ActivityTab', {
+      screen: 'AdminRefundDetails',
+      params: { refundId: data.refundId },
+    });
+    return;
+  }
+
+  navigationRef.navigate('AlertsTab');
 }
 
 function AuthRoutes() {

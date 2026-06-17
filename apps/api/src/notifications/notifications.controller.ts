@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe, Patch, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { NotificationsService } from './notifications.service';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 
 @Controller({
   path: 'notifications',
@@ -28,6 +29,16 @@ export class NotificationsController {
   @Throttle({ default: { limit: 180, ttl: 60_000 } })
   unreadCount(@CurrentUser() user: AuthenticatedUser) {
     return this.notificationsService.unreadCount(user);
+  }
+
+  @Get('preferences')
+  preferences(@CurrentUser() user: AuthenticatedUser) {
+    return this.notificationsService.getPreferences(user);
+  }
+
+  @Patch('preferences')
+  updatePreferences(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateNotificationPreferencesDto) {
+    return this.notificationsService.updatePreferences(user, dto);
   }
 
   @Patch(':id/read')

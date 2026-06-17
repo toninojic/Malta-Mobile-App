@@ -143,6 +143,8 @@ export class ContractorVerificationsService {
       include: verificationInclude,
     });
 
+    await this.notifyAdminsNewVerification(verification.id, user.id);
+
     return this.toVerification(verification, false);
   }
 
@@ -168,6 +170,8 @@ export class ContractorVerificationsService {
       },
       include: verificationInclude,
     });
+
+    await this.notifyAdminsNewVerification(verification.id, user.id);
 
     return this.toVerification(verification, false);
   }
@@ -306,6 +310,19 @@ export class ContractorVerificationsService {
       where: { contractorId },
       include: verificationInclude,
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async notifyAdminsNewVerification(verificationId: string, contractorId: string) {
+    await this.notificationsService.createForAdmins({
+      type: NotificationType.NEW_VERIFICATION_REQUEST,
+      title: 'New contractor verification',
+      body: 'A contractor submitted verification documents for review.',
+      data: {
+        verificationId,
+        contractorId,
+        target: 'adminVerifications',
+      },
     });
   }
 

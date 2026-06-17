@@ -8,6 +8,7 @@ import { JobRequest, JobStatus, Prisma, UserRole } from '@prisma/client';
 import { paginationMeta } from '../common/dto/pagination-query.dto';
 import { assertValidServiceCategory } from '../common/service-categories';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BrowseJobsQueryDto } from './dto/browse-jobs-query.dto';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -28,7 +29,10 @@ const jobInclude = {
 
 @Injectable()
 export class JobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async browse(user: AuthenticatedUser, query: BrowseJobsQueryDto) {
     if (user.role !== UserRole.CONTRACTOR && user.role !== UserRole.ADMIN) {
@@ -86,7 +90,7 @@ export class JobsService {
 
     const expiresAt = this.expirationDate();
 
-    return this.prisma.jobRequest.create({
+    const job = await this.prisma.jobRequest.create({
       data: {
         employerId: user.id,
         title: dto.title,
@@ -99,6 +103,10 @@ export class JobsService {
       },
       include: jobInclude,
     });
+
+    void this.notificationsService.notifyNewJobNearby(job);
+
+    return job;
   }
 
   async findMine(user: AuthenticatedUser) {

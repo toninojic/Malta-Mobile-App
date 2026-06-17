@@ -302,14 +302,32 @@ export class TokensService {
     }
 
     try {
-      const refund = await this.prisma.refundRequest.create({
-        data: {
-          userId: user.id,
-          tokenTransactionId: transaction.id,
-          amount: transaction.amount,
-          reason: dto.reason,
-        },
-        include: refundInclude,
+      const refund = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.refundRequest.create({
+          data: {
+            userId: user.id,
+            tokenTransactionId: transaction.id,
+            amount: transaction.amount,
+            reason: dto.reason,
+          },
+          include: refundInclude,
+        });
+
+        await this.notificationsService.createForAdmins(
+          {
+            type: NotificationType.NEW_REFUND_REQUEST,
+            title: 'New refund request',
+            body: 'A contractor requested a token refund.',
+            data: {
+              refundRequestId: created.id,
+              userId: user.id,
+              target: 'adminRefunds',
+            },
+          },
+          tx,
+        );
+
+        return created;
       });
 
       return this.toRefund(refund);

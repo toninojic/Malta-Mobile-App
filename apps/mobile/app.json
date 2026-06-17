@@ -23,7 +23,8 @@
       "package": "mt.marketplace.craftsman",
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "com.android.vending.BILLING"
+        "com.android.vending.BILLING",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -32,7 +33,13 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-image-picker"
+      "expo-image-picker",
+      [
+        "expo-notifications",
+        {
+          "color": "#ED3A35"
+        }
+      ]
     ],
     "extra": {
       "apiUrl": "https://maltapro-api.onrender.com/api/v1",

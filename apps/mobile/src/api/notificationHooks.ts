@@ -66,3 +66,25 @@ export function useMarkAllNotificationsRead() {
     },
   });
 }
+
+export function useNotificationPreferences(enabled = true) {
+  return useQuery({
+    queryKey: ['notifications', 'preferences'],
+    queryFn: api.notificationPreferences,
+    enabled,
+  });
+}
+
+export function useUpdateNotificationPreferences() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: api.updateNotificationPreferences,
+    onSuccess: async () => {
+      await invalidateQueryKeys(queryClient, [
+        ['notifications', 'preferences'],
+        ['notifications', 'unread-count'],
+      ]);
+    },
+  });
+}

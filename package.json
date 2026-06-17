@@ -8,6 +8,8 @@
   ],
   "scripts": {
     "api:dev": "npm run start:dev --workspace @malta-marketplace/api",
+    "eas": "node scripts/eas-no-deprecation.mjs",
+    "eas:project:info": "node scripts/eas-no-deprecation.mjs project:info",
     "mobile:start": "npm run start --workspace @malta-marketplace/mobile",
     "mobile:api-url:set": "npm run api-url:set --workspace @malta-marketplace/mobile --",
     "mobile:api-url:check": "npm run api-url:check --workspace @malta-marketplace/mobile",
@@ -21,5 +23,18 @@
   "dependencies": {
     "react-dom": "19.1.0",
     "react-native-web": "^0.21.0"
+  },
+  "overrides": {
+    "body-parser": "1.20.5",
+    "express": "4.22.2",
+    "ajv": "8.20.0",
+    "file-type": "22.0.1",
+    "js-yaml": "4.2.0",
+    "lodash": "4.18.1",
+    "multer": "2.1.1",
+    "picomatch": "4.0.4",
+    "postcss": "8.5.15",
+    "qs": "6.15.2",
+    "webpack": "5.107.2"
   }
 }

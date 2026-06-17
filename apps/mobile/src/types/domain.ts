@@ -29,15 +29,21 @@ export type NotificationType =
   | 'NEW_OFFER'
   | 'OFFER_SELECTED'
   | 'NEW_MESSAGE'
+  | 'NEW_JOB_NEARBY'
   | 'CONTACT_UNLOCKED'
   | 'REFUND_APPROVED'
   | 'REFUND_DENIED'
+  | 'REFUND_REJECTED'
   | 'JOB_COMPLETED'
   | 'REVIEW_RECEIVED'
   | 'REVIEW_REPLIED'
   | 'REVIEW_REMOVED'
   | 'CONTRACTOR_VERIFICATION_APPROVED'
-  | 'CONTRACTOR_VERIFICATION_REJECTED';
+  | 'CONTRACTOR_VERIFICATION_REJECTED'
+  | 'SYSTEM_ALERT'
+  | 'NEW_REPORT'
+  | 'NEW_VERIFICATION_REQUEST'
+  | 'NEW_REFUND_REQUEST';
 
 export type UserProfile = {
   id: string;
@@ -506,6 +512,68 @@ export type InAppNotification = {
   isRead: boolean;
   readAt?: string | null;
   createdAt: string;
+};
+
+export type PushTokenPlatform = 'ios' | 'android' | 'web' | 'unknown';
+
+export type PushToken = {
+  id: string;
+  userId: string;
+  expoPushToken: string;
+  platform: PushTokenPlatform;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  isActive: boolean;
+  lastUsedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NotificationPreferences = {
+  id?: string;
+  userId?: string;
+  messages: boolean;
+  offerUpdates: boolean;
+  jobCompletion: boolean;
+  reviews: boolean;
+  paymentsRefunds: boolean;
+  newJobsNearMe: boolean;
+  systemAlerts: boolean;
+  adminAlerts: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ContractorServiceLocation = {
+  id: string;
+  contractorId: string;
+  locationKey: string;
+  locationLabel: string;
+  createdAt: string;
+};
+
+export type ServiceLocationOption = {
+  key: string;
+  label: string;
+};
+
+export type ContractorServiceAreasResponse = {
+  availableLocations: ServiceLocationOption[];
+  locations: ContractorServiceLocation[];
+};
+
+export type ContractorServiceCategory = {
+  id: string;
+  contractorId: string;
+  categoryKey: string;
+  categoryLabel: string;
+  subcategoryKey?: string | null;
+  subcategoryLabel?: string | null;
+  createdAt: string;
+};
+
+export type ContractorServiceCategoriesResponse = {
+  categories: ContractorServiceCategory[];
 };
 
 export type OfferWorkDetails = {

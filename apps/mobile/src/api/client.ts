@@ -27,9 +27,13 @@ import {
   PaginatedResponse,
   Payment,
   PaymentConfig,
+  PushToken,
   RefundRequest,
   RefundStatus,
   Review,
+  ContractorServiceAreasResponse,
+  ContractorServiceCategoriesResponse,
+  NotificationPreferences,
   TokenBalance,
   TokenPackage,
   TokenTransaction,
@@ -664,6 +668,34 @@ export const api = {
       method: 'PATCH',
     });
   },
+  notificationPreferences() {
+    return request<NotificationPreferences>('/notifications/preferences');
+  },
+  updateNotificationPreferences(input: Partial<NotificationPreferences>) {
+    return request<NotificationPreferences>('/notifications/preferences', {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+  registerPushToken(input: {
+    expoPushToken: string;
+    platform: 'ios' | 'android' | 'web' | 'unknown';
+    deviceId?: string;
+    deviceName?: string;
+  }) {
+    return request<PushToken>('/push-tokens', {
+      method: 'POST',
+      body: input,
+    });
+  },
+  pushTokens() {
+    return request<PushToken[]>('/push-tokens/mine');
+  },
+  deactivatePushToken(id: string) {
+    return request<{ success: true }>(`/push-tokens/${id}`, {
+      method: 'DELETE',
+    });
+  },
   adminNotifications(input: { page?: number; limit?: number } = {}) {
     return request<PaginatedResponse<InAppNotification>>(
       `/admin/notifications${queryString({ page: input.page, limit: input.limit })}`,
@@ -746,6 +778,26 @@ export const api = {
   },
   portfolioImages() {
     return request<ContractorPortfolioImage[]>('/users/me/portfolio-images');
+  },
+  contractorServiceAreas() {
+    return request<ContractorServiceAreasResponse>('/contractors/me/service-areas');
+  },
+  updateContractorServiceAreas(locations: string[]) {
+    return request<ContractorServiceAreasResponse>('/contractors/me/service-areas', {
+      method: 'PATCH',
+      body: { locations },
+    });
+  },
+  contractorServiceCategories() {
+    return request<ContractorServiceCategoriesResponse>('/contractors/me/service-categories');
+  },
+  updateContractorServiceCategories(
+    categories: Array<{ categoryKey: string; subcategoryKey?: string | null }>,
+  ) {
+    return request<ContractorServiceCategoriesResponse>('/contractors/me/service-categories', {
+      method: 'PATCH',
+      body: { categories },
+    });
   },
   async uploadPortfolioImages(images: UploadableFile[]) {
     const uploaded = await Promise.all(images.map((image) => uploadFileToS3('portfolio', image)));

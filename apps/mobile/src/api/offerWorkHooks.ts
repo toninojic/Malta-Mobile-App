@@ -79,6 +79,44 @@ export function useAdminContractorVerifications(enabled = true) {
   });
 }
 
+export function useContractorServiceAreas(enabled = true) {
+  return useQuery({
+    queryKey: ['contractors', 'service-areas', 'mine'],
+    queryFn: api.contractorServiceAreas,
+    enabled,
+  });
+}
+
+export function useUpdateContractorServiceAreas() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: api.updateContractorServiceAreas,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['contractors', 'service-areas'] });
+    },
+  });
+}
+
+export function useContractorServiceCategories(enabled = true) {
+  return useQuery({
+    queryKey: ['contractors', 'service-categories', 'mine'],
+    queryFn: api.contractorServiceCategories,
+    enabled,
+  });
+}
+
+export function useUpdateContractorServiceCategories() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: api.updateContractorServiceCategories,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['contractors', 'service-categories'] });
+    },
+  });
+}
+
 export function useApproveContractorVerification() {
   const queryClient = useQueryClient();
 
