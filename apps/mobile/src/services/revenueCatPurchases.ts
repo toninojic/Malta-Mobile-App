@@ -20,14 +20,74 @@ export type RevenueCatPurchaseResult = {
   processing: true;
 };
 
+export type RevenueCatDiagnostics = {
+  platform: string;
+  buildProfile: string;
+  apiKeyPresent: boolean;
+  androidApiKeyPresent: boolean;
+  androidApiKeyLooksLikeGoogle: boolean;
+  mockPurchasesAllowed: boolean;
+  appUserIdPresent: boolean;
+  appUserId: string | null;
+  configureCalled: boolean;
+  configuredAppUserId: string | null;
+  customerInfoSucceeded: boolean | null;
+  customerInfoAppUserId: string | null;
+  offeringsSucceeded: boolean | null;
+  defaultOfferingPresent: boolean | null;
+  currentOfferingIdentifier: string | null;
+  offeringCount: number | null;
+  lastEvent: string;
+  lastError: string | null;
+  updatedAt: string | null;
+};
+
 let configuredUserId: string | null = null;
 let offeringsCheckedForUserId: string | null = null;
+let customerInfoCheckedForUserId: string | null = null;
+
+let revenueCatDiagnostics: RevenueCatDiagnostics = {
+  platform: Platform.OS,
+  buildProfile: purchaseConfig.buildProfile ?? 'unknown',
+  apiKeyPresent: Boolean(purchaseConfig.activeApiKey),
+  androidApiKeyPresent: Boolean(purchaseConfig.androidApiKey),
+  androidApiKeyLooksLikeGoogle: purchaseConfig.androidApiKey.startsWith('goog_'),
+  mockPurchasesAllowed: purchaseConfig.allowMockPurchases,
+  appUserIdPresent: false,
+  appUserId: null,
+  configureCalled: false,
+  configuredAppUserId: null,
+  customerInfoSucceeded: null,
+  customerInfoAppUserId: null,
+  offeringsSucceeded: null,
+  defaultOfferingPresent: null,
+  currentOfferingIdentifier: null,
+  offeringCount: null,
+  lastEvent: 'not started',
+  lastError: null,
+  updatedAt: null,
+};
+
+const diagnosticsListeners = new Set<(diagnostics: RevenueCatDiagnostics) => void>();
 
 export function getRevenueCatProductId(tokenPackage: TokenPackage) {
   return PRODUCT_IDS_BY_TOKEN_COUNT[tokenPackage.tokenCount];
 }
 
-export async function configureRevenueCatForCurrentUser() {
+export function getRevenueCatDiagnosticsSnapshot() {
+  return revenueCatDiagnostics;
+}
+
+export function subscribeToRevenueCatDiagnostics(listener: (diagnostics: RevenueCatDiagnostics) => void) {
+  diagnosticsListeners.add(listener);
+  listener(revenueCatDiagnostics);
+
+  return () => {
+    diagnosticsListeners.delete(listener);
+  };
+}
+
+export async function configureRevenueCatForCurrentUser(options: { forceDiagnostics?: boolean } = {}) {
   const user = useAuthStore.getState().user;
 
   logRevenueCatDebug('init requested', {
@@ -40,18 +100,33 @@ export async function configureRevenueCatForCurrentUser() {
     mockPurchasesAllowed: purchaseConfig.allowMockPurchases,
   });
 
+  updateRevenueCatDiagnostics('init requested', {
+    platform: Platform.OS,
+    buildProfile: purchaseConfig.buildProfile ?? 'unknown',
+    apiKeyPresent: Boolean(purchaseConfig.activeApiKey),
+    androidApiKeyPresent: Boolean(purchaseConfig.androidApiKey),
+    androidApiKeyLooksLikeGoogle: purchaseConfig.androidApiKey.startsWith('goog_'),
+    appUserIdPresent: Boolean(user?.id),
+    appUserId: user?.id ?? null,
+    mockPurchasesAllowed: purchaseConfig.allowMockPurchases,
+    lastError: null,
+  });
+
   if (Platform.OS === 'web') {
     logRevenueCatDebug('init skipped', { reason: 'web platform' });
+    updateRevenueCatDiagnostics('init skipped', { lastError: 'web platform' });
     return false;
   }
 
   if (!purchaseConfig.activeApiKey) {
     logRevenueCatDebug('init skipped', { reason: 'missing RevenueCat public api key' });
+    updateRevenueCatDiagnostics('init skipped', { lastError: 'missing RevenueCat public api key' });
     return false;
   }
 
   if (!user?.id) {
     logRevenueCatDebug('init skipped', { reason: 'missing backend user id' });
+    updateRevenueCatDiagnostics('init skipped', { lastError: 'missing backend user id' });
     return false;
   }
 
@@ -62,8 +137,13 @@ export async function configureRevenueCatForCurrentUser() {
 
     if (!isConfigured) {
       logRevenueCatDebug('Purchases.configure called', {
+        appUserID: user.id,
         appUserIdPresent: true,
         apiKeyPresent: true,
+      });
+      updateRevenueCatDiagnostics('Purchases.configure called', {
+        configureCalled: true,
+        configuredAppUserId: user.id,
       });
       Purchases.configure({
         apiKey: purchaseConfig.activeApiKey,
@@ -72,13 +152,23 @@ export async function configureRevenueCatForCurrentUser() {
       configuredUserId = user.id;
     } else if (configuredUserId !== user.id) {
       logRevenueCatDebug('Purchases.logIn called', {
+        appUserID: user.id,
         appUserIdPresent: true,
+      });
+      updateRevenueCatDiagnostics('Purchases.logIn called', {
+        configureCalled: true,
+        configuredAppUserId: user.id,
       });
       await Purchases.logIn(user.id);
       configuredUserId = user.id;
     } else {
       logRevenueCatDebug('already configured for current user', {
+        appUserID: user.id,
         appUserIdPresent: true,
+      });
+      updateRevenueCatDiagnostics('already configured for current user', {
+        configureCalled: true,
+        configuredAppUserId: user.id,
       });
     }
 
@@ -87,13 +177,15 @@ export async function configureRevenueCatForCurrentUser() {
       Purchases.setDisplayName(user.profile?.displayName ?? user.email).catch(() => undefined),
     ]);
 
-    await logRevenueCatOfferingsDiagnostics(user.id);
+    await logRevenueCatCustomerInfoDiagnostics(user.id, options.forceDiagnostics);
+    await logRevenueCatOfferingsDiagnostics(user.id, options.forceDiagnostics);
 
     return true;
   } catch (error) {
     logRevenueCatDebug('init failed', {
       message: getRevenueCatErrorMessage(error),
     });
+    updateRevenueCatDiagnostics('init failed', { lastError: getRevenueCatErrorMessage(error) });
     return false;
   }
 }
@@ -159,8 +251,40 @@ function getRevenueCatErrorMessage(error: unknown) {
   return 'Purchase could not be completed. Please try again.';
 }
 
-async function logRevenueCatOfferingsDiagnostics(userId: string) {
-  if (offeringsCheckedForUserId === userId) {
+async function logRevenueCatCustomerInfoDiagnostics(userId: string, forceDiagnostics = false) {
+  if (!forceDiagnostics && customerInfoCheckedForUserId === userId) {
+    return;
+  }
+
+  customerInfoCheckedForUserId = userId;
+
+  try {
+    const customerInfo = await Purchases.getCustomerInfo();
+
+    logRevenueCatDebug('getCustomerInfo result', {
+      appUserID: userId,
+      originalAppUserId: customerInfo.originalAppUserId,
+      activeEntitlementCount: Object.keys(customerInfo.entitlements.active ?? {}).length,
+    });
+    updateRevenueCatDiagnostics('getCustomerInfo result', {
+      customerInfoSucceeded: true,
+      customerInfoAppUserId: customerInfo.originalAppUserId ?? userId,
+      lastError: null,
+    });
+  } catch (error) {
+    logRevenueCatDebug('getCustomerInfo error', {
+      appUserID: userId,
+      message: getRevenueCatErrorMessage(error),
+    });
+    updateRevenueCatDiagnostics('getCustomerInfo error', {
+      customerInfoSucceeded: false,
+      lastError: getRevenueCatErrorMessage(error),
+    });
+  }
+}
+
+async function logRevenueCatOfferingsDiagnostics(userId: string, forceDiagnostics = false) {
+  if (!forceDiagnostics && offeringsCheckedForUserId === userId) {
     return;
   }
 
@@ -169,18 +293,68 @@ async function logRevenueCatOfferingsDiagnostics(userId: string) {
   try {
     const offerings = await Purchases.getOfferings();
     const allOfferings = Object.keys(offerings.all ?? {});
+    const currentIdentifier = offerings.current?.identifier ?? null;
+    const defaultOfferingPresent = Boolean((offerings.all ?? {}).default ?? offerings.current);
 
     logRevenueCatDebug('getOfferings result', {
+      appUserID: userId,
       currentOfferingPresent: Boolean(offerings.current),
+      currentOfferingIdentifier: currentIdentifier,
+      defaultOfferingPresent,
       offeringCount: allOfferings.length,
+    });
+    updateRevenueCatDiagnostics('getOfferings result', {
+      offeringsSucceeded: true,
+      defaultOfferingPresent,
+      currentOfferingIdentifier: currentIdentifier,
+      offeringCount: allOfferings.length,
+      lastError: null,
     });
   } catch (error) {
     logRevenueCatDebug('getOfferings error', {
+      appUserID: userId,
       message: getRevenueCatErrorMessage(error),
+    });
+    updateRevenueCatDiagnostics('getOfferings error', {
+      offeringsSucceeded: false,
+      defaultOfferingPresent: false,
+      currentOfferingIdentifier: null,
+      offeringCount: null,
+      lastError: getRevenueCatErrorMessage(error),
     });
   }
 }
 
 function logRevenueCatDebug(message: string, details: Record<string, unknown> = {}) {
-  console.info('[RevenueCat]', message, details);
+  console.log('[RevenueCat]', message, details);
+}
+
+function updateRevenueCatDiagnostics(event: string, partial: Partial<RevenueCatDiagnostics>) {
+  revenueCatDiagnostics = {
+    ...revenueCatDiagnostics,
+    ...partial,
+    lastEvent: event,
+    updatedAt: new Date().toISOString(),
+  };
+
+  console.log('[RevenueCat][diagnostics]', {
+    event,
+    apiKeyPresent: revenueCatDiagnostics.apiKeyPresent,
+    androidApiKeyPresent: revenueCatDiagnostics.androidApiKeyPresent,
+    androidApiKeyLooksLikeGoogle: revenueCatDiagnostics.androidApiKeyLooksLikeGoogle,
+    mockPurchasesAllowed: revenueCatDiagnostics.mockPurchasesAllowed,
+    appUserIdPresent: revenueCatDiagnostics.appUserIdPresent,
+    appUserID: revenueCatDiagnostics.appUserId,
+    configureCalled: revenueCatDiagnostics.configureCalled,
+    configuredAppUserID: revenueCatDiagnostics.configuredAppUserId,
+    customerInfoSucceeded: revenueCatDiagnostics.customerInfoSucceeded,
+    customerInfoAppUserID: revenueCatDiagnostics.customerInfoAppUserId,
+    offeringsSucceeded: revenueCatDiagnostics.offeringsSucceeded,
+    defaultOfferingPresent: revenueCatDiagnostics.defaultOfferingPresent,
+    currentOfferingIdentifier: revenueCatDiagnostics.currentOfferingIdentifier,
+    offeringCount: revenueCatDiagnostics.offeringCount,
+    lastError: revenueCatDiagnostics.lastError,
+  });
+
+  diagnosticsListeners.forEach((listener) => listener(revenueCatDiagnostics));
 }

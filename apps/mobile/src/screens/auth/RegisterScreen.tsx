@@ -10,6 +10,7 @@ import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
+import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 import { UserRole } from '../../types/domain';
 
@@ -32,6 +33,7 @@ export function RegisterScreen({ navigation }: Props) {
     mutationFn: api.register,
     onSuccess: async (session) => {
       await setSession(session);
+      await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
     },
     onError: (error) => {
       Alert.alert('Registration failed', error instanceof Error ? error.message : 'Please try again.');
