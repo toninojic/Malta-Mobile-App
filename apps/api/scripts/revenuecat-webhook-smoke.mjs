@@ -13,14 +13,15 @@ for (const envFile of ['.env', 'apps/api/.env', '../../.env']) {
 const API_URL = process.env.API_URL ?? 'http://localhost:3000/api/v1';
 const WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET?.trim();
 const prisma = new PrismaClient();
+const EXACT_REVENUECAT_USER_ID = '137e92fc-e620-48be-9b13-d07860770396';
 
 const EXACT_REVENUECAT_PAYLOAD = {
   api_version: '1.0',
   event: {
-    aliases: ['137e92fc-e620-48be-9b13-d07860770396'],
+    aliases: [EXACT_REVENUECAT_USER_ID],
     app_id: 'appabce0b3eef',
-    app_user_id: '137e92fc-e620-48be-9b13-d07860770396',
-    original_app_user_id: '137e92fc-e620-48be-9b13-d07860770396',
+    app_user_id: EXACT_REVENUECAT_USER_ID,
+    original_app_user_id: EXACT_REVENUECAT_USER_ID,
     product_id: 'maltapro_tokens_5',
     transaction_id: 'GPA.3333-8986-9532-13423',
     original_transaction_id: 'GPA.3333-8986-9532-13423',

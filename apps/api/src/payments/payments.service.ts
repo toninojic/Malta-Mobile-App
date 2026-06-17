@@ -31,7 +31,7 @@ const REVENUECAT_PRODUCT_TOKEN_COUNTS: Record<string, number> = {
   maltapro_tokens_20: 20,
   maltapro_tokens_50: 50,
 };
-const REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION = '2026-06-17-user-lookup-v2';
+const REVENUECAT_WEBHOOK_DIAGNOSTIC_VERSION = '2026-06-17-user-lookup-v3-no-uuid-gate';
 
 type PaymentWithPackage = Prisma.PaymentGetPayload<{ include: typeof paymentInclude }>;
 
@@ -448,23 +448,15 @@ export class PaymentsService {
     const uniqueCandidateIds = [...new Set(candidateIds)];
 
     for (const candidateId of uniqueCandidateIds) {
-      if (!this.isUuidValue(candidateId)) {
-        diagnostics.queryUsed.push(`skipped non-uuid candidate ${candidateId}`);
-        continue;
-      }
-
       diagnostics.queryUsed.push(`Prisma User.id = ${candidateId}`);
-      const prismaUser = await this.prisma.user.findUnique({
-        where: { id: candidateId },
-        select: { id: true, email: true, role: true, status: true },
-      });
+      const prismaUser = await this.findUserByIdPrisma(candidateId, diagnostics);
 
       if (prismaUser) {
         this.markUserFound(diagnostics, 'prisma_user_id', prismaUser);
         return { user: prismaUser, diagnostics };
       }
 
-      diagnostics.queryUsed.push(`SQL "User"."id" = ${candidateId}::uuid`);
+      diagnostics.queryUsed.push(`SQL "User"."id"::text = ${candidateId}`);
       const rawUser = await this.findUserByIdRaw(candidateId);
 
       if (rawUser) {
@@ -500,6 +492,21 @@ export class PaymentsService {
     diagnostics.matchedUserEmail = user.email;
   }
 
+  private async findUserByIdPrisma(
+    userId: string,
+    diagnostics: RevenueCatUserLookupDiagnostics,
+  ) {
+    try {
+      return await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, role: true, status: true },
+      });
+    } catch (error) {
+      diagnostics.queryUsed.push(`Prisma User.id lookup failed for ${userId}: ${this.lookupErrorMessage(error)}`);
+      return null;
+    }
+  }
+
   private async findUserByIdRaw(userId: string) {
     const users = await this.prisma.$queryRaw<RevenueCatWebhookUser[]>`
       SELECT
@@ -508,7 +515,7 @@ export class PaymentsService {
         "role"::text AS "role",
         "status"::text AS "status"
       FROM "User"
-      WHERE "id" = ${userId}::uuid
+      WHERE "id"::text = ${userId}
       LIMIT 1
     `;
 
@@ -657,12 +664,16 @@ export class PaymentsService {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
   }
 
-  private isUuidValue(value: string) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
-  }
-
   private isUniqueConstraintError(error: unknown) {
     return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+  }
+
+  private lookupErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+      return error.message.replace(/\s+/g, ' ').slice(0, 220);
+    }
+
+    return 'unknown error';
   }
 
   private decimalValue(value: unknown) {
