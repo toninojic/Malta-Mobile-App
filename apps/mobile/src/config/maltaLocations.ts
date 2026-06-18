@@ -1,6 +1,6 @@
 export const MALTA_SERVICE_LOCATIONS = [
   { key: 'sliema', label: 'Sliema' },
-  { key: 'st-julians', label: "St Julian's" },
+  { key: 'st_julians', label: "St Julian's" },
   { key: 'valletta', label: 'Valletta' },
   { key: 'gzira', label: 'Gzira' },
   { key: 'msida', label: 'Msida' },
@@ -11,7 +11,7 @@ export const MALTA_SERVICE_LOCATIONS = [
   { key: 'rabat', label: 'Rabat' },
   { key: 'mellieha', label: 'Mellieha' },
   { key: 'bugibba', label: 'Bugibba' },
-  { key: 'st-pauls-bay', label: "St Paul's Bay" },
+  { key: 'st_pauls_bay', label: "St Paul's Bay" },
   { key: 'marsaskala', label: 'Marsaskala' },
   { key: 'marsaxlokk', label: 'Marsaxlokk' },
   { key: 'zabbar', label: 'Zabbar' },
@@ -21,4 +21,3 @@ export const MALTA_SERVICE_LOCATIONS = [
   { key: 'luqa', label: 'Luqa' },
   { key: 'zejtun', label: 'Zejtun' },
 ] as const;
-

@@ -92,7 +92,8 @@ export function useUpdateContractorServiceAreas() {
 
   return useMutation({
     mutationFn: api.updateContractorServiceAreas,
-    onSuccess: async () => {
+    onSuccess: async (serviceAreas) => {
+      queryClient.setQueryData(['contractors', 'service-areas', 'mine'], serviceAreas);
       await queryClient.invalidateQueries({ queryKey: ['contractors', 'service-areas'] });
     },
   });
@@ -111,7 +112,8 @@ export function useUpdateContractorServiceCategories() {
 
   return useMutation({
     mutationFn: api.updateContractorServiceCategories,
-    onSuccess: async () => {
+    onSuccess: async (serviceCategories) => {
+      queryClient.setQueryData(['contractors', 'service-categories', 'mine'], serviceCategories);
       await queryClient.invalidateQueries({ queryKey: ['contractors', 'service-categories'] });
     },
   });

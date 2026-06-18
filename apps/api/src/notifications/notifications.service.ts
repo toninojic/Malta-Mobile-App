@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { JobRequest, Notification, NotificationPreference, NotificationType, Prisma, UserRole, UserStatus } from '@prisma/client';
 import { normalizeLocationKey } from '../common/malta-locations';
 import { PaginatedResponse, PaginationQueryDto, paginationMeta } from '../common/dto/pagination-query.dto';
@@ -23,6 +23,8 @@ const alertsWhere = (userId: string): Prisma.NotificationWhereInput => ({
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly pushNotifications: PushNotificationService,
@@ -103,43 +105,65 @@ export class NotificationsService {
         ),
       );
 
+      this.logDev('nearby job matching completed', {
+        jobId: job.id,
+        locationKey,
+        category: job.category,
+        subcategory: job.subcategory,
+        matchedContractors: matchingContractors.length,
+      });
+
       return { matchedContractors: matchingContractors.length };
-    } catch {
+    } catch (error) {
+      this.logDevFailure('nearby job matching failed', error, { jobId: job.id });
       return { matchedContractors: 0 };
     }
   }
 
   async getPreferences(user: AuthenticatedUser) {
-    const preference = await this.ensurePreferences(user.id, user.role);
-    return this.toPreference(preference);
+    try {
+      const preference = await this.ensurePreferences(user.id, user.role);
+      this.logDev('notification preferences loaded', { userId: user.id, role: user.role });
+      return this.toPreference(preference);
+    } catch (error) {
+      this.logDevFailure('notification preferences load failed', error, { userId: user.id, role: user.role });
+      throw error;
+    }
   }
 
   async updatePreferences(user: AuthenticatedUser, dto: UpdateNotificationPreferencesDto) {
-    const current = await this.ensurePreferences(user.id, user.role);
-    const defaults = defaultNotificationPreferences(user.role);
+    try {
+      const current = await this.ensurePreferences(user.id, user.role);
+      const defaults = defaultNotificationPreferences(user.role);
 
-    const data = {
-      newJobsNearMe: user.role === UserRole.CONTRACTOR ? dto.newJobsNearMe : false,
-      offerUpdates: dto.offerUpdates,
-      messages: dto.messages,
-      reviews: dto.reviews,
-      paymentsRefunds: dto.paymentsRefunds,
-      systemAlerts: dto.systemAlerts,
-      adminAlerts: user.role === UserRole.ADMIN ? dto.adminAlerts : false,
-    };
+      const data = {
+        newJobsNearMe: user.role === UserRole.CONTRACTOR ? dto.newJobsNearMe : false,
+        offerUpdates: dto.offerUpdates,
+        messages: dto.messages,
+        reviews: dto.reviews,
+        paymentsRefunds: dto.paymentsRefunds,
+        systemAlerts: dto.systemAlerts,
+        adminAlerts: user.role === UserRole.ADMIN ? dto.adminAlerts : false,
+      };
 
-    const updated = await this.prisma.notificationPreference.update({
-      where: { id: current.id },
-      data: Object.fromEntries(
-        Object.entries(data).filter(([, value]) => value !== undefined),
-      ),
-    });
+      const updated = await this.prisma.notificationPreference.update({
+        where: { id: current.id },
+        data: Object.fromEntries(
+          Object.entries(data).filter(([, value]) => value !== undefined),
+        ),
+      });
 
-    return this.toPreference({
-      ...updated,
-      newJobsNearMe: user.role === UserRole.CONTRACTOR ? updated.newJobsNearMe : defaults.newJobsNearMe,
-      adminAlerts: user.role === UserRole.ADMIN ? updated.adminAlerts : defaults.adminAlerts,
-    });
+      this.logDev('notification preferences saved', { userId: user.id, role: user.role });
+
+      return this.toPreference({
+        ...updated,
+        newJobsNearMe: user.role === UserRole.CONTRACTOR ? updated.newJobsNearMe : defaults.newJobsNearMe,
+        adminAlerts: user.role === UserRole.ADMIN ? updated.adminAlerts : defaults.adminAlerts,
+      });
+    } catch (error) {
+      this.logDevFailure('notification preferences save failed', error, { userId: user.id, role: user.role });
+      throw error;
+    }
   }
 
   async findMine(
@@ -271,5 +295,26 @@ export class NotificationsService {
       readAt: notification.readAt,
       createdAt: notification.createdAt,
     };
+  }
+
+  private logDev(message: string, metadata: Record<string, unknown>) {
+    if (process.env.NODE_ENV === 'production') {
+      return;
+    }
+
+    this.logger.debug(`${message} ${JSON.stringify(metadata)}`);
+  }
+
+  private logDevFailure(message: string, error: unknown, metadata: Record<string, unknown>) {
+    if (process.env.NODE_ENV === 'production') {
+      return;
+    }
+
+    this.logger.warn(
+      `${message} ${JSON.stringify({
+        ...metadata,
+        error: error instanceof Error ? error.message : String(error),
+      })}`,
+    );
   }
 }

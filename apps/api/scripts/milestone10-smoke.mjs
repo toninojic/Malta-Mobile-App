@@ -152,14 +152,12 @@ console.info('OK default notification preferences');
 await request('/contractors/me/service-areas', {
   method: 'PATCH',
   token: contractor.accessToken,
-  body: { locations: ['Sliema'] },
+  body: [{ locationKey: 'sliema', locationLabel: 'Sliema' }],
 });
 await request('/contractors/me/service-categories', {
   method: 'PATCH',
   token: contractor.accessToken,
-  body: {
-    categories: [{ categoryKey: 'plumbing', subcategoryKey: 'pipe_installation' }],
-  },
+  body: [{ categoryKey: 'plumbing', subcategoryKey: 'pipe_installation' }],
 });
 console.info('OK contractor service matching preferences saved');
 
@@ -206,4 +204,3 @@ await expectStatus('contractor-only service endpoint protection', 403, () =>
 );
 
 console.info('Milestone 10 smoke test passed.');
-

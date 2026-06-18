@@ -1,4 +1,8 @@
+const { existsSync, writeFileSync } = require('node:fs');
+const { resolve } = require('node:path');
+
 const baseConfig = require('./app.json').expo;
+const googleServicesPath = resolve(__dirname, 'google-services.json');
 
 function parseBooleanEnv(value, fallback) {
   if (value === undefined) {
@@ -26,6 +30,7 @@ const configuredAllowMockPurchases = parseBooleanEnv(
   baseConfig.extra?.allowMockPurchases,
 );
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? baseConfig.extra?.buildProfile;
+const googleServicesFile = resolveGoogleServicesFile();
 
 if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
   throw new Error(
@@ -33,17 +38,45 @@ if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
   );
 }
 
-module.exports = () => ({
-  ...baseConfig,
-  extra: {
-    ...baseConfig.extra,
-    apiUrl: configuredApiUrl ? normalizeApiUrl(configuredApiUrl) : undefined,
-    apiDebug: process.env.EXPO_PUBLIC_API_LOGGING
-      ? process.env.EXPO_PUBLIC_API_LOGGING === 'true'
-      : baseConfig.extra?.apiDebug,
-    revenueCatApiKeyAndroid: configuredRevenueCatAndroidKey,
-    revenueCatApiKeyIos: configuredRevenueCatIosKey,
-    allowMockPurchases: configuredAllowMockPurchases,
-    buildProfile,
-  },
-});
+module.exports = () => {
+  const android = {
+    ...baseConfig.android,
+  };
+
+  if (googleServicesFile) {
+    android.googleServicesFile = googleServicesFile;
+  } else {
+    delete android.googleServicesFile;
+  }
+
+  return {
+    ...baseConfig,
+    android,
+    extra: {
+      ...baseConfig.extra,
+      apiUrl: configuredApiUrl ? normalizeApiUrl(configuredApiUrl) : undefined,
+      apiDebug: process.env.EXPO_PUBLIC_API_LOGGING
+        ? process.env.EXPO_PUBLIC_API_LOGGING === 'true'
+        : baseConfig.extra?.apiDebug,
+      revenueCatApiKeyAndroid: configuredRevenueCatAndroidKey,
+      revenueCatApiKeyIos: configuredRevenueCatIosKey,
+      allowMockPurchases: configuredAllowMockPurchases,
+      buildProfile,
+    },
+  };
+};
+
+function resolveGoogleServicesFile() {
+  const encodedGoogleServices = process.env.GOOGLE_SERVICES_JSON_BASE64?.trim();
+
+  if (encodedGoogleServices) {
+    writeFileSync(googleServicesPath, Buffer.from(encodedGoogleServices, 'base64').toString('utf8'));
+    return './google-services.json';
+  }
+
+  if (existsSync(googleServicesPath)) {
+    return './google-services.json';
+  }
+
+  return undefined;
+}

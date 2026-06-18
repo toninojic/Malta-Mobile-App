@@ -12,5 +12,13 @@ coverage/
 *.log
 *.tsbuildinfo
 apps/api/generated/
+apps/mobile/google-services.json
+apps/mobile/GoogleService-Info.plist
+google-services.json
+GoogleService-Info.plist
+*.keystore
+*.jks
+*.p8
+*.p12
 .DS_Store
 Thumbs.db

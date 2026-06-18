@@ -80,7 +80,8 @@ export function useUpdateNotificationPreferences() {
 
   return useMutation({
     mutationFn: api.updateNotificationPreferences,
-    onSuccess: async () => {
+    onSuccess: async (preferences) => {
+      queryClient.setQueryData(['notifications', 'preferences'], preferences);
       await invalidateQueryKeys(queryClient, [
         ['notifications', 'preferences'],
         ['notifications', 'unread-count'],

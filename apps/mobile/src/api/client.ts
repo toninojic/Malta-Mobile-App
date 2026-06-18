@@ -46,6 +46,7 @@ import {
 } from '../types/domain';
 import { getAccessToken, getRefreshToken, useAuthStore } from '../store/auth.store';
 import { apiConfig } from '../config/apiConfig';
+import { MALTA_SERVICE_LOCATIONS } from '../config/maltaLocations';
 
 const API_URL = apiConfig.baseUrl;
 
@@ -785,7 +786,10 @@ export const api = {
   updateContractorServiceAreas(locations: string[]) {
     return request<ContractorServiceAreasResponse>('/contractors/me/service-areas', {
       method: 'PATCH',
-      body: { locations },
+      body: locations.map((locationKey) => ({
+        locationKey,
+        locationLabel: MALTA_SERVICE_LOCATIONS.find((location) => location.key === locationKey)?.label ?? locationKey,
+      })),
     });
   },
   contractorServiceCategories() {
@@ -796,7 +800,7 @@ export const api = {
   ) {
     return request<ContractorServiceCategoriesResponse>('/contractors/me/service-categories', {
       method: 'PATCH',
-      body: { categories },
+      body: categories,
     });
   },
   async uploadPortfolioImages(images: UploadableFile[]) {

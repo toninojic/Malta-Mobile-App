@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { ImagePlus, LogOut, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, ImagePlus, LogOut, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -44,7 +44,6 @@ type PreferenceToggleKey = keyof Pick<
   NotificationPreferences,
   | 'messages'
   | 'offerUpdates'
-  | 'jobCompletion'
   | 'reviews'
   | 'paymentsRefunds'
   | 'newJobsNearMe'
@@ -74,8 +73,14 @@ export function ProfileEditScreen() {
   const [tradeCategories, setTradeCategories] = useState('');
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [profileSavedOpen, setProfileSavedOpen] = useState(false);
+  const [notificationSettingsExpanded, setNotificationSettingsExpanded] = useState(false);
   const [serviceAreasExpanded, setServiceAreasExpanded] = useState(false);
   const [serviceCategoriesExpanded, setServiceCategoriesExpanded] = useState(false);
+  const [expandedServiceCategoryKeys, setExpandedServiceCategoryKeys] = useState<string[]>([]);
+  const [serviceLocationSearch, setServiceLocationSearch] = useState('');
+  const [notificationSettingsError, setNotificationSettingsError] = useState<string | null>(null);
+  const [serviceAreasError, setServiceAreasError] = useState<string | null>(null);
+  const [serviceCategoriesError, setServiceCategoriesError] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ['users', 'me'],
@@ -169,6 +174,56 @@ export function ProfileEditScreen() {
   const selectedLocationKeys = serviceAreasQuery.data?.locations.map((locationItem) => locationItem.locationKey) ?? [];
   const selectedCategoryKeys =
     serviceCategoriesQuery.data?.categories.map((item) => `${item.categoryKey}:${item.subcategoryKey ?? ''}`) ?? [];
+  const availableServiceLocations = serviceAreasQuery.data?.availableLocations ?? MALTA_SERVICE_LOCATIONS;
+  const filteredServiceLocations = availableServiceLocations.filter((locationItem) => {
+    const queryText = serviceLocationSearch.trim().toLowerCase();
+    return !queryText || locationItem.label.toLowerCase().includes(queryText) || locationItem.key.includes(queryText);
+  });
+  const notificationSettingsStatus = updateNotificationPreferencesMutation.isPending
+    ? 'Saving'
+    : notificationPreferencesQuery.isLoading
+      ? 'Loading'
+      : notificationPreferencesQuery.isError
+        ? 'Error'
+        : 'Ready';
+  const serviceAreasStatus = updateServiceAreasMutation.isPending
+    ? 'Saving'
+    : serviceAreasQuery.isLoading
+      ? 'Loading'
+      : serviceAreasQuery.isError
+        ? 'Error'
+        : `${selectedLocationKeys.length} selected`;
+  const serviceCategoriesStatus = updateServiceCategoriesMutation.isPending
+    ? 'Saving'
+    : serviceCategoriesQuery.isLoading
+      ? 'Loading'
+      : serviceCategoriesQuery.isError
+        ? 'Error'
+        : `${selectedCategoryKeys.length} selected`;
+
+  useEffect(() => {
+    if (notificationPreferencesQuery.error) {
+      const message = readableError(notificationPreferencesQuery.error);
+      setNotificationSettingsError(message);
+      logProfileSettingsFailure('notification preferences load failed', notificationPreferencesQuery.error);
+    }
+  }, [notificationPreferencesQuery.error]);
+
+  useEffect(() => {
+    if (serviceAreasQuery.error) {
+      const message = readableError(serviceAreasQuery.error);
+      setServiceAreasError(message);
+      logProfileSettingsFailure('service locations load failed', serviceAreasQuery.error);
+    }
+  }, [serviceAreasQuery.error]);
+
+  useEffect(() => {
+    if (serviceCategoriesQuery.error) {
+      const message = readableError(serviceCategoriesQuery.error);
+      setServiceCategoriesError(message);
+      logProfileSettingsFailure('service categories load failed', serviceCategoriesQuery.error);
+    }
+  }, [serviceCategoriesQuery.error]);
 
   const pickAvatar = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -215,20 +270,45 @@ export function ProfileEditScreen() {
   };
 
   const updatePreference = (key: PreferenceToggleKey, value: boolean) => {
-    updateNotificationPreferencesMutation.mutate({ [key]: value });
+    setNotificationSettingsError(null);
+    updateNotificationPreferencesMutation.mutate(
+      { [key]: value },
+      {
+        onError: (error) => {
+          const message = readableError(error);
+          setNotificationSettingsError(message);
+          logProfileSettingsFailure('notification preferences save failed', error);
+        },
+      },
+    );
   };
 
   const toggleServiceLocation = (locationKey: string) => {
+    if (updateServiceAreasMutation.isPending) {
+      return;
+    }
+
     const current = new Set(selectedLocationKeys);
     if (current.has(locationKey)) {
       current.delete(locationKey);
     } else {
       current.add(locationKey);
     }
-    updateServiceAreasMutation.mutate([...current]);
+    setServiceAreasError(null);
+    updateServiceAreasMutation.mutate([...current], {
+      onError: (error) => {
+        const message = readableError(error);
+        setServiceAreasError(message);
+        logProfileSettingsFailure('service locations save failed', error);
+      },
+    });
   };
 
   const toggleServiceCategory = (categoryKey: string, subcategoryKey?: string | null) => {
+    if (updateServiceCategoriesMutation.isPending) {
+      return;
+    }
+
     const id = `${categoryKey}:${subcategoryKey ?? ''}`;
     const current = new Set(selectedCategoryKeys);
     if (current.has(id)) {
@@ -236,6 +316,7 @@ export function ProfileEditScreen() {
     } else {
       current.add(id);
     }
+    setServiceCategoriesError(null);
     updateServiceCategoriesMutation.mutate(
       [...current].flatMap((value) => {
         const [nextCategoryKey, nextSubcategoryKey] = value.split(':');
@@ -247,6 +328,19 @@ export function ProfileEditScreen() {
           subcategoryKey: nextSubcategoryKey || null,
         };
       }),
+      {
+        onError: (error) => {
+          const message = readableError(error);
+          setServiceCategoriesError(message);
+          logProfileSettingsFailure('service categories save failed', error);
+        },
+      },
+    );
+  };
+
+  const toggleCategoryExpanded = (categoryKey: string) => {
+    setExpandedServiceCategoryKeys((current) =>
+      current.includes(categoryKey) ? current.filter((key) => key !== categoryKey) : [...current, categoryKey],
     );
   };
 
@@ -450,64 +544,100 @@ export function ProfileEditScreen() {
       </Card>
 
       <Card>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Notification Settings</Text>
-        <View style={styles.preferenceList}>
-          {notificationPreferenceOptions(role).map((option) => (
-            <View key={option.key} style={styles.preferenceRow}>
-              <View style={styles.preferenceText}>
-                <Text style={[styles.preferenceTitle, { color: theme.colors.text }]}>{option.label}</Text>
-                <Text style={[styles.preferenceDescription, { color: theme.colors.textMuted }]}>{option.description}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setNotificationSettingsExpanded((value) => !value)}
+          style={styles.accordionHeader}
+        >
+          <View style={styles.sectionHeaderText}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Notification Settings</Text>
+            <Text style={[styles.email, { color: theme.colors.textMuted }]}>{notificationSettingsStatus}</Text>
+          </View>
+          {notificationSettingsExpanded ? (
+            <ChevronDown color={theme.colors.textMuted} size={20} />
+          ) : (
+            <ChevronRight color={theme.colors.textMuted} size={20} />
+          )}
+        </Pressable>
+        {notificationSettingsExpanded ? (
+          <View style={styles.preferenceList}>
+            {notificationSettingsError ? (
+              <Text style={[styles.errorText, { color: theme.colors.danger }]}>{notificationSettingsError}</Text>
+            ) : null}
+            {notificationPreferencesQuery.isLoading ? (
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>Loading notification settings...</Text>
+            ) : null}
+            {notificationPreferenceOptions(role).map((option) => (
+              <View key={option.key} style={styles.preferenceRow}>
+                <View style={styles.preferenceText}>
+                  <Text style={[styles.preferenceTitle, { color: theme.colors.text }]}>{option.label}</Text>
+                  <Text style={[styles.preferenceDescription, { color: theme.colors.textMuted }]}>{option.description}</Text>
+                </View>
+                <Switch
+                  value={Boolean(notificationPreferencesQuery.data?.[option.key])}
+                  disabled={notificationPreferencesQuery.isLoading || updateNotificationPreferencesMutation.isPending}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.success }}
+                  thumbColor="#FFFFFF"
+                  onValueChange={(value) => updatePreference(option.key, value)}
+                />
               </View>
-              <Switch
-                value={Boolean(notificationPreferencesQuery.data?.[option.key])}
-                disabled={notificationPreferencesQuery.isLoading || updateNotificationPreferencesMutation.isPending}
-                trackColor={{ false: theme.colors.border, true: theme.colors.success }}
-                thumbColor="#FFFFFF"
-                onValueChange={(value) => updatePreference(option.key, value)}
-              />
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        ) : null}
       </Card>
 
       {isContractor ? (
         <Card>
-          <View style={styles.sectionHeader}>
-            <View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setServiceAreasExpanded((value) => !value)}
+            style={styles.accordionHeader}
+          >
+            <View style={styles.sectionHeaderText}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Service Locations</Text>
               <Text style={[styles.email, { color: theme.colors.textMuted }]}>
-                Used for nearby job alerts.
+                {serviceAreasStatus}
               </Text>
             </View>
-            <Button
-              title={serviceAreasExpanded ? 'Done' : `${selectedLocationKeys.length} Selected`}
-              variant="secondary"
-              onPress={() => setServiceAreasExpanded((value) => !value)}
-            />
-          </View>
+            {serviceAreasExpanded ? (
+              <ChevronDown color={theme.colors.textMuted} size={20} />
+            ) : (
+              <ChevronRight color={theme.colors.textMuted} size={20} />
+            )}
+          </Pressable>
           {serviceAreasExpanded ? (
-            <View style={styles.choiceGrid}>
-              {MALTA_SERVICE_LOCATIONS.map((locationItem) => {
-                const selected = selectedLocationKeys.includes(locationItem.key);
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={locationItem.key}
-                    onPress={() => toggleServiceLocation(locationItem.key)}
-                    style={[
-                      styles.choicePill,
-                      {
-                        backgroundColor: selected ? theme.colors.success : theme.colors.surfaceMuted,
-                        borderColor: selected ? theme.colors.success : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.choiceText, { color: selected ? '#FFFFFF' : theme.colors.text }]}>
-                      {locationItem.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.expandedSection}>
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>Used for nearby job alerts.</Text>
+              {serviceAreasError ? <Text style={[styles.errorText, { color: theme.colors.danger }]}>{serviceAreasError}</Text> : null}
+              <TextField label="Search locations" value={serviceLocationSearch} onChangeText={setServiceLocationSearch} />
+              {serviceAreasQuery.isLoading ? (
+                <Text style={[styles.email, { color: theme.colors.textMuted }]}>Loading service locations...</Text>
+              ) : null}
+              <View style={styles.choiceGrid}>
+                {filteredServiceLocations.map((locationItem) => {
+                  const selected = selectedLocationKeys.includes(locationItem.key);
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={updateServiceAreasMutation.isPending}
+                      key={locationItem.key}
+                      onPress={() => toggleServiceLocation(locationItem.key)}
+                      style={[
+                        styles.choicePill,
+                        updateServiceAreasMutation.isPending && styles.disabledChoice,
+                        {
+                          backgroundColor: selected ? theme.colors.success : theme.colors.surfaceMuted,
+                          borderColor: selected ? theme.colors.success : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.choiceText, { color: selected ? '#FFFFFF' : theme.colors.text }]}>
+                        {locationItem.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           ) : null}
         </Card>
@@ -515,75 +645,116 @@ export function ProfileEditScreen() {
 
       {isContractor ? (
         <Card>
-          <View style={styles.sectionHeader}>
-            <View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setServiceCategoriesExpanded((value) => !value)}
+            style={styles.accordionHeader}
+          >
+            <View style={styles.sectionHeaderText}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Service Categories</Text>
               <Text style={[styles.email, { color: theme.colors.textMuted }]}>
-                Match only the work types you want.
+                {serviceCategoriesStatus}
               </Text>
             </View>
-            <Button
-              title={serviceCategoriesExpanded ? 'Done' : `${selectedCategoryKeys.length} Selected`}
-              variant="secondary"
-              onPress={() => setServiceCategoriesExpanded((value) => !value)}
-            />
-          </View>
+            {serviceCategoriesExpanded ? (
+              <ChevronDown color={theme.colors.textMuted} size={20} />
+            ) : (
+              <ChevronRight color={theme.colors.textMuted} size={20} />
+            )}
+          </Pressable>
           {serviceCategoriesExpanded ? (
-            <View style={styles.categoryList}>
-              {SERVICE_CATEGORIES.map((category) => (
-                <View key={category.key} style={styles.categoryGroup}>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => toggleServiceCategory(category.key)}
-                    style={[
-                      styles.choicePill,
-                      {
-                        alignSelf: 'flex-start',
-                        backgroundColor: selectedCategoryKeys.includes(`${category.key}:`)
-                          ? theme.colors.success
-                          : theme.colors.surfaceMuted,
-                        borderColor: selectedCategoryKeys.includes(`${category.key}:`)
-                          ? theme.colors.success
-                          : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceText,
-                        {
-                          color: selectedCategoryKeys.includes(`${category.key}:`) ? '#FFFFFF' : theme.colors.text,
-                        },
-                      ]}
-                    >
-                      All {serviceCategoryLabel(category.key)}
-                    </Text>
-                  </Pressable>
-                  <View style={styles.choiceGrid}>
-                    {category.subcategories.map((subcategory) => {
-                      const selected = selectedCategoryKeys.includes(`${category.key}:${subcategory.key}`);
-                      return (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={subcategory.key}
-                          onPress={() => toggleServiceCategory(category.key, subcategory.key)}
-                          style={[
-                            styles.choicePill,
-                            {
-                              backgroundColor: selected ? theme.colors.success : theme.colors.surfaceMuted,
-                              borderColor: selected ? theme.colors.success : theme.colors.border,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.choiceText, { color: selected ? '#FFFFFF' : theme.colors.text }]}>
-                            {serviceSubcategoryLabel(category.key, subcategory.key)}
+            <View style={styles.expandedSection}>
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>Match only the work types you want.</Text>
+              {serviceCategoriesError ? (
+                <Text style={[styles.errorText, { color: theme.colors.danger }]}>{serviceCategoriesError}</Text>
+              ) : null}
+              {serviceCategoriesQuery.isLoading ? (
+                <Text style={[styles.email, { color: theme.colors.textMuted }]}>Loading service categories...</Text>
+              ) : null}
+              <View style={styles.categoryList}>
+                {SERVICE_CATEGORIES.map((category) => {
+                  const isExpanded = expandedServiceCategoryKeys.includes(category.key);
+                  const selectedInCategory = selectedCategoryKeys.filter((key) => key.startsWith(`${category.key}:`)).length;
+                  const allCategorySelected = selectedCategoryKeys.includes(`${category.key}:`);
+                  return (
+                    <View key={category.key} style={styles.categoryGroup}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => toggleCategoryExpanded(category.key)}
+                        style={[styles.categoryHeader, { borderColor: theme.colors.border }]}
+                      >
+                        <View style={styles.sectionHeaderText}>
+                          <Text style={[styles.preferenceTitle, { color: theme.colors.text }]}>
+                            {serviceCategoryLabel(category.key)}
                           </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
+                          <Text style={[styles.preferenceDescription, { color: theme.colors.textMuted }]}>
+                            {selectedInCategory ? `${selectedInCategory} selected` : 'Tap to choose subcategories'}
+                          </Text>
+                        </View>
+                        {isExpanded ? (
+                          <ChevronDown color={theme.colors.textMuted} size={18} />
+                        ) : (
+                          <ChevronRight color={theme.colors.textMuted} size={18} />
+                        )}
+                      </Pressable>
+                      {isExpanded ? (
+                        <View style={styles.categoryChoices}>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={updateServiceCategoriesMutation.isPending}
+                            onPress={() => toggleServiceCategory(category.key)}
+                            style={[
+                              styles.choicePill,
+                              updateServiceCategoriesMutation.isPending && styles.disabledChoice,
+                              {
+                                alignSelf: 'flex-start',
+                                backgroundColor: allCategorySelected ? theme.colors.success : theme.colors.surfaceMuted,
+                                borderColor: allCategorySelected ? theme.colors.success : theme.colors.border,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.choiceText,
+                                {
+                                  color: allCategorySelected ? '#FFFFFF' : theme.colors.text,
+                                },
+                              ]}
+                            >
+                              All {serviceCategoryLabel(category.key)}
+                            </Text>
+                          </Pressable>
+                          <View style={styles.choiceGrid}>
+                            {category.subcategories.map((subcategory) => {
+                              const selected = selectedCategoryKeys.includes(`${category.key}:${subcategory.key}`);
+                              return (
+                                <Pressable
+                                  accessibilityRole="button"
+                                  disabled={updateServiceCategoriesMutation.isPending}
+                                  key={subcategory.key}
+                                  onPress={() => toggleServiceCategory(category.key, subcategory.key)}
+                                  style={[
+                                    styles.choicePill,
+                                    updateServiceCategoriesMutation.isPending && styles.disabledChoice,
+                                    {
+                                      backgroundColor: selected ? theme.colors.success : theme.colors.surfaceMuted,
+                                      borderColor: selected ? theme.colors.success : theme.colors.border,
+                                    },
+                                  ]}
+                                >
+                                  <Text style={[styles.choiceText, { color: selected ? '#FFFFFF' : theme.colors.text }]}>
+                                    {serviceSubcategoryLabel(category.key, subcategory.key)}
+                                  </Text>
+                                </Pressable>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           ) : null}
         </Card>
@@ -691,6 +862,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  sectionHeaderText: {
+    flex: 1,
+    gap: 4,
+  },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '900',
@@ -732,6 +913,9 @@ const styles = StyleSheet.create({
   preferenceList: {
     gap: 14,
   },
+  expandedSection: {
+    gap: 12,
+  },
   preferenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -765,11 +949,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
+  disabledChoice: {
+    opacity: 0.55,
+  },
   categoryList: {
-    gap: 14,
+    gap: 10,
   },
   categoryGroup: {
     gap: 8,
+  },
+  categoryHeader: {
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  categoryChoices: {
+    gap: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
   },
 });
 
@@ -784,21 +989,31 @@ function notificationPreferenceOptions(role: string | undefined): Array<{
   label: string;
   description: string;
 }> {
+  if (role === 'ADMIN') {
+    return [
+      {
+        key: 'adminAlerts',
+        label: 'Admin alerts',
+        description: 'Refunds, verification requests, and moderation items.',
+      },
+      {
+        key: 'systemAlerts',
+        label: 'System alerts',
+        description: 'Account and system status changes.',
+      },
+    ];
+  }
+
   const base: Array<{ key: PreferenceToggleKey; label: string; description: string }> = [
-    {
-      key: 'messages',
-      label: 'Messages',
-      description: 'Chat notifications without private message content.',
-    },
     {
       key: 'offerUpdates',
       label: 'Offer updates',
       description: 'New offers, selected offers, and contact unlock updates.',
     },
     {
-      key: 'jobCompletion',
-      label: 'Job completion',
-      description: 'Completion requests and confirmations.',
+      key: 'messages',
+      label: 'Messages',
+      description: 'Chat notifications without private message content.',
     },
     {
       key: 'reviews',
@@ -807,7 +1022,7 @@ function notificationPreferenceOptions(role: string | undefined): Array<{
     },
     {
       key: 'paymentsRefunds',
-      label: 'Payments and refunds',
+      label: 'Payments / refunds',
       description: 'Wallet and refund request updates.',
     },
     {
@@ -818,22 +1033,26 @@ function notificationPreferenceOptions(role: string | undefined): Array<{
   ];
 
   if (role === 'CONTRACTOR') {
-    base.splice(1, 0, {
+    base.unshift({
       key: 'newJobsNearMe',
-      label: 'Nearby job alerts',
+      label: 'New jobs near me',
       description: 'New jobs matching your service locations and categories.',
     });
   }
 
-  if (role === 'ADMIN') {
-    base.push({
-      key: 'adminAlerts',
-      label: 'Admin queue alerts',
-      description: 'Refunds, verification requests, and moderation items.',
-    });
+  return base;
+}
+
+function readableError(error: unknown) {
+  return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+}
+
+function logProfileSettingsFailure(label: string, error: unknown) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
   }
 
-  return base;
+  console.warn('[profile-settings]', label, error instanceof Error ? error.message : String(error));
 }
 
 function mimeTypeFromUri(uri: string) {
