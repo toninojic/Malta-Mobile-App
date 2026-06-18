@@ -1,24 +1,25 @@
 {
   "cli": {
-    "version": ">= 13.0.0",
+    "version": ">= 20.2.0",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://maltapro-api.onrender.com/api/v1",
         "EXPO_PUBLIC_API_LOGGING": "true",
         "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true"
       }
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://maltapro-api.onrender.com/api/v1",
         "EXPO_PUBLIC_API_LOGGING": "true",
-        "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true"
+        "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true",
+        "EXPO_PUBLIC_PUSH_DEBUG": "false"
       },
       "android": {
         "buildType": "apk"
@@ -26,8 +27,15 @@
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "env": {
-        "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "false"
+        "EXPO_PUBLIC_API_URL": "https://maltapro-api.onrender.com/api/v1",
+        "EXPO_PUBLIC_API_LOGGING": "false",
+        "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "false",
+        "EXPO_PUBLIC_PUSH_DEBUG": "false"
+      },
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   },

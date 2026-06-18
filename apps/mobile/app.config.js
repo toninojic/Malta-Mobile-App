@@ -21,6 +21,7 @@ function normalizeApiUrl(value) {
 }
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ?? baseConfig.extra?.apiUrl;
+const resolvedApiUrl = configuredApiUrl ? normalizeApiUrl(configuredApiUrl) : undefined;
 const configuredRevenueCatAndroidKey =
   process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID?.trim() || baseConfig.extra?.revenueCatApiKeyAndroid;
 const configuredRevenueCatIosKey =
@@ -40,6 +41,12 @@ const googleServicesFile = resolveGoogleServicesFile();
 if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
   throw new Error(
     'Missing EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID for production build. Set the Google RevenueCat public key that starts with goog_ in EAS environment variables.',
+  );
+}
+
+if (buildProfile === 'preview' && buildPlatform === 'android' && !isUsableDeviceApiUrl(resolvedApiUrl)) {
+  throw new Error(
+    'Missing usable EXPO_PUBLIC_API_URL for Android preview build. Set the EAS preview environment value to a public HTTPS staging/ngrok API URL, for example https://your-preview-api.example.com/api/v1.',
   );
 }
 
@@ -65,7 +72,7 @@ module.exports = () => {
     android,
     extra: {
       ...baseConfig.extra,
-      apiUrl: configuredApiUrl ? normalizeApiUrl(configuredApiUrl) : undefined,
+      apiUrl: resolvedApiUrl,
       apiDebug: process.env.EXPO_PUBLIC_API_LOGGING
         ? process.env.EXPO_PUBLIC_API_LOGGING === 'true'
         : baseConfig.extra?.apiDebug,
@@ -91,4 +98,26 @@ function resolveGoogleServicesFile() {
   }
 
   return undefined;
+}
+
+function isUsableDeviceApiUrl(value) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return (
+      url.protocol === 'https:' &&
+      host !== 'localhost' &&
+      host !== '127.0.0.1' &&
+      host !== '0.0.0.0' &&
+      !host.endsWith('.local') &&
+      !/^10\./.test(host) &&
+      !/^192\.168\./.test(host)
+    );
+  } catch {
+    return false;
+  }
 }

@@ -120,10 +120,11 @@ When a user deletes their account:
 - they are signed out locally;
 - existing jobs, offers, messages, payments, wallet records, and reviews are retained for marketplace history, admin audit, and relational integrity.
 
-Build Android APK/AAB through EAS:
+Build Android through EAS:
 
 ```bash
-npm run mobile:apk
+npm run mobile:build:preview
+npm run mobile:build:production
 ```
 
 Use the EAS wrapper in this repo to avoid noisy Node deprecation warnings:
@@ -132,6 +133,8 @@ Use the EAS wrapper in this repo to avoid noisy Node deprecation warnings:
 npm run eas:project:info
 npm run eas -- build --platform android --profile production
 ```
+
+See [EAS_BUILD.md](EAS_BUILD.md) for preview APK, production AAB, Google Play upload, Firebase/FCM, and EAS environment setup.
 
 ## Production Notes
 

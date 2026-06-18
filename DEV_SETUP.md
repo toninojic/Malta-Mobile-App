@@ -71,3 +71,5 @@ npm run start --workspace=@malta-marketplace/mobile -- --clear
 ```
 
 Production builds should set `EXPO_PUBLIC_API_URL` through EAS environment variables.
+
+For APK/AAB build profiles, see [EAS_BUILD.md](EAS_BUILD.md).

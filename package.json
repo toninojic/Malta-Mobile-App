@@ -14,6 +14,9 @@
     "mobile:api-url:set": "npm run api-url:set --workspace @malta-marketplace/mobile --",
     "mobile:api-url:check": "npm run api-url:check --workspace @malta-marketplace/mobile",
     "mobile:apk": "npm run build:android:apk --workspace @malta-marketplace/mobile",
+    "mobile:build:preview": "npm run build:android:preview --workspace @malta-marketplace/mobile",
+    "mobile:build:production": "npm run build:android:production --workspace @malta-marketplace/mobile",
+    "mobile:submit:production": "npm run submit:android:production --workspace @malta-marketplace/mobile",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces"
   },
