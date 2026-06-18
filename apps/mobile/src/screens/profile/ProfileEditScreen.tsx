@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { ChevronDown, ChevronRight, ImagePlus, LogOut, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
+import { BellRing, ChevronDown, ChevronRight, ImagePlus, LogOut, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -29,7 +29,14 @@ import { SERVICE_CATEGORIES, serviceCategoryLabel, serviceSubcategoryLabel } fro
 import { useTheme } from '../../design/theme';
 import { AppearanceMode, useAppearanceStore } from '../../store/appearance.store';
 import { useAuthStore } from '../../store/auth.store';
-import { deactivateCurrentDevicePushToken } from '../../services/pushNotifications';
+import {
+  deactivateCurrentDevicePushToken,
+  getPushRegistrationDiagnostics,
+  maskPushToken,
+  registerExpoPushTokenForUser,
+  shouldShowPushDiagnostics,
+  subscribePushRegistrationDiagnostics,
+} from '../../services/pushNotifications';
 import { AuthUser, NotificationPreferences, UserProfile } from '../../types/domain';
 
 type SelectedAvatar = {
@@ -81,6 +88,9 @@ export function ProfileEditScreen() {
   const [notificationSettingsError, setNotificationSettingsError] = useState<string | null>(null);
   const [serviceAreasError, setServiceAreasError] = useState<string | null>(null);
   const [serviceCategoriesError, setServiceCategoriesError] = useState<string | null>(null);
+  const [pushDiagnostics, setPushDiagnostics] = useState(getPushRegistrationDiagnostics());
+  const [pushRetrying, setPushRetrying] = useState(false);
+  const pushDiagnosticsEnabled = shouldShowPushDiagnostics();
 
   const query = useQuery({
     queryKey: ['users', 'me'],
@@ -89,6 +99,18 @@ export function ProfileEditScreen() {
   const portfolioQuery = usePortfolioImages(currentUser?.role === 'CONTRACTOR');
   const verificationQuery = useContractorVerification(currentUser?.role === 'CONTRACTOR');
   const notificationPreferencesQuery = useNotificationPreferences(Boolean(currentUser));
+  const pushDebugTokensQuery = useQuery({
+    queryKey: ['notifications', 'debug', 'push-tokens'],
+    queryFn: api.notificationDebugPushTokens,
+    enabled: pushDiagnosticsEnabled && notificationSettingsExpanded && Boolean(currentUser),
+    staleTime: 5_000,
+  });
+  const sendTestPushMutation = useMutation({
+    mutationFn: api.sendTestPushNotification,
+    onSuccess: async () => {
+      await pushDebugTokensQuery.refetch();
+    },
+  });
   const updateNotificationPreferencesMutation = useUpdateNotificationPreferences();
   const serviceAreasQuery = useContractorServiceAreas(currentUser?.role === 'CONTRACTOR');
   const serviceCategoriesQuery = useContractorServiceCategories(currentUser?.role === 'CONTRACTOR');
@@ -210,6 +232,14 @@ export function ProfileEditScreen() {
   }, [notificationPreferencesQuery.error]);
 
   useEffect(() => {
+    if (!pushDiagnosticsEnabled) {
+      return undefined;
+    }
+
+    return subscribePushRegistrationDiagnostics(setPushDiagnostics);
+  }, [pushDiagnosticsEnabled]);
+
+  useEffect(() => {
     if (serviceAreasQuery.error) {
       const message = readableError(serviceAreasQuery.error);
       setServiceAreasError(message);
@@ -281,6 +311,20 @@ export function ProfileEditScreen() {
         },
       },
     );
+  };
+
+  const retryPushRegistration = async () => {
+    if (!currentUser || pushRetrying) {
+      return;
+    }
+
+    setPushRetrying(true);
+    try {
+      await registerExpoPushTokenForUser(currentUser);
+      await pushDebugTokensQuery.refetch();
+    } finally {
+      setPushRetrying(false);
+    }
   };
 
   const toggleServiceLocation = (locationKey: string) => {
@@ -582,6 +626,65 @@ export function ProfileEditScreen() {
                 />
               </View>
             ))}
+            {pushDiagnosticsEnabled ? (
+              <View style={[styles.pushDebugBox, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeaderText}>
+                    <Text style={[styles.preferenceTitle, { color: theme.colors.text }]}>Push diagnostics</Text>
+                    <Text style={[styles.preferenceDescription, { color: theme.colors.textMuted }]}>
+                      Temporary registration status for this device.
+                    </Text>
+                  </View>
+                  <BellRing color={theme.colors.success} size={20} />
+                </View>
+                <DebugRow label="Permission" value={`${pushDiagnostics.permissionStatus ?? 'unknown'} (${pushDiagnostics.permissionGranted ? 'granted' : 'not granted'})`} />
+                <DebugRow label="Project ID" value={pushDiagnostics.projectId ?? 'missing'} />
+                <DebugRow label="Expo token" value={maskPushToken(pushDiagnostics.expoPushToken)} />
+                <DebugRow label="Backend" value={pushDiagnostics.backendRegistrationStatus} />
+                {pushDiagnostics.backendResponse ? <DebugRow label="Response" value={pushDiagnostics.backendResponse} /> : null}
+                {pushDiagnostics.backendError ? <Text style={[styles.errorText, { color: theme.colors.danger }]}>{pushDiagnostics.backendError}</Text> : null}
+                <DebugRow
+                  label="Saved tokens"
+                  value={
+                    pushDebugTokensQuery.isLoading
+                      ? 'loading'
+                      : pushDebugTokensQuery.error
+                        ? readableError(pushDebugTokensQuery.error)
+                        : `${pushDebugTokensQuery.data?.activeCount ?? 0} active / ${pushDebugTokensQuery.data?.count ?? 0} total`
+                  }
+                />
+                {sendTestPushMutation.data ? (
+                  <DebugRow
+                    label="Test push"
+                    value={
+                      sendTestPushMutation.data.message ??
+                      `${sendTestPushMutation.data.sent}/${sendTestPushMutation.data.tokenCount} accepted by Expo`
+                    }
+                  />
+                ) : null}
+                {sendTestPushMutation.error ? (
+                  <Text style={[styles.errorText, { color: theme.colors.danger }]}>
+                    {readableError(sendTestPushMutation.error)}
+                  </Text>
+                ) : null}
+                <View style={styles.pushDebugActions}>
+                  <Button
+                    title="Retry"
+                    icon={RefreshCw}
+                    variant="secondary"
+                    loading={pushRetrying}
+                    onPress={retryPushRegistration}
+                  />
+                  <Button
+                    title="Test Push"
+                    icon={BellRing}
+                    variant="secondary"
+                    loading={sendTestPushMutation.isPending}
+                    onPress={() => sendTestPushMutation.mutate()}
+                  />
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </Card>
@@ -823,6 +926,17 @@ export function ProfileEditScreen() {
   );
 }
 
+function DebugRow({ label, value }: { label: string; value: string }) {
+  const theme = useTheme();
+
+  return (
+    <View style={styles.debugRow}>
+      <Text style={[styles.debugLabel, { color: theme.colors.textMuted }]}>{label}</Text>
+      <Text selectable style={[styles.debugValue, { color: theme.colors.text }]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   profileTopCard: {
     marginTop: 0,
@@ -912,6 +1026,32 @@ const styles = StyleSheet.create({
   },
   preferenceList: {
     gap: 14,
+  },
+  pushDebugBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 12,
+  },
+  pushDebugActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  debugLabel: {
+    flexShrink: 0,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  debugValue: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   expandedSection: {
     gap: 12,

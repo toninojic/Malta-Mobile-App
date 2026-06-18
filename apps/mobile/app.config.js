@@ -29,6 +29,10 @@ const configuredAllowMockPurchases = parseBooleanEnv(
   process.env.EXPO_PUBLIC_ALLOW_MOCK_PURCHASES,
   baseConfig.extra?.allowMockPurchases,
 );
+const configuredPushDebug = parseBooleanEnv(
+  process.env.EXPO_PUBLIC_PUSH_DEBUG,
+  baseConfig.extra?.pushDebug ?? false,
+);
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? baseConfig.extra?.buildProfile;
 const googleServicesFile = resolveGoogleServicesFile();
 
@@ -61,6 +65,7 @@ module.exports = () => {
       revenueCatApiKeyAndroid: configuredRevenueCatAndroidKey,
       revenueCatApiKeyIos: configuredRevenueCatIosKey,
       allowMockPurchases: configuredAllowMockPurchases,
+      pushDebug: configuredPushDebug,
       buildProfile,
     },
   };

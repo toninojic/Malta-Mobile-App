@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -16,10 +16,18 @@ import { PushNotificationService } from './push-notification.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.EMPLOYER, UserRole.CONTRACTOR, UserRole.ADMIN)
 export class PushTokensController {
+  private readonly logger = new Logger(PushTokensController.name);
+
   constructor(private readonly pushNotifications: PushNotificationService) {}
 
   @Post()
   register(@CurrentUser() user: AuthenticatedUser, @Body() dto: RegisterPushTokenDto) {
+    this.logDebug('push token registration endpoint hit', {
+      userId: user.id,
+      platform: dto.platform,
+      deviceId: dto.deviceId,
+      tokenPrefix: dto.expoPushToken.slice(0, 18),
+    });
     return this.pushNotifications.register(user, dto);
   }
 
@@ -31,6 +39,14 @@ export class PushTokensController {
   @Delete(':id')
   deactivate(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.pushNotifications.deactivateMine(user, id);
+  }
+
+  private logDebug(message: string, metadata: Record<string, unknown>) {
+    if (!shouldLogPushDebug()) {
+      return;
+    }
+
+    this.logger.debug(`${message} ${JSON.stringify(metadata)}`);
   }
 }
 
@@ -47,4 +63,8 @@ export class AdminPushTokensController {
   findAll(@Query() query: PaginationQueryDto) {
     return this.pushNotifications.adminFindAll(query);
   }
+}
+
+function shouldLogPushDebug() {
+  return process.env.PUSH_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
 }

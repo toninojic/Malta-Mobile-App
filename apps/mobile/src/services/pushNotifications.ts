@@ -17,8 +17,34 @@ export type PushNotificationData = {
   target?: string;
 };
 
+export type PushRegistrationDiagnostics = {
+  platform: string;
+  permissionStatus: string | null;
+  permissionGranted: boolean | null;
+  projectId: string | null;
+  expoPushToken: string | null;
+  backendRegistrationStatus: 'idle' | 'pending' | 'success' | 'failed' | 'skipped';
+  backendResponse: string | null;
+  backendError: string | null;
+  lastAttemptAt: string | null;
+  userId: string | null;
+};
+
 let lastRegisteredUserId: string | null = null;
 let registrationInFlight: Promise<void> | null = null;
+let pushDiagnostics: PushRegistrationDiagnostics = {
+  platform: Platform.OS,
+  permissionStatus: null,
+  permissionGranted: null,
+  projectId: null,
+  expoPushToken: null,
+  backendRegistrationStatus: 'idle',
+  backendResponse: null,
+  backendError: null,
+  lastAttemptAt: null,
+  userId: null,
+};
+const pushDiagnosticsListeners = new Set<(diagnostics: PushRegistrationDiagnostics) => void>();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -30,8 +56,37 @@ Notifications.setNotificationHandler({
   }),
 });
 
+export function getPushRegistrationDiagnostics() {
+  return pushDiagnostics;
+}
+
+export function subscribePushRegistrationDiagnostics(listener: (diagnostics: PushRegistrationDiagnostics) => void) {
+  pushDiagnosticsListeners.add(listener);
+  listener(pushDiagnostics);
+
+  return () => {
+    pushDiagnosticsListeners.delete(listener);
+  };
+}
+
+export function shouldShowPushDiagnostics() {
+  const extra = Constants.expoConfig?.extra as { buildProfile?: string; pushDebug?: boolean } | undefined;
+  return Boolean(
+    (typeof __DEV__ !== 'undefined' && __DEV__) ||
+      extra?.pushDebug === true ||
+      extra?.buildProfile === 'development' ||
+      extra?.buildProfile === 'preview',
+  );
+}
+
 export async function registerExpoPushTokenForUser(user: AuthUser | null) {
   if (!user || Platform.OS === 'web') {
+    setPushDiagnostics({
+      platform: Platform.OS,
+      backendRegistrationStatus: Platform.OS === 'web' ? 'skipped' : 'idle',
+      backendError: Platform.OS === 'web' ? 'Expo push registration is skipped on web.' : null,
+      userId: user?.id ?? null,
+    });
     return;
   }
 
@@ -69,41 +124,104 @@ export async function deactivateCurrentDevicePushToken() {
 }
 
 async function doRegisterExpoPushToken(user: AuthUser) {
+  setPushDiagnostics({
+    platform: Platform.OS,
+    backendRegistrationStatus: 'pending',
+    backendError: null,
+    backendResponse: null,
+    lastAttemptAt: new Date().toISOString(),
+    userId: user.id,
+  });
+
   try {
     await configureAndroidChannels();
 
     const permission = await ensureNotificationPermission();
-    if (!permission) {
-      console.info('[push] permission denied');
+    setPushDiagnostics({
+      permissionStatus: permission.status,
+      permissionGranted: permission.granted,
+    });
+    console.info('[push] notification permission resolved', {
+      status: permission.status,
+      granted: permission.granted,
+      userId: user.id,
+    });
+
+    if (!permission.granted) {
+      setPushDiagnostics({
+        backendRegistrationStatus: 'skipped',
+        backendError: 'Notification permission is not granted.',
+      });
+      console.info('[push] permission denied', { status: permission.status, userId: user.id });
       return;
     }
 
     const projectId = getExpoProjectId();
+    setPushDiagnostics({ projectId });
+    console.info('[push] Expo project id resolved', {
+      projectId: projectId ?? '[missing]',
+      userId: user.id,
+    });
+
     if (!projectId) {
+      setPushDiagnostics({
+        backendRegistrationStatus: 'skipped',
+        backendError: 'Missing EAS project id.',
+      });
       console.warn('[push] missing EAS project id; push token registration skipped');
       return;
     }
 
     const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    setPushDiagnostics({ expoPushToken: token.data ?? null });
+    console.info('[push] Expo push token returned', {
+      userId: user.id,
+      token: maskPushToken(token.data),
+    });
+
     if (!token.data) {
+      setPushDiagnostics({
+        backendRegistrationStatus: 'skipped',
+        backendError: 'Expo returned an empty push token.',
+      });
       console.warn('[push] Expo returned empty push token');
       return;
     }
 
-    await api.registerPushToken({
+    const payload = {
       expoPushToken: token.data,
       platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
       deviceId: `${Platform.OS}-${user.id}`,
       deviceName: getDeviceName(),
+    } as const;
+
+    console.info('[push] registering Expo push token with backend', {
+      userId: user.id,
+      bodyKeys: Object.keys(payload),
+      token: maskPushToken(payload.expoPushToken),
+      platform: payload.platform,
     });
 
+    const response = await api.registerPushToken(payload);
+
     lastRegisteredUserId = user.id;
+    setPushDiagnostics({
+      backendRegistrationStatus: 'success',
+      backendResponse: `Saved token ${response.id}`,
+      backendError: null,
+    });
     console.info('[push] Expo push token registered', {
       userId: user.id,
       platform: Platform.OS,
-      tokenPrefix: token.data.slice(0, 18),
+      token: maskPushToken(token.data),
+      pushTokenId: response.id,
+      isActive: response.isActive,
     });
   } catch (error) {
+    setPushDiagnostics({
+      backendRegistrationStatus: 'failed',
+      backendError: error instanceof Error ? error.message : String(error),
+    });
     console.warn('[push] registration failed', error instanceof Error ? error.message : String(error));
   }
 }
@@ -165,11 +283,14 @@ function normalizeNotificationData(data: Record<string, unknown> | undefined): P
 async function ensureNotificationPermission() {
   const current = await Notifications.getPermissionsAsync();
   if (current.granted || current.status === 'granted') {
-    return true;
+    return { granted: true, status: current.status ?? 'granted' };
   }
 
   const requested = await Notifications.requestPermissionsAsync();
-  return Boolean(requested.granted || requested.status === 'granted');
+  return {
+    granted: Boolean(requested.granted || requested.status === 'granted'),
+    status: requested.status ?? 'unknown',
+  };
 }
 
 async function configureAndroidChannels() {
@@ -206,4 +327,36 @@ function getExpoProjectId() {
 function getDeviceName() {
   const maybeConstants = Constants as unknown as { deviceName?: string };
   return maybeConstants.deviceName ?? `${Platform.OS} device`;
+}
+
+function setPushDiagnostics(partial: Partial<PushRegistrationDiagnostics>) {
+  pushDiagnostics = {
+    ...pushDiagnostics,
+    ...partial,
+  };
+
+  if (shouldShowPushDiagnostics()) {
+    console.info('[push:diagnostics]', sanitizePushDiagnostics(pushDiagnostics));
+  }
+
+  pushDiagnosticsListeners.forEach((listener) => listener(pushDiagnostics));
+}
+
+export function maskPushToken(token?: string | null) {
+  if (!token) {
+    return '[missing]';
+  }
+
+  if (token.length <= 18) {
+    return `${token.slice(0, 4)}...`;
+  }
+
+  return `${token.slice(0, 18)}...${token.slice(-8)}`;
+}
+
+function sanitizePushDiagnostics(diagnostics: PushRegistrationDiagnostics) {
+  return {
+    ...diagnostics,
+    expoPushToken: maskPushToken(diagnostics.expoPushToken),
+  };
 }

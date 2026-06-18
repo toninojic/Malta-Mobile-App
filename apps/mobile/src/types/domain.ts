@@ -529,6 +529,27 @@ export type PushToken = {
   updatedAt: string;
 };
 
+export type PushTokenDebugResponse = {
+  userId: string;
+  count: number;
+  activeCount: number;
+  tokens: PushToken[];
+};
+
+export type PushTestDebugResponse = {
+  userId: string;
+  sent: number;
+  tokenCount: number;
+  tokens?: Array<{ id: string; tokenPrefix: string }>;
+  tickets: Array<{
+    status?: 'ok' | 'error';
+    id?: string;
+    message?: string;
+    details?: { error?: string };
+  }>;
+  message?: string;
+};
+
 export type NotificationPreferences = {
   id?: string;
   userId?: string;

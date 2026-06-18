@@ -10,7 +10,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle, ShieldCheck, Star, UserRound, UsersRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../api/activityHooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useConversations } from '../api/messageHooks';
@@ -108,6 +108,20 @@ export function RootNavigator() {
       void configureRevenueCatForCurrentUser();
       void registerExpoPushTokenForUser(user);
     }
+  }, [hydrated, user?.id]);
+
+  useEffect(() => {
+    if (!hydrated || !user) {
+      return undefined;
+    }
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void registerExpoPushTokenForUser(user);
+      }
+    });
+
+    return () => subscription.remove();
   }, [hydrated, user?.id]);
 
   useEffect(() => {

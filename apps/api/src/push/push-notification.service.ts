@@ -32,6 +32,13 @@ export class PushNotificationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async register(user: AuthenticatedUser, dto: RegisterPushTokenDto) {
+    this.logPushDebug('push token upsert started', {
+      userId: user.id,
+      platform: dto.platform,
+      deviceId: dto.deviceId,
+      tokenPrefix: dto.expoPushToken.slice(0, 18),
+    });
+
     const token = await this.prisma.pushToken.upsert({
       where: { expoPushToken: dto.expoPushToken },
       create: {
@@ -51,6 +58,14 @@ export class PushNotificationService {
         isActive: true,
         lastUsedAt: new Date(),
       },
+    });
+
+    this.logPushDebug('push token upsert completed', {
+      userId: user.id,
+      pushTokenId: token.id,
+      isActive: token.isActive,
+      lastUsedAt: token.lastUsedAt.toISOString(),
+      tokenPrefix: token.expoPushToken.slice(0, 18),
     });
 
     return this.toPushToken(token);
@@ -97,6 +112,82 @@ export class PushNotificationService {
     return {
       data: tokens.map((token) => this.toPushToken(token)),
       pagination: paginationMeta(query.page, query.limit, total),
+    };
+  }
+
+  async debugMine(user: AuthenticatedUser) {
+    const tokens = await this.prisma.pushToken.findMany({
+      where: { userId: user.id },
+      orderBy: { lastUsedAt: 'desc' },
+    });
+
+    this.logPushDebug('debug push tokens requested', {
+      userId: user.id,
+      tokenCount: tokens.length,
+      activeTokenCount: tokens.filter((token) => token.isActive).length,
+    });
+
+    return {
+      userId: user.id,
+      count: tokens.length,
+      activeCount: tokens.filter((token) => token.isActive).length,
+      tokens: tokens.map((token) => this.toPushToken(token)),
+    };
+  }
+
+  async sendDebugTest(user: AuthenticatedUser) {
+    const tokens = await this.prisma.pushToken.findMany({
+      where: { userId: user.id, isActive: true },
+      orderBy: { lastUsedAt: 'desc' },
+      select: { id: true, expoPushToken: true },
+    });
+
+    this.logPushDebug('debug test push requested', {
+      userId: user.id,
+      activeTokenCount: tokens.length,
+    });
+
+    if (!tokens.length) {
+      return {
+        userId: user.id,
+        sent: 0,
+        tokenCount: 0,
+        tickets: [],
+        message: 'No active push tokens are saved for this user.',
+      };
+    }
+
+    const messages = tokens.map((token) => ({
+      to: token.expoPushToken,
+      sound: 'default' as const,
+      title: 'MaltaPro test push',
+      body: 'Your device is registered for push notifications.',
+      data: {
+        type: NotificationType.SYSTEM_ALERT,
+        target: 'notifications',
+      },
+      channelId: 'system' as const,
+    }));
+
+    const tickets = await this.sendExpoMessagesWithResult(messages);
+    const sent = tickets.filter((ticket) => ticket.status === 'ok').length;
+
+    this.logPushDebug('debug test push completed', {
+      userId: user.id,
+      sent,
+      ticketCount: tickets.length,
+      errors: tickets.filter((ticket) => ticket.status === 'error').map((ticket) => ticket.details?.error ?? ticket.message ?? 'unknown'),
+    });
+
+    return {
+      userId: user.id,
+      sent,
+      tokenCount: tokens.length,
+      tokens: tokens.map((token) => ({
+        id: token.id,
+        tokenPrefix: token.expoPushToken.slice(0, 18),
+      })),
+      tickets,
     };
   }
 
@@ -192,6 +283,12 @@ export class PushNotificationService {
   }
 
   private async sendExpoMessages(messages: ExpoPushMessage[]) {
+    await this.sendExpoMessagesWithResult(messages);
+  }
+
+  private async sendExpoMessagesWithResult(messages: ExpoPushMessage[]) {
+    const allTickets: ExpoTicket[] = [];
+
     for (let index = 0; index < messages.length; index += 100) {
       const chunk = messages.slice(index, index + 100);
       const response = await fetch(this.expoPushUrl, {
@@ -208,11 +305,21 @@ export class PushNotificationService {
 
       if (!response.ok) {
         this.logger.warn(`Expo push API returned ${response.status}`);
+        allTickets.push(
+          ...chunk.map(() => ({
+            status: 'error' as const,
+            message: `Expo push API returned ${response.status}`,
+          })),
+        );
         continue;
       }
 
-      await this.handleExpoTickets(chunk, payload?.data ?? []);
+      const tickets = payload?.data ?? [];
+      allTickets.push(...tickets);
+      await this.handleExpoTickets(chunk, tickets);
     }
+
+    return allTickets;
   }
 
   private async handleExpoTickets(messages: ExpoPushMessage[], tickets: ExpoTicket[]) {
@@ -286,6 +393,14 @@ export class PushNotificationService {
 
   private errorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private logPushDebug(message: string, metadata: Record<string, unknown>) {
+    if (process.env.PUSH_DEBUG !== 'true' && process.env.NODE_ENV === 'production') {
+      return;
+    }
+
+    this.logger.debug(`${message} ${JSON.stringify(metadata)}`);
   }
 
   private toPushToken(token: {

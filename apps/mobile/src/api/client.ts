@@ -28,6 +28,8 @@ import {
   Payment,
   PaymentConfig,
   PushToken,
+  PushTestDebugResponse,
+  PushTokenDebugResponse,
   RefundRequest,
   RefundStatus,
   Review,
@@ -695,6 +697,14 @@ export const api = {
   deactivatePushToken(id: string) {
     return request<{ success: true }>(`/push-tokens/${id}`, {
       method: 'DELETE',
+    });
+  },
+  notificationDebugPushTokens() {
+    return request<PushTokenDebugResponse>('/notifications/debug/push-tokens');
+  },
+  sendTestPushNotification() {
+    return request<PushTestDebugResponse>('/notifications/debug/send-test', {
+      method: 'POST',
     });
   },
   adminNotifications(input: { page?: number; limit?: number } = {}) {
