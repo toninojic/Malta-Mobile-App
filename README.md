@@ -127,6 +127,13 @@ npm run mobile:build:preview
 npm run mobile:build:production
 ```
 
+Publish JS/UI updates without rebuilding the Android binary:
+
+```bash
+npm run mobile:update:preview
+npm run mobile:update:production
+```
+
 Use the EAS wrapper in this repo to avoid noisy Node deprecation warnings:
 
 ```bash

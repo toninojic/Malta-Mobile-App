@@ -17,6 +17,8 @@
     "mobile:build:preview": "npm run build:android:preview --workspace @malta-marketplace/mobile",
     "mobile:build:production": "npm run build:android:production --workspace @malta-marketplace/mobile",
     "mobile:submit:production": "npm run submit:android:production --workspace @malta-marketplace/mobile",
+    "mobile:update:preview": "npm run update:preview --workspace @malta-marketplace/mobile",
+    "mobile:update:production": "npm run update:production --workspace @malta-marketplace/mobile",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces"
   },

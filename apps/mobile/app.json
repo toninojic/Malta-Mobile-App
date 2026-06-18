@@ -3,6 +3,12 @@
     "name": "MaltaPro",
     "slug": "malta-craftsman-marketplace",
     "version": "0.1.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/783f09f3-8378-4d15-b699-9bdfc2b4842f"
+    },
     "orientation": "portrait",
     "scheme": "maltapro",
     "icon": "./assets/icon.png",

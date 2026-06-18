@@ -16,6 +16,7 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "channel": "preview",
       "env": {
         "EXPO_PUBLIC_API_LOGGING": "true",
         "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true",
@@ -28,6 +29,7 @@
     "production": {
       "autoIncrement": true,
       "environment": "production",
+      "channel": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://maltapro-api.onrender.com/api/v1",
         "EXPO_PUBLIC_API_LOGGING": "false",

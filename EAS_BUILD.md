@@ -68,6 +68,11 @@ npx eas-cli@latest env:create --scope project --environment production --name GO
 ## Preview APK
 
 Preview is for direct install and internal QA. It creates an APK and does not upload to Google Play.
+Preview builds receive OTA updates from the EAS Update branch/channel:
+
+```text
+preview
+```
 
 From repo root:
 
@@ -86,6 +91,11 @@ The preview profile requires a public HTTPS API URL. It should point at staging,
 ## Production AAB
 
 Production is for Google Play Internal Testing / Play Store. It creates an AAB.
+Production builds receive OTA updates from the EAS Update branch/channel:
+
+```text
+production
+```
 
 From repo root:
 
@@ -166,3 +176,62 @@ From repo root:
 npm run mobile:build:preview
 npm run mobile:build:production
 ```
+
+## EAS Update Branches
+
+MaltaPro uses two EAS Update branches:
+
+```text
+preview
+production
+```
+
+The build profiles are configured in `apps/mobile/eas.json`:
+
+- `preview` build profile uses channel `preview`;
+- `production` build profile uses channel `production`.
+
+Create the branches once from `apps/mobile` if they do not already exist:
+
+```bash
+npx eas-cli@latest branch:create preview
+npx eas-cli@latest branch:create production
+```
+
+Publish a JS/UI update to preview:
+
+```bash
+npx eas-cli@latest update --branch preview
+```
+
+Publish a JS/UI update to production:
+
+```bash
+npx eas-cli@latest update --branch production
+```
+
+From repo root, use:
+
+```bash
+npm run mobile:update:preview
+npm run mobile:update:production
+```
+
+Use EAS Update for JavaScript, TypeScript, styling, copy, API-call, and navigation fixes that do not change native dependencies or native config.
+
+Create a new APK/AAB build instead of an update when you change:
+
+- `expo-notifications`, `expo-updates`, RevenueCat, or any native dependency;
+- `app.json` native configuration such as package name, permissions, splash, icons, Firebase files, or plugins;
+- Android/iOS credentials;
+- `runtimeVersion` or app version compatibility.
+
+The app uses:
+
+```json
+"runtimeVersion": {
+  "policy": "appVersion"
+}
+```
+
+That means updates are delivered only to builds with the same Expo app version, for example `0.1.0`. If you increment the app version, build a new binary before publishing updates for that version.
