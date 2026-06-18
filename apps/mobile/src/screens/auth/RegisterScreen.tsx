@@ -10,6 +10,7 @@ import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
+import { markContractorSetupRequired } from '../../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 import { UserRole } from '../../types/domain';
@@ -32,6 +33,9 @@ export function RegisterScreen({ navigation }: Props) {
   const mutation = useMutation({
     mutationFn: api.register,
     onSuccess: async (session) => {
+      if (session.user.role === 'CONTRACTOR') {
+        await markSetupRequiredWithTimeout(session.user.id);
+      }
       await setSession(session);
       await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
     },
@@ -85,6 +89,24 @@ export function RegisterScreen({ navigation }: Props) {
       <Button title="Log In" variant="secondary" onPress={() => navigation.navigate('Login')} />
     </Screen>
   );
+}
+
+async function markSetupRequiredWithTimeout(userId: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  await Promise.race([
+    markContractorSetupRequired(userId),
+    new Promise<void>((resolve) => {
+      timeoutId = setTimeout(() => {
+        console.warn('[contractor-setup] mark required timed out; continuing registration', { userId });
+        resolve();
+      }, 1_500);
+    }),
+  ]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
 }
 
 function RoleOption({
