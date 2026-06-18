@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { UserStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -97,5 +98,27 @@ export class UsersService {
         avatarUrl,
       },
     });
+  }
+
+  async deactivateAccount(userId: string) {
+    await this.prisma.$transaction([
+      this.prisma.pushToken.updateMany({
+        where: { userId },
+        data: { isActive: false },
+      }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          status: UserStatus.SUSPENDED,
+          refreshTokenHash: null,
+        },
+      }),
+    ]);
+
+    return {
+      success: true,
+      status: UserStatus.SUSPENDED,
+      message: 'Account deactivated. Existing marketplace records are retained for audit and transaction history.',
+    };
   }
 }

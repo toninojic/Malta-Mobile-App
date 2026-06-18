@@ -80,6 +80,7 @@ export function ProfileEditScreen() {
   const [tradeCategories, setTradeCategories] = useState('');
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [profileSavedOpen, setProfileSavedOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [notificationSettingsExpanded, setNotificationSettingsExpanded] = useState(false);
   const [serviceAreasExpanded, setServiceAreasExpanded] = useState(false);
   const [serviceCategoriesExpanded, setServiceCategoriesExpanded] = useState(false);
@@ -185,6 +186,17 @@ export function ProfileEditScreen() {
       await deactivateCurrentDevicePushToken();
       await clearSession();
       queryClient.clear();
+    },
+  });
+  const deleteAccountMutation = useMutation({
+    mutationFn: api.deleteAccount,
+    onSuccess: async () => {
+      setDeleteAccountOpen(false);
+      await clearSession();
+      queryClient.clear();
+    },
+    onError: (error) => {
+      Alert.alert('Could not delete account', error instanceof Error ? error.message : 'Please try again.');
     },
   });
 
@@ -508,6 +520,26 @@ export function ProfileEditScreen() {
         icon={Save}
         actions={[{ label: 'Close', variant: 'primary', onPress: () => setProfileSavedOpen(false) }]}
         onRequestClose={() => setProfileSavedOpen(false)}
+      />
+      <AppModal
+        visible={deleteAccountOpen}
+        title="Delete Account"
+        body="Your account will be deactivated and you will be signed out. Existing jobs, offers, messages, wallet records, and reviews are retained for marketplace history and admin audit."
+        icon={Trash2}
+        actions={[
+          { label: 'Cancel', onPress: () => setDeleteAccountOpen(false), disabled: deleteAccountMutation.isPending },
+          {
+            label: 'Delete Account',
+            variant: 'danger',
+            disabled: deleteAccountMutation.isPending,
+            onPress: () => deleteAccountMutation.mutate(),
+          },
+        ]}
+        onRequestClose={() => {
+          if (!deleteAccountMutation.isPending) {
+            setDeleteAccountOpen(false);
+          }
+        }}
       />
       <Card style={styles.profileTopCard}>
         <View style={styles.headerRow}>
@@ -921,6 +953,19 @@ export function ProfileEditScreen() {
       ) : null}
 
       <Button title="Save Profile" icon={Save} loading={updateMutation.isPending} onPress={() => updateMutation.mutate()} />
+      <Card>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Account</Text>
+        <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+          Delete account deactivates login access while keeping marketplace history intact.
+        </Text>
+        <Button
+          title="Delete Account"
+          icon={Trash2}
+          variant="danger"
+          loading={deleteAccountMutation.isPending}
+          onPress={() => setDeleteAccountOpen(true)}
+        />
+      </Card>
       <Button title="Log Out" icon={LogOut} variant="secondary" loading={logoutMutation.isPending} onPress={() => logoutMutation.mutate()} />
     </Screen>
   );

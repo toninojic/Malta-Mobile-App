@@ -49,9 +49,19 @@ export function AppModal({ visible, title, body, icon: Icon, media, actions, onR
 function ModalButton({ action }: { action: AppModalAction }) {
   const theme = useTheme();
   const variant = action.variant ?? 'secondary';
-  const background = variant === 'primary' ? theme.colors.success : theme.colors.surfaceMuted;
-  const border = variant === 'primary' ? theme.colors.success : theme.colors.border;
-  const text = variant === 'primary' ? '#FFFFFF' : theme.colors.text;
+  const background =
+    variant === 'primary'
+      ? theme.colors.success
+      : variant === 'danger'
+        ? theme.colors.danger
+        : theme.colors.surfaceMuted;
+  const border =
+    variant === 'primary'
+      ? theme.colors.success
+      : variant === 'danger'
+        ? theme.colors.danger
+        : theme.colors.border;
+  const text = variant === 'primary' || variant === 'danger' ? '#FFFFFF' : theme.colors.text;
 
   return (
     <Pressable

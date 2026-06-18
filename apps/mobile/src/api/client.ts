@@ -317,6 +317,11 @@ export const api = {
       body: input,
     });
   },
+  deleteAccount() {
+    return request<{ success: true; status: UserStatus; message: string }>('/users/me', {
+      method: 'DELETE',
+    });
+  },
   storageUploadUrl(input: {
     folder: StorageFolder;
     fileName: string;

@@ -93,12 +93,32 @@ Start Expo:
 npm run mobile:start
 ```
 
-For testing on a real phone, the mobile app needs a public HTTPS API URL. For local testing, expose the API with ngrok or another tunnel, then run:
+By default, local development points the mobile app at:
+
+```text
+http://localhost:3000/api/v1
+```
+
+For Android emulator, physical phone, or tunnel testing, update `apps/mobile/.env` as described in [DEV_SETUP.md](DEV_SETUP.md).
+
+For testing on a real phone outside your network, expose the API with ngrok or another tunnel, then run:
 
 ```bash
 npm run mobile:api-url:set -- https://your-public-api-url.example.com
 npm run mobile:api-url:check
 ```
+
+## Account Deletion
+
+User-facing account deletion is implemented as soft deactivation.
+
+When a user deletes their account:
+
+- their account status becomes `SUSPENDED`;
+- their refresh token is cleared;
+- their saved push tokens are deactivated;
+- they are signed out locally;
+- existing jobs, offers, messages, payments, wallet records, and reviews are retained for marketplace history, admin audit, and relational integrity.
 
 Build Android APK/AAB through EAS:
 

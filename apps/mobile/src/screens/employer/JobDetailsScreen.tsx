@@ -417,6 +417,7 @@ export function JobDetailsScreen({ route, navigation }: Props) {
               onViewReview={(reviewId) =>
                 navigation.getParent()?.navigate('ActivityTab', { screen: 'ReviewDetails', params: { reviewId } })
               }
+              onBackToJobs={() => navigation.navigate('EmployerJobs')}
               onOpenChat={
                 offer.contactId
                   ? () =>
@@ -484,6 +485,7 @@ function EmployerOfferCard({
   onStatusChange,
   onLeaveReview,
   onViewReview,
+  onBackToJobs,
   onOpenChat,
   onOpenProfile,
 }: {
@@ -498,6 +500,7 @@ function EmployerOfferCard({
   onStatusChange: () => void;
   onLeaveReview: (contactId: string) => void;
   onViewReview: (reviewId: string) => void;
+  onBackToJobs: () => void;
   onOpenChat?: () => void;
   onOpenProfile?: () => void;
 }) {
@@ -637,6 +640,7 @@ function EmployerOfferCard({
         onStatusChange={onStatusChange}
         onLeaveReview={onLeaveReview}
         onViewReview={onViewReview}
+        onBackToJobs={onBackToJobs}
       />
       {isUnlocked && onOpenChat ? (
         <Button title="Open Chat" icon={MessageCircle} onPress={onOpenChat} />
@@ -653,11 +657,13 @@ function EmployerOfferCompletionActions({
   onStatusChange,
   onLeaveReview,
   onViewReview,
+  onBackToJobs,
 }: {
   offer: Offer;
   onStatusChange: () => void;
   onLeaveReview: (contactId: string) => void;
   onViewReview: (reviewId: string) => void;
+  onBackToJobs: () => void;
 }) {
   const contactId = offer.unlockStatus === 'UNLOCKED' ? offer.contactId ?? undefined : undefined;
   const completionQuery = useCompletionStatus(contactId);
@@ -692,7 +698,17 @@ function EmployerOfferCompletionActions({
         title="Completion Confirmed"
         body="Review is now available."
         icon={CheckCircle2}
-        actions={[{ label: 'Close', variant: 'primary', onPress: () => setCompletionConfirmedOpen(false) }]}
+        actions={[
+          { label: 'Close', onPress: () => setCompletionConfirmedOpen(false) },
+          {
+            label: 'Back to Jobs',
+            variant: 'primary',
+            onPress: () => {
+              setCompletionConfirmedOpen(false);
+              onBackToJobs();
+            },
+          },
+        ]}
         onRequestClose={() => setCompletionConfirmedOpen(false)}
       />
       {status ? <Badge status={status} /> : null}

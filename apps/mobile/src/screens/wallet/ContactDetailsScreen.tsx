@@ -27,7 +27,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
   const ensureConversationMutation = useEnsureConversationForContact();
   const completeMutation = useCompleteContact();
   const confirmMutation = useConfirmCompletion();
-  const [completionInfo, setCompletionInfo] = useState<{ title: string; body: string } | null>(null);
+  const [completionInfo, setCompletionInfo] = useState<{ title: string; body: string; jobId?: string } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,7 +62,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
       onSuccess: async () => {
         await completionQuery.refetch({ cancelRefetch: false });
         await query.refetch({ cancelRefetch: false });
-        setCompletionInfo({ title: 'Completion Requested', body: 'The employer has been notified.' });
+        setCompletionInfo({ title: 'Completion Requested', body: 'The employer has been notified.', jobId: contact.jobRequest.id });
       },
       onError: (error) => {
         Alert.alert('Could not mark completed', error instanceof Error ? error.message : 'Please try again.');
@@ -75,7 +75,7 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
       onSuccess: async () => {
         await completionQuery.refetch({ cancelRefetch: false });
         await query.refetch({ cancelRefetch: false });
-        setCompletionInfo({ title: 'Completion Confirmed', body: 'Review is now available.' });
+        setCompletionInfo({ title: 'Completion Confirmed', body: 'Review is now available.', jobId: contact.jobRequest.id });
       },
       onError: (error) => {
         Alert.alert('Could not confirm completion', error instanceof Error ? error.message : 'Please try again.');
@@ -109,7 +109,38 @@ export function ContactDetailsScreen({ route, navigation }: Props) {
         title={completionInfo?.title ?? ''}
         body={completionInfo?.body ?? ''}
         icon={CheckCircle2}
-        actions={[{ label: 'Close', variant: 'primary', onPress: () => setCompletionInfo(null) }]}
+        actions={[
+          { label: 'Close', onPress: () => setCompletionInfo(null) },
+          ...(isEmployer && completionInfo?.jobId
+            ? [
+                {
+                  label: 'Back to Job Details',
+                  variant: 'primary' as const,
+                  onPress: () => {
+                    const jobId = completionInfo.jobId as string;
+                    setCompletionInfo(null);
+                    navigation.getParent()?.navigate('JobsTab', { screen: 'JobDetails', params: { jobId } });
+                  },
+                },
+                {
+                  label: 'Back to Jobs',
+                  onPress: () => {
+                    setCompletionInfo(null);
+                    navigation.getParent()?.navigate('JobsTab', { screen: 'EmployerJobs' });
+                  },
+                },
+              ]
+            : [
+                {
+                  label: 'Back',
+                  variant: 'primary' as const,
+                  onPress: () => {
+                    setCompletionInfo(null);
+                    navigation.goBack();
+                  },
+                },
+              ]),
+        ]}
         onRequestClose={() => setCompletionInfo(null)}
       />
       <Card>

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Patch,
@@ -41,6 +42,11 @@ export class UsersController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(user.id, dto);
+  }
+
+  @Delete('me')
+  deactivateMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.deactivateAccount(user.id);
   }
 
   @Post('me/avatar')

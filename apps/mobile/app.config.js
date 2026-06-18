@@ -34,11 +34,18 @@ const configuredPushDebug = parseBooleanEnv(
   baseConfig.extra?.pushDebug ?? false,
 );
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? baseConfig.extra?.buildProfile;
+const buildPlatform = process.env.EAS_BUILD_PLATFORM;
 const googleServicesFile = resolveGoogleServicesFile();
 
 if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
   throw new Error(
     'Missing EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID for production build. Set the Google RevenueCat public key that starts with goog_ in EAS environment variables.',
+  );
+}
+
+if (buildProfile && buildPlatform === 'android' && !googleServicesFile) {
+  throw new Error(
+    'Missing google-services.json for Android EAS build. Set GOOGLE_SERVICES_JSON_BASE64 as a sensitive EAS environment variable or provide apps/mobile/google-services.json before building.',
   );
 }
 

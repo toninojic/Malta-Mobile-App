@@ -70,13 +70,8 @@ export function subscribePushRegistrationDiagnostics(listener: (diagnostics: Pus
 }
 
 export function shouldShowPushDiagnostics() {
-  const extra = Constants.expoConfig?.extra as { buildProfile?: string; pushDebug?: boolean } | undefined;
-  return Boolean(
-    (typeof __DEV__ !== 'undefined' && __DEV__) ||
-      extra?.pushDebug === true ||
-      extra?.buildProfile === 'development' ||
-      extra?.buildProfile === 'preview',
-  );
+  const extra = Constants.expoConfig?.extra as { pushDebug?: boolean } | undefined;
+  return extra?.pushDebug === true;
 }
 
 export async function registerExpoPushTokenForUser(user: AuthUser | null) {

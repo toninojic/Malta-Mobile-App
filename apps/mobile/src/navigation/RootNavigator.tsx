@@ -19,6 +19,7 @@ import { useContractorVerification } from '../api/offerWorkHooks';
 import { useContractorRatingSummary, useEmployerRatingSummary } from '../api/reviewHooks';
 import { AppModal } from '../components/AppModal';
 import { useTheme } from '../design/theme';
+import { isContractorSetupCompleted, markContractorSetupCompleted } from '../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../services/revenueCatPurchases';
 import {
   PushNotificationData,
@@ -33,6 +34,7 @@ import { ActivityScreen } from '../screens/activity/ActivityScreen';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
+import { ContractorSetupScreen } from '../screens/auth/ContractorSetupScreen';
 import { EmployerJobsScreen } from '../screens/employer/EmployerJobsScreen';
 import { JobDetailsScreen } from '../screens/employer/JobDetailsScreen';
 import { JobFormScreen } from '../screens/employer/JobFormScreen';
@@ -163,9 +165,58 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme} linking={linking}>
-      {user ? <AuthenticatedTabs /> : <AuthRoutes />}
+      {user ? <AuthenticatedExperience /> : <AuthRoutes />}
     </NavigationContainer>
   );
+}
+
+function AuthenticatedExperience() {
+  const theme = useTheme();
+  const user = useAuthStore((state) => state.user);
+  const [contractorSetupComplete, setContractorSetupComplete] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    if (user?.role !== 'CONTRACTOR') {
+      setContractorSetupComplete(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    setContractorSetupComplete(null);
+    void isContractorSetupCompleted(user.id).then((completed) => {
+      if (active) {
+        setContractorSetupComplete(completed);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id, user?.role]);
+
+  if (user?.role === 'CONTRACTOR' && contractorSetupComplete === false) {
+    return (
+      <ContractorSetupScreen
+        onComplete={() => {
+          void markContractorSetupCompleted(user.id).then(() => setContractorSetupComplete(true));
+        }}
+      />
+    );
+  }
+
+  if (user?.role === 'CONTRACTOR' && contractorSetupComplete === null) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator color={theme.colors.primary} />
+        <Text style={{ marginTop: 12, color: theme.colors.textMuted }}>Preparing contractor setup</Text>
+      </View>
+    );
+  }
+
+  return <AuthenticatedTabs />;
 }
 
 function navigateFromPush(data: PushNotificationData) {
