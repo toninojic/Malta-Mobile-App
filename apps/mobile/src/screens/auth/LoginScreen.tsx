@@ -9,6 +9,7 @@ import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
+import { clearContractorSetupRequirement, getContractorSetupDecision } from '../../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 
@@ -23,6 +24,18 @@ export function LoginScreen({ navigation }: Props) {
   const mutation = useMutation({
     mutationFn: api.login,
     onSuccess: async (session) => {
+      clearContractorSetupRequirement(session.user.id);
+      const setupDecision = getContractorSetupDecision(session.user);
+      console.info('[contractor-setup] auth action', {
+        authAction: 'login',
+        userId: session.user.id,
+        role: session.user.role,
+        isNewlyRegistered: false,
+        contractorOnboardingRequired: setupDecision.contractorOnboardingRequired,
+        contractorOnboardingCompleted: setupDecision.contractorOnboardingCompleted,
+        contractorOnboardingSkipped: setupDecision.contractorOnboardingSkipped,
+        finalNavigationTarget: 'app',
+      });
       await setSession(session);
       await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
     },

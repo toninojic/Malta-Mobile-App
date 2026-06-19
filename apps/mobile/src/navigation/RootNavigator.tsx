@@ -19,7 +19,7 @@ import { useContractorVerification } from '../api/offerWorkHooks';
 import { useContractorRatingSummary, useEmployerRatingSummary } from '../api/reviewHooks';
 import { AppModal } from '../components/AppModal';
 import { useTheme } from '../design/theme';
-import { ContractorSetupStatus, getContractorSetupStatus, markContractorSetupCompleted } from '../services/contractorSetup';
+import { ContractorSetupCompletion, finishContractorSetup, getContractorSetupDecision } from '../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../services/revenueCatPurchases';
 import {
   PushNotificationData,
@@ -171,111 +171,55 @@ export function RootNavigator() {
 }
 
 function AuthenticatedExperience() {
-  const theme = useTheme();
   const user = useAuthStore((state) => state.user);
-  const [contractorSetupStatus, setContractorSetupStatus] = useState<ContractorSetupStatus | 'loading'>('loading');
+  const [setupRevision, setSetupRevision] = useState(0);
+  const setupDecision = getContractorSetupDecision(user);
 
   useEffect(() => {
-    let active = true;
-
-    if (user?.role !== 'CONTRACTOR') {
-      setContractorSetupStatus('skipped');
-      console.info('[contractor-setup] bypass for non-contractor', {
-        userId: user?.id ?? null,
-        role: user?.role ?? null,
-        decision: 'enter-app',
-      });
-      return () => {
-        active = false;
-      };
-    }
-
-    setContractorSetupStatus('loading');
-    console.info('[contractor-setup] loading status', {
-      userId: user.id,
-      role: user.role,
+    console.info('[contractor-setup] navigation decision', {
+      authAction: setupDecision.isNewlyRegisteredContractor ? 'register' : 'login-or-existing-session',
+      userId: user?.id ?? null,
+      role: user?.role ?? null,
+      isNewlyRegistered: setupDecision.isNewlyRegisteredContractor,
+      contractorOnboardingRequired: setupDecision.contractorOnboardingRequired,
+      contractorOnboardingCompleted: setupDecision.contractorOnboardingCompleted,
+      contractorOnboardingSkipped: setupDecision.contractorOnboardingSkipped,
+      finalNavigationTarget: setupDecision.finalNavigationTarget,
     });
+  }, [
+    setupDecision.contractorOnboardingCompleted,
+    setupDecision.contractorOnboardingRequired,
+    setupDecision.contractorOnboardingSkipped,
+    setupDecision.finalNavigationTarget,
+    setupDecision.isNewlyRegisteredContractor,
+    setupRevision,
+    user?.id,
+    user?.role,
+  ]);
 
-    void withTimeout(getContractorSetupStatus(user.id), 4_000, 'skipped')
-      .then((status) => {
-        if (!active) {
-          return;
-        }
-
-        setContractorSetupStatus(status);
-        console.info('[contractor-setup] status resolved', {
+  if (user?.role === 'CONTRACTOR' && setupDecision.contractorOnboardingRequired) {
+    const finishSetup = (outcome: ContractorSetupCompletion) => {
+      void finishContractorSetup(user.id, outcome).finally(() => {
+        console.info('[contractor-setup] setup screen closed', {
           userId: user.id,
           role: user.role,
-          status,
-          decision: status === 'required' ? 'show-onboarding' : 'enter-app',
+          outcome,
+          contractorOnboardingCompleted: outcome === 'completed',
+          contractorOnboardingSkipped: outcome === 'skipped',
+          finalNavigationTarget: 'app',
         });
-      })
-      .catch((error) => {
-        if (!active) {
-          return;
-        }
-
-        setContractorSetupStatus('error');
-        console.warn('[contractor-setup] status failed; entering app', {
-          userId: user.id,
-          role: user.role,
-          error: error instanceof Error ? error.message : String(error),
-          decision: 'enter-app',
-        });
+        setSetupRevision((current) => current + 1);
       });
-
-    return () => {
-      active = false;
     };
-  }, [user?.id, user?.role]);
 
-  if (user?.role === 'CONTRACTOR' && contractorSetupStatus === 'required') {
     return (
       <ContractorSetupScreen
-        onComplete={() => {
-          void markContractorSetupCompleted(user.id).then(() => {
-            console.info('[contractor-setup] completed from onboarding', {
-              userId: user.id,
-              role: user.role,
-              decision: 'enter-app',
-            });
-            setContractorSetupStatus('completed');
-          });
-        }}
+        onFinish={finishSetup}
       />
     );
   }
 
-  if (user?.role === 'CONTRACTOR' && contractorSetupStatus === 'loading') {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background }}>
-        <ActivityIndicator color={theme.colors.primary} />
-        <Text style={{ marginTop: 12, color: theme.colors.textMuted }}>Preparing contractor setup</Text>
-      </View>
-    );
-  }
-
   return <AuthenticatedTabs />;
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T) {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const timeout = new Promise<T>((resolve) => {
-    timeoutId = setTimeout(() => {
-      console.warn('[contractor-setup] status load timed out; using fallback', {
-        timeoutMs,
-        fallback,
-      });
-      resolve(fallback);
-    }, timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  });
 }
 
 function navigateFromPush(data: PushNotificationData) {

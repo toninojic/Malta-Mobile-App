@@ -10,7 +10,7 @@ import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
-import { markContractorSetupRequired } from '../../services/contractorSetup';
+import { getContractorSetupDecision, markContractorSetupRequired } from '../../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 import { UserRole } from '../../types/domain';
@@ -36,6 +36,17 @@ export function RegisterScreen({ navigation }: Props) {
       if (session.user.role === 'CONTRACTOR') {
         await markSetupRequiredWithTimeout(session.user.id);
       }
+      const setupDecision = getContractorSetupDecision(session.user);
+      console.info('[contractor-setup] auth action', {
+        authAction: 'register',
+        userId: session.user.id,
+        role: session.user.role,
+        isNewlyRegistered: session.user.role === 'CONTRACTOR',
+        contractorOnboardingRequired: setupDecision.contractorOnboardingRequired,
+        contractorOnboardingCompleted: setupDecision.contractorOnboardingCompleted,
+        contractorOnboardingSkipped: setupDecision.contractorOnboardingSkipped,
+        finalNavigationTarget: setupDecision.finalNavigationTarget,
+      });
       await setSession(session);
       await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
     },

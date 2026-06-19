@@ -20,16 +20,17 @@ import { TextField } from '../../components/TextField';
 import { MALTA_SERVICE_LOCATIONS } from '../../config/maltaLocations';
 import { SERVICE_CATEGORIES, serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
+import { ContractorSetupCompletion } from '../../services/contractorSetup';
 
 type ContractorSetupScreenProps = {
-  onComplete: () => void;
+  onFinish: (outcome: ContractorSetupCompletion) => void;
 };
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
-export function ContractorSetupScreen({ onComplete }: ContractorSetupScreenProps) {
+export function ContractorSetupScreen({ onFinish }: ContractorSetupScreenProps) {
   const theme = useTheme();
   const [stepIndex, setStepIndex] = useState(0);
   const [locationSearch, setLocationSearch] = useState('');
@@ -51,11 +52,15 @@ export function ContractorSetupScreen({ onComplete }: ContractorSetupScreenProps
 
   const goNext = () => {
     if (isLastStep) {
-      onComplete();
+      onFinish('completed');
       return;
     }
 
     setStepIndex((current) => Math.min(current + 1, steps.length - 1));
+  };
+
+  const skipSetup = () => {
+    onFinish('skipped');
   };
 
   const toggleLocation = (locationKey: string) => {
@@ -306,7 +311,7 @@ export function ContractorSetupScreen({ onComplete }: ContractorSetupScreenProps
       ) : null}
 
       <View style={styles.actions}>
-        <Button title="Skip for now" variant="secondary" onPress={goNext} />
+        <Button title="Skip for now" variant="secondary" onPress={skipSetup} />
         <Button title={isLastStep ? 'Finish Setup' : 'Next'} icon={isLastStep ? CheckCircle2 : undefined} onPress={goNext} />
       </View>
     </Screen>
