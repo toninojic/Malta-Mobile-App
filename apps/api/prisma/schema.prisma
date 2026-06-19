@@ -127,6 +127,23 @@ enum MessageType {
   VOICE
 }
 
+enum AiConversationStatus {
+  ACTIVE
+  COMPLETED
+  DISCARDED
+}
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum AiJobDraftStatus {
+  DRAFT
+  PUBLISHED
+  DISCARDED
+}
+
 model User {
   id               String             @id @default(uuid()) @db.Uuid
   email            String             @unique @db.VarChar(320)
@@ -168,6 +185,9 @@ model User {
   serviceCategories   ContractorServiceCategory[] @relation("ContractorServiceCategories")
   verificationRequests ContractorVerification[] @relation("ContractorVerifications")
   reviewedVerifications ContractorVerification[] @relation("VerificationReviews")
+  aiConversations  AiConversation[] @relation("EmployerAiConversations")
+  aiJobDrafts      AiJobDraft[] @relation("EmployerAiJobDrafts")
+  aiUsage          AiUsage[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -667,4 +687,62 @@ model AuditLog {
   @@index([action, createdAt])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+model AiConversation {
+  id         String               @id @default(uuid()) @db.Uuid
+  employerId String              @db.Uuid
+  employer   User                @relation("EmployerAiConversations", fields: [employerId], references: [id], onDelete: Cascade)
+  status     AiConversationStatus @default(ACTIVE)
+  messages   AiMessage[]
+  draft      AiJobDraft?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([employerId, status, updatedAt])
+}
+
+model AiMessage {
+  id             String         @id @default(uuid()) @db.Uuid
+  conversationId String         @db.Uuid
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiMessageRole
+  content        String         @db.VarChar(2000)
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([role, createdAt])
+}
+
+model AiJobDraft {
+  id             String           @id @default(uuid()) @db.Uuid
+  conversationId String           @unique @db.Uuid
+  employerId     String           @db.Uuid
+  conversation   AiConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  employer       User             @relation("EmployerAiJobDrafts", fields: [employerId], references: [id], onDelete: Cascade)
+  title          String           @db.VarChar(160)
+  description    String           @db.VarChar(4000)
+  categoryKey    String           @db.VarChar(100)
+  subcategoryKey String           @db.VarChar(100)
+  locationKey    String           @db.VarChar(120)
+  status         AiJobDraftStatus @default(DRAFT)
+  publishedJobId String?          @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([employerId, status, updatedAt])
+  @@index([categoryKey, subcategoryKey, locationKey])
+}
+
+model AiUsage {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateUtc          DateTime @db.Date
+  userMessageCount Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, dateUtc])
+  @@index([dateUtc])
 }

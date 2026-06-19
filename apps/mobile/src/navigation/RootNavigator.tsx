@@ -18,6 +18,8 @@ import { useUnreadNotificationCount } from '../api/notificationHooks';
 import { useContractorVerification } from '../api/offerWorkHooks';
 import { useContractorRatingSummary, useEmployerRatingSummary } from '../api/reviewHooks';
 import { AppModal } from '../components/AppModal';
+import { AiJobAssistantHost } from '../components/AiJobAssistantHost';
+import { MALTA_SERVICE_LOCATIONS } from '../config/maltaLocations';
 import { useTheme } from '../design/theme';
 import { ContractorSetupCompletion, finishContractorSetup, getContractorSetupDecision } from '../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../services/revenueCatPurchases';
@@ -99,6 +101,7 @@ export function RootNavigator() {
   const user = useAuthStore((state) => state.user);
   const hydrate = useAuthStore((state) => state.hydrate);
   const hydrateAppearance = useAppearanceStore((state) => state.hydrate);
+  const [currentRouteName, setCurrentRouteName] = useState<string | undefined>();
 
   useEffect(() => {
     void hydrate();
@@ -164,8 +167,39 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef} theme={navTheme} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      linking={linking}
+      onReady={() => setCurrentRouteName(navigationRef.getCurrentRoute()?.name)}
+      onStateChange={() => setCurrentRouteName(navigationRef.getCurrentRoute()?.name)}
+    >
       {user ? <AuthenticatedExperience /> : <AuthRoutes />}
+      {user ? (
+        <AiJobAssistantHost
+          currentRouteName={currentRouteName}
+          onEditManually={(draft) => {
+            navigationRef.navigate('JobsTab', {
+              screen: 'JobForm',
+              params: {
+                draft: {
+                  title: draft.title,
+                  description: draft.description,
+                  category: draft.categoryKey,
+                  subcategory: draft.subcategoryKey,
+                  location: MALTA_SERVICE_LOCATIONS.find((location) => location.key === draft.locationKey)?.label ?? draft.locationKey,
+                },
+              },
+            });
+          }}
+          onPublished={(job) => {
+            navigationRef.navigate('JobsTab', {
+              screen: 'JobDetails',
+              params: { jobId: job.id },
+            });
+          }}
+        />
+      ) : null}
     </NavigationContainer>
   );
 }

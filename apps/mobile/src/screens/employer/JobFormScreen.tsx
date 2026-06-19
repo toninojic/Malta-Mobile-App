@@ -34,6 +34,7 @@ export function JobFormScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const jobId = route.params?.jobId;
+  const initialDraft = route.params?.draft;
   const isEditing = Boolean(jobId);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -71,6 +72,18 @@ export function JobFormScreen({ route, navigation }: Props) {
       })),
     );
   }, [query.data]);
+
+  useEffect(() => {
+    if (isEditing || !initialDraft) {
+      return;
+    }
+
+    setTitle(initialDraft.title);
+    setDescription(initialDraft.description);
+    setCategory(initialDraft.category);
+    setSubcategory(initialDraft.subcategory);
+    setLocation(initialDraft.location);
+  }, [initialDraft, isEditing]);
 
   const values = useMemo<JobFormValues>(
     () => ({

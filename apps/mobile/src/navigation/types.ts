@@ -9,7 +9,16 @@ export type AuthStackParamList = {
 export type JobsStackParamList = {
   EmployerJobs: undefined;
   JobDetails: { jobId: string };
-  JobForm: { jobId?: string };
+  JobForm: {
+    jobId?: string;
+    draft?: {
+      title: string;
+      description: string;
+      category: string;
+      subcategory: string;
+      location: string;
+    };
+  } | undefined;
   OfferForm: { jobId: string; offerId?: string };
   OfferWorkDetails: { offerId: string };
   UnlockContact: { offerId: string };

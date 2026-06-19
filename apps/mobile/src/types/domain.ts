@@ -156,6 +156,70 @@ export type JobFormValues = {
   imageKeys?: string[];
 };
 
+export type AiMessageRole = 'USER' | 'ASSISTANT';
+export type AiConversationStatus = 'ACTIVE' | 'COMPLETED' | 'DISCARDED';
+export type AiJobDraftStatus = 'DRAFT' | 'PUBLISHED' | 'DISCARDED';
+
+export type AiConversation = {
+  id: string;
+  employerId: string;
+  status: AiConversationStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AiMessage = {
+  id: string;
+  conversationId: string;
+  role: AiMessageRole;
+  content: string;
+  createdAt: string;
+};
+
+export type AiJobDraft = {
+  id: string;
+  conversationId: string;
+  employerId: string;
+  title: string;
+  description: string;
+  categoryKey: string;
+  subcategoryKey: string;
+  locationKey: string;
+  status: AiJobDraftStatus;
+  publishedJobId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AiUsage = {
+  limit: number;
+  usedMessages: number;
+  remainingMessages: number;
+  dateUtc: string;
+};
+
+export type AiJobAssistantState = {
+  isAvailable: boolean;
+  unavailableReason?: string | null;
+  conversation: AiConversation | null;
+  messages: AiMessage[];
+  draft: AiJobDraft | null;
+  usage: AiUsage;
+  remainingMessages: number;
+};
+
+export type AiMessageResponse = {
+  assistantMessage: string;
+  draft: AiJobDraft | null;
+  usage: AiUsage;
+  remainingMessages: number;
+};
+
+export type AiPublishResponse = {
+  job: JobRequest;
+  draft: AiJobDraft;
+};
+
 export type UploadedJobImage = {
   key: string;
   url: string;

@@ -2,6 +2,9 @@ import {
   AuthResponse,
   AuthUser,
   ActivitySummary,
+  AiJobAssistantState,
+  AiMessageResponse,
+  AiPublishResponse,
   AdminStatistics,
   AdminUser,
   AuditLog,
@@ -45,6 +48,7 @@ import {
   UserProfile,
   UserRole,
   UserStatus,
+  AiJobDraft,
 } from '../types/domain';
 import { getAccessToken, getRefreshToken, useAuthStore } from '../store/auth.store';
 import { apiConfig } from '../config/apiConfig';
@@ -388,6 +392,33 @@ export const api = {
   deleteJob(id: string) {
     return request<{ success: true; job: JobRequest }>(`/jobs/${id}`, {
       method: 'DELETE',
+    });
+  },
+  aiJobAssistantCurrent() {
+    return request<AiJobAssistantState>('/ai/job-assistant/conversations/current');
+  },
+  createAiJobAssistantConversation() {
+    return request<AiJobAssistantState>('/ai/job-assistant/conversations', {
+      method: 'POST',
+    });
+  },
+  sendAiJobAssistantMessage(input: { conversationId: string; message: string }) {
+    return request<AiMessageResponse>('/ai/job-assistant/messages', {
+      method: 'POST',
+      body: input,
+    });
+  },
+  aiJobAssistantUsage() {
+    return request<AiJobAssistantState['usage']>('/ai/job-assistant/usage');
+  },
+  publishAiJobDraft(draftId: string) {
+    return request<AiPublishResponse>(`/ai/job-assistant/draft/${draftId}/publish`, {
+      method: 'POST',
+    });
+  },
+  discardAiJobDraft(draftId: string) {
+    return request<{ success: true; draft: AiJobDraft }>(`/ai/job-assistant/draft/${draftId}/discard`, {
+      method: 'POST',
     });
   },
   offersForJob(jobId: string, input: { page?: number; limit?: number; status?: OfferStatus } = {}) {
