@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
-import { SendHorizontal, ThumbsUp } from 'lucide-react-native';
+import { Flag, SendHorizontal, ThumbsUp } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '../../api/client';
 import { useConversationMessages, useMarkMessageRead, useSendMessage } from '../../api/messageHooks';
+import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/EmptyState';
@@ -40,6 +41,7 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   const user = useAuthStore((state) => state.user);
   const [content, setContent] = useState('');
   const [keyboardClearance, setKeyboardClearance] = useState(0);
+  const [messageToReport, setMessageToReport] = useState<ChatMessage | null>(null);
   const messagesQuery = useConversationMessages(route.params.conversationId, isFocused);
   const sendMutation = useSendMessage();
   const markReadMutation = useMarkMessageRead();
@@ -142,14 +144,49 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
 
   const hasMessage = content.trim().length > 0;
   const ComposerIcon = hasMessage ? SendHorizontal : ThumbsUp;
+  const openReportForm = (targetType: 'CONVERSATION' | 'MESSAGE', targetId: string, targetSummary: string) => {
+    navigation.getParent()?.navigate('ActivityTab', {
+      screen: 'ReportForm',
+      params: { targetType, targetId, targetSummary },
+    });
+  };
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['left', 'right']}>
+      <AppModal
+        visible={Boolean(messageToReport)}
+        title="Report Message"
+        body="Report this message to the MaltaPro admin team?"
+        icon={Flag}
+        actions={[
+          { label: 'Cancel', variant: 'secondary', onPress: () => setMessageToReport(null) },
+          {
+            label: 'Report',
+            variant: 'primary',
+            onPress: () => {
+              const selected = messageToReport;
+              setMessageToReport(null);
+              if (selected) {
+                openReportForm('MESSAGE', selected.id, selected.content.slice(0, 80));
+              }
+            },
+          },
+        ]}
+        onRequestClose={() => setMessageToReport(null)}
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
         style={styles.root}
       >
+        <View style={[styles.threadActions, { borderColor: theme.colors.border }]}>
+          <Button
+            title="Report Conversation"
+            icon={Flag}
+            variant="secondary"
+            onPress={() => openReportForm('CONVERSATION', route.params.conversationId, 'Conversation')}
+          />
+        </View>
         <FlatList
           ref={listRef}
           data={messages}
@@ -181,7 +218,16 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
             />
           }
           renderItem={({ item }) => (
-            <MessageBubble key={item.id} message={item} mine={item.senderId === user?.id} />
+            <MessageBubble
+              key={item.id}
+              message={item}
+              mine={item.senderId === user?.id}
+              onReport={() => {
+                if (item.senderId !== user?.id) {
+                  setMessageToReport(item);
+                }
+              }}
+            />
           )}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
@@ -228,20 +274,22 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   );
 }
 
-function MessageBubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
+function MessageBubble({ message, mine, onReport }: { message: ChatMessage; mine: boolean; onReport: () => void }) {
   const theme = useTheme();
 
   return (
-    <Card style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-      <Text style={[styles.sender, { color: theme.colors.textMuted }]}>
-        {mine ? 'You' : message.sender?.profile?.displayName ?? message.sender?.email ?? 'Contact'}
-      </Text>
-      <Text style={[styles.message, { color: theme.colors.text }]}>{message.content}</Text>
-      <Text style={[styles.status, { color: theme.colors.textMuted }]}>
-        {formatChatTimestamp(message.createdAt)}
-        {mine ? `  ${message.isRead ? '\u2713\u2713' : '\u2713'}` : ''}
-      </Text>
-    </Card>
+    <Pressable disabled={mine} onLongPress={onReport} delayLongPress={260} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
+      <Card>
+        <Text style={[styles.sender, { color: theme.colors.textMuted }]}>
+          {mine ? 'You' : message.sender?.profile?.displayName ?? message.sender?.email ?? 'Contact'}
+        </Text>
+        <Text style={[styles.message, { color: theme.colors.text }]}>{message.content}</Text>
+        <Text style={[styles.status, { color: theme.colors.textMuted }]}>
+          {formatChatTimestamp(message.createdAt)}
+          {mine ? `  ${message.isRead ? '\u2713\u2713' : '\u2713'}` : ''}
+        </Text>
+      </Card>
+    </Pressable>
   );
 }
 
@@ -256,6 +304,11 @@ const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: '88%',
+  },
+  threadActions: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   mine: {
     alignSelf: 'flex-end',

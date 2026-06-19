@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { MessageSquareReply, RefreshCw, Trash2 } from 'lucide-react-native';
+import { Flag, MessageSquareReply, RefreshCw, Trash2 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useEmployerReview, useRemoveReview, useReplyReview, useReview } from '../../api/reviewHooks';
@@ -17,7 +17,7 @@ import { useAuthStore } from '../../store/auth.store';
 
 type Props = NativeStackScreenProps<ActivityStackParamList, 'ReviewDetails'>;
 
-export function ReviewDetailsScreen({ route }: Props) {
+export function ReviewDetailsScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
   const isAdmin = route.params.admin || user?.role === 'ADMIN';
@@ -60,6 +60,10 @@ export function ReviewDetailsScreen({ route }: Props) {
     !contractorReply &&
     review.status === 'ACTIVE';
   const canRemove = !isEmployerReview && isAdmin && review.status === 'ACTIVE';
+  const canReport =
+    !isAdmin &&
+    review.status === 'ACTIVE' &&
+    (isEmployerReview ? review.contractorId !== user?.id : review.employerId !== user?.id);
 
   const submitReply = () => {
     const trimmed = reply.trim();
@@ -156,6 +160,20 @@ export function ReviewDetailsScreen({ route }: Props) {
 
       {canRemove ? (
         <Button title="Remove Review" icon={Trash2} variant="danger" loading={removeMutation.isPending} onPress={removeReview} />
+      ) : null}
+      {canReport ? (
+        <Button
+          title="Report Review"
+          icon={Flag}
+          variant="secondary"
+          onPress={() =>
+            navigation.navigate('ReportForm', {
+              targetType: 'REVIEW',
+              targetId: review.id,
+              targetSummary: review.jobRequest?.title ?? 'Review',
+            })
+          }
+        />
       ) : null}
     </Screen>
   );

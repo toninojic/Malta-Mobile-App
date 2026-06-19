@@ -1,16 +1,18 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Building2, Mail, MapPin, Phone, RefreshCw, ShieldCheck, Star } from 'lucide-react-native';
+import { Building2, Flag, Mail, MapPin, Phone, RefreshCw, ShieldCheck, Star } from 'lucide-react-native';
 import { ComponentType, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useContractorProfile, useContractorReviews } from '../../api/reviewHooks';
 import { EmptyState } from '../../components/EmptyState';
 import { AppModal } from '../../components/AppModal';
+import { Button } from '../../components/Button';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { RatingSummaryCard } from '../../components/reviews/RatingSummaryCard';
 import { ReviewCard } from '../../components/reviews/ReviewCard';
 import { Screen } from '../../components/Screen';
 import { useTheme } from '../../design/theme';
 import { ActivityStackParamList } from '../../navigation/types';
+import { useAuthStore } from '../../store/auth.store';
 
 type Props = NativeStackScreenProps<ActivityStackParamList, 'ContractorProfile'>;
 
@@ -18,6 +20,7 @@ export function ContractorProfileScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const profileQuery = useContractorProfile(route.params.contractorId);
   const reviewsQuery = useContractorReviews(route.params.contractorId);
+  const user = useAuthStore((state) => state.user);
   const [portfolioViewerIndex, setPortfolioViewerIndex] = useState(0);
   const [portfolioViewerOpen, setPortfolioViewerOpen] = useState(false);
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
@@ -169,6 +172,20 @@ export function ContractorProfileScreen({ route, navigation }: Props) {
           />
         ))}
       </View>
+      {contractor && user?.id !== route.params.contractorId ? (
+        <Button
+          title="Report Contractor"
+          icon={Flag}
+          variant="secondary"
+          onPress={() =>
+            navigation.navigate('ReportForm', {
+              targetType: 'USER',
+              targetId: route.params.contractorId,
+              targetSummary: displayName,
+            })
+          }
+        />
+      ) : null}
     </Screen>
   );
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { CalendarClock, CheckCircle2, Edit3, MapPin, MessageCircle, RefreshCw, SendHorizontal, ShieldCheck, Star, Trash2, UserRound, XCircle } from 'lucide-react-native';
+import { CalendarClock, CheckCircle2, Edit3, Flag, MapPin, MessageCircle, RefreshCw, SendHorizontal, ShieldCheck, Star, Trash2, UserRound, XCircle } from 'lucide-react-native';
 import { ComponentType, useCallback, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -340,6 +340,20 @@ export function JobDetailsScreen({ route, navigation }: Props) {
       ) : null}
 
       {isContractor ? (
+        <Button
+          title="Report Job"
+          icon={Flag}
+          variant="secondary"
+          onPress={() =>
+            navigation.getParent()?.navigate('ActivityTab', {
+              screen: 'ReportForm',
+              params: { targetType: 'JOB', targetId: job.id, targetSummary: job.title },
+            })
+          }
+        />
+      ) : null}
+
+      {isContractor ? (
         <Card>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Your offer</Text>
@@ -418,6 +432,16 @@ export function JobDetailsScreen({ route, navigation }: Props) {
                 navigation.getParent()?.navigate('ActivityTab', { screen: 'ReviewDetails', params: { reviewId } })
               }
               onBackToJobs={() => navigation.navigate('EmployerJobs')}
+              onReport={() =>
+                navigation.getParent()?.navigate('ActivityTab', {
+                  screen: 'ReportForm',
+                  params: {
+                    targetType: 'OFFER',
+                    targetId: offer.id,
+                    targetSummary: `Offer for ${job.title}`,
+                  },
+                })
+              }
               onOpenChat={
                 offer.contactId
                   ? () =>
@@ -486,6 +510,7 @@ function EmployerOfferCard({
   onLeaveReview,
   onViewReview,
   onBackToJobs,
+  onReport,
   onOpenChat,
   onOpenProfile,
 }: {
@@ -501,6 +526,7 @@ function EmployerOfferCard({
   onLeaveReview: (contactId: string) => void;
   onViewReview: (reviewId: string) => void;
   onBackToJobs: () => void;
+  onReport: () => void;
   onOpenChat?: () => void;
   onOpenProfile?: () => void;
 }) {
@@ -648,6 +674,7 @@ function EmployerOfferCard({
       {isUnlocked && onOpenProfile ? (
         <Button title="View Contractor Profile" icon={UserRound} variant="secondary" onPress={onOpenProfile} />
       ) : null}
+      <Button title="Report Offer" icon={Flag} variant="secondary" onPress={onReport} />
     </Card>
   );
 }

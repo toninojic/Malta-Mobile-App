@@ -27,6 +27,7 @@ export const NOTIFICATION_TYPE_PREFERENCE: Partial<Record<NotificationType, Noti
   [NotificationType.CONTRACTOR_VERIFICATION_APPROVED]: 'systemAlerts',
   [NotificationType.CONTRACTOR_VERIFICATION_REJECTED]: 'systemAlerts',
   [NotificationType.SYSTEM_ALERT]: 'systemAlerts',
+  [NotificationType.REPORT_STATUS_UPDATED]: 'systemAlerts',
   [NotificationType.NEW_REPORT]: 'adminAlerts',
   [NotificationType.NEW_VERIFICATION_REQUEST]: 'adminAlerts',
   [NotificationType.NEW_REFUND_REQUEST]: 'adminAlerts',

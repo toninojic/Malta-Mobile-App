@@ -152,12 +152,23 @@ function openNotificationTarget(
   const offerId = stringMeta(metadata, 'offerId');
   const jobId = stringMeta(metadata, 'jobId') ?? stringMeta(metadata, 'jobRequestId');
   const reviewId = stringMeta(metadata, 'reviewId');
+  const reportId = stringMeta(metadata, 'reportId');
   const employerReviewId = stringMeta(metadata, 'employerReviewId');
   const contactId = stringMeta(metadata, 'contactId') ?? stringMeta(metadata, 'contactUnlockId');
   const isEmployer = role === 'EMPLOYER';
 
   if (notification.type === 'NEW_MESSAGE' && conversationId) {
     navigation.navigate('MessagesTab', { screen: 'ConversationThread', params: { conversationId } });
+    return;
+  }
+
+  if (notification.type === 'NEW_REPORT' && role === 'ADMIN') {
+    navigation.navigate('AdminModerationTab');
+    return;
+  }
+
+  if (notification.type === 'REPORT_STATUS_UPDATED' && reportId) {
+    navigation.navigate('ActivityTab', { screen: 'MyReports' });
     return;
   }
 

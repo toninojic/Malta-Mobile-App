@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Edit3, LockOpen, MessageCircle, RefreshCw, Star, Trash2, UserRound } from 'lucide-react-native';
+import { CheckCircle2, Edit3, Flag, LockOpen, MessageCircle, RefreshCw, Star, Trash2, UserRound } from 'lucide-react-native';
 import { ComponentType, useCallback, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -253,7 +253,28 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
             </View>
           ) : null
         }
-        actions={[{ label: 'Close', variant: 'primary', onPress: () => setEmployerInfoOpen(false) }]}
+        actions={[
+          ...(user?.role === 'CONTRACTOR' && details.employer
+            ? [
+                {
+                  label: 'Report Employer',
+                  variant: 'secondary' as const,
+                  onPress: () => {
+                    setEmployerInfoOpen(false);
+                    navigation.getParent()?.navigate('ActivityTab', {
+                      screen: 'ReportForm',
+                      params: {
+                        targetType: 'USER',
+                        targetId: details.employer?.id ?? '',
+                        targetSummary: details.employer?.profile?.displayName ?? details.employer?.email ?? 'Employer',
+                      },
+                    });
+                  },
+                },
+              ]
+            : []),
+          { label: 'Close', variant: 'primary', onPress: () => setEmployerInfoOpen(false) },
+        ]}
         onRequestClose={() => setEmployerInfoOpen(false)}
       />
       <Card
@@ -454,6 +475,36 @@ export function OfferWorkDetailsScreen({ route, navigation }: Props) {
               navigation.getParent()?.navigate('ActivityTab', {
                 screen: 'ReviewDetails',
                 params: { reviewId: employerReviewId, target: 'employer' },
+              })
+            }
+          />
+        ) : null}
+        {user?.role === 'EMPLOYER' ? (
+          <Button
+            title="Report Offer"
+            icon={Flag}
+            variant="secondary"
+            onPress={() =>
+              navigation.getParent()?.navigate('ActivityTab', {
+                screen: 'ReportForm',
+                params: {
+                  targetType: 'OFFER',
+                  targetId: details.offer.id,
+                  targetSummary: `Offer for ${details.job.title}`,
+                },
+              })
+            }
+          />
+        ) : null}
+        {user?.role === 'CONTRACTOR' ? (
+          <Button
+            title="Report Job"
+            icon={Flag}
+            variant="secondary"
+            onPress={() =>
+              navigation.getParent()?.navigate('ActivityTab', {
+                screen: 'ReportForm',
+                params: { targetType: 'JOB', targetId: details.job.id, targetSummary: details.job.title },
               })
             }
           />

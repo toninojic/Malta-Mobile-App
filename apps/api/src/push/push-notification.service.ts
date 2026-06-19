@@ -369,6 +369,7 @@ export class PushNotificationService {
       type === NotificationType.ACCOUNT_ACTIVATED ||
       type === NotificationType.ACCOUNT_SUSPENDED ||
       type === NotificationType.NEW_REPORT ||
+      type === NotificationType.REPORT_STATUS_UPDATED ||
       type === NotificationType.NEW_VERIFICATION_REQUEST ||
       type === NotificationType.NEW_REFUND_REQUEST
     ) {

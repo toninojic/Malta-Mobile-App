@@ -13,6 +13,7 @@ export type PushNotificationData = {
   contactId?: string;
   conversationId?: string;
   reviewId?: string;
+  reportId?: string;
   refundId?: string;
   target?: string;
 };
@@ -253,6 +254,8 @@ export async function invalidateAfterPush(queryClient: QueryClient, data: PushNo
     queryClient.invalidateQueries({ queryKey: ['notifications'] }),
     queryClient.invalidateQueries({ queryKey: ['messages', 'conversations'] }),
     queryClient.invalidateQueries({ queryKey: ['activity', 'summary'] }),
+    queryClient.invalidateQueries({ queryKey: ['reports'] }),
+    queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] }),
     invalidateMarketplaceState(queryClient, {
       offerId: data.offerId,
       jobId: data.jobId,
@@ -270,6 +273,7 @@ function normalizeNotificationData(data: Record<string, unknown> | undefined): P
     contactId: typeof input.contactId === 'string' ? input.contactId : undefined,
     conversationId: typeof input.conversationId === 'string' ? input.conversationId : undefined,
     reviewId: typeof input.reviewId === 'string' ? input.reviewId : undefined,
+    reportId: typeof input.reportId === 'string' ? input.reportId : undefined,
     refundId: typeof input.refundId === 'string' ? input.refundId : undefined,
     target: typeof input.target === 'string' ? input.target : undefined,
   };

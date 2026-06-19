@@ -22,6 +22,17 @@ export type UnlockStatus = 'LOCKED' | 'PENDING' | 'UNLOCKED';
 export type JobCompletionStatus = 'PENDING_EMPLOYER_CONFIRMATION' | 'CONFIRMED' | 'DISPUTED' | 'CANCELLED';
 export type ReviewStatus = 'ACTIVE' | 'REMOVED';
 export type ContractorVerificationStatus = 'UNVERIFIED' | 'PENDING_REVIEW' | 'VERIFIED' | 'REJECTED';
+export type ReportTargetType = 'USER' | 'JOB' | 'OFFER' | 'CONVERSATION' | 'MESSAGE' | 'REVIEW';
+export type ReportReason =
+  | 'SPAM'
+  | 'SCAM_OR_FRAUD'
+  | 'HARASSMENT'
+  | 'INAPPROPRIATE_CONTENT'
+  | 'FAKE_PROFILE'
+  | 'CONTACT_DETAILS_BYPASS'
+  | 'PAYMENT_ISSUE'
+  | 'OTHER';
+export type ReportStatus = 'PENDING' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
 export type WorkDetailsAction =
   | 'EDIT_OFFER'
   | 'WITHDRAW_OFFER'
@@ -49,6 +60,7 @@ export type NotificationType =
   | 'CONTRACTOR_VERIFICATION_REJECTED'
   | 'SYSTEM_ALERT'
   | 'NEW_REPORT'
+  | 'REPORT_STATUS_UPDATED'
   | 'NEW_VERIFICATION_REQUEST'
   | 'NEW_REFUND_REQUEST';
 
@@ -737,6 +749,30 @@ export type AuditLog = {
   metadata?: Record<string, unknown> | null;
   createdAt: string;
   admin?: AuthUser;
+};
+
+export type ReportTargetSummary = {
+  title: string;
+  subtitle?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type Report = {
+  id: string;
+  reporterId?: string;
+  reporter?: AuthUser;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetSummary?: ReportTargetSummary;
+  reason: ReportReason;
+  description?: string | null;
+  status: ReportStatus;
+  reviewedByAdminId?: string | null;
+  reviewedByAdmin?: Pick<AuthUser, 'id' | 'email' | 'profile'> | null;
+  adminNote?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AdminStatistics = {

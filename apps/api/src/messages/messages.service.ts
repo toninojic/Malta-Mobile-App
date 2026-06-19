@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContactUnlockStatus, Message, NotificationType, Prisma, UserRole } from '@prisma/client';
+import { CONTACT_DETAILS_BLOCKED_MESSAGE, containsContactDetails } from '../common/contact-details';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -62,6 +63,9 @@ export class MessagesService {
     const content = this.sanitize(dto.content);
     if (!content) {
       throw new BadRequestException('Message content cannot be empty.');
+    }
+    if (containsContactDetails(content)) {
+      throw new BadRequestException(CONTACT_DETAILS_BLOCKED_MESSAGE);
     }
 
     const result = await this.prisma.$transaction(async (tx) => {

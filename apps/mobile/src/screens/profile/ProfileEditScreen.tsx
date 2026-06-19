@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { BellRing, ChevronDown, ChevronRight, ImagePlus, LogOut, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
+import { NavigationProp, useNavigation } from '@react-navigation/native';
+import { BellRing, ChevronDown, ChevronRight, Flag, ImagePlus, LogOut, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -27,6 +28,7 @@ import { TextField } from '../../components/TextField';
 import { MALTA_SERVICE_LOCATIONS } from '../../config/maltaLocations';
 import { SERVICE_CATEGORIES, serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
+import { AppTabParamList } from '../../navigation/types';
 import { AppearanceMode, useAppearanceStore } from '../../store/appearance.store';
 import { useAuthStore } from '../../store/auth.store';
 import {
@@ -63,6 +65,7 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export function ProfileEditScreen() {
   const theme = useTheme();
+  const navigation = useNavigation<NavigationProp<AppTabParamList>>();
   const queryClient = useQueryClient();
   const clearSession = useAuthStore((state) => state.clearSession);
   const updateUser = useAuthStore((state) => state.updateUser);
@@ -953,6 +956,12 @@ export function ProfileEditScreen() {
       ) : null}
 
       <Button title="Save Profile" icon={Save} loading={updateMutation.isPending} onPress={() => updateMutation.mutate()} />
+      <Button
+        title="My Reports"
+        icon={Flag}
+        variant="secondary"
+        onPress={() => navigation.navigate('ActivityTab', { screen: 'MyReports' })}
+      />
       <Card>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Account</Text>
         <Text style={[styles.email, { color: theme.colors.textMuted }]}>

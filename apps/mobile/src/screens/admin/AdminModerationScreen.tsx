@@ -1,4 +1,4 @@
-import { CheckCircle2, Eye, Link2, MessageCircle, RefreshCw, RotateCcw, ScrollText, Star, XCircle } from 'lucide-react-native';
+import { CheckCircle2, Eye, Flag, Link2, MessageCircle, RefreshCw, RotateCcw, ScrollText, Star, UserCheck, UserX, XCircle } from 'lucide-react-native';
 import { ComponentType, ReactNode, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useAdminAuditLogs, useAdminConversationMessages, useAdminRefundsForModeration } from '../../api/adminHooks';
@@ -9,6 +9,7 @@ import {
   useApproveContractorVerification,
   useRejectContractorVerification,
 } from '../../api/offerWorkHooks';
+import { useAdminReportAction, useAdminReports, useUpdateAdminReportStatus } from '../../api/reportHooks';
 import { useAdminReviews, useRemoveReview } from '../../api/reviewHooks';
 import { useApproveRefund, useRejectRefund } from '../../api/tokenHooks';
 import { AppModal, AppModalAction } from '../../components/AppModal';
@@ -21,12 +22,21 @@ import { OptionSelect } from '../../components/OptionSelect';
 import { ReviewCard } from '../../components/reviews/ReviewCard';
 import { RefundCard } from '../../components/wallet/RefundCard';
 import { Screen } from '../../components/Screen';
+import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { getAccessToken } from '../../store/auth.store';
-import { ContractorVerification, Conversation, Review } from '../../types/domain';
+import { ContractorVerification, Conversation, Report, ReportStatus, ReportTargetType, Review } from '../../types/domain';
 import { formatDate } from '../../utils/date';
+import {
+  REPORT_REASON_OPTIONS,
+  REPORT_STATUS_OPTIONS,
+  REPORT_TARGET_OPTIONS,
+  reportReasonLabel,
+  reportTargetLabel,
+} from '../../utils/reportLabels';
 
 const SECTION_OPTIONS = [
+  { key: 'REPORTS', label: 'Reports' },
   { key: 'REFUNDS', label: 'Refunds' },
   { key: 'REVIEWS', label: 'Reviews' },
   { key: 'CONVERSATIONS', label: 'Chats' },
@@ -35,7 +45,7 @@ const SECTION_OPTIONS = [
   { key: 'AUDIT', label: 'Audit' },
 ];
 
-type Section = 'REFUNDS' | 'REVIEWS' | 'CONVERSATIONS' | 'CONTACTS' | 'VERIFICATIONS' | 'AUDIT';
+type Section = 'REPORTS' | 'REFUNDS' | 'REVIEWS' | 'CONVERSATIONS' | 'CONTACTS' | 'VERIFICATIONS' | 'AUDIT';
 
 type ModerationDialog = {
   title: string;
@@ -46,17 +56,18 @@ type ModerationDialog = {
 
 export function AdminModerationScreen() {
   const theme = useTheme();
-  const [section, setSection] = useState<Section>('REFUNDS');
+  const [section, setSection] = useState<Section>('REPORTS');
 
   return (
     <Screen contentTopPadding={28}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Moderation</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Refunds, reviews, conversations, contact unlocks, and immutable audit logs.</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Reports, refunds, reviews, conversations, contact unlocks, and immutable audit logs.</Text>
       </View>
 
       <OptionSelect label="Queue" value={section} options={SECTION_OPTIONS} onChange={(value) => setSection(value as Section)} />
 
+      {section === 'REPORTS' ? <ReportsSection /> : null}
       {section === 'REFUNDS' ? <RefundsSection /> : null}
       {section === 'REVIEWS' ? <ReviewsSection /> : null}
       {section === 'CONVERSATIONS' ? <ConversationsSection /> : null}
@@ -65,6 +76,244 @@ export function AdminModerationScreen() {
       {section === 'AUDIT' ? <AuditSection /> : null}
     </Screen>
   );
+}
+
+const REPORT_STATUS_FILTER_OPTIONS = [{ key: 'ALL', label: 'All' }, ...REPORT_STATUS_OPTIONS];
+const REPORT_TARGET_FILTER_OPTIONS = [{ key: 'ALL', label: 'All targets' }, ...REPORT_TARGET_OPTIONS];
+const REPORT_REASON_FILTER_OPTIONS = [{ key: 'ALL', label: 'All reasons' }, ...REPORT_REASON_OPTIONS];
+
+function ReportsSection() {
+  const theme = useTheme();
+  const [status, setStatus] = useState<'ALL' | ReportStatus>('PENDING');
+  const [targetType, setTargetType] = useState<'ALL' | ReportTargetType>('ALL');
+  const [reason, setReason] = useState<'ALL' | Report['reason']>('ALL');
+  const [adminNote, setAdminNote] = useState('');
+  const [confirmationDialog, setConfirmationDialog] = useState<ModerationDialog | null>(null);
+  const query = useAdminReports(
+    {
+      status: status === 'ALL' ? undefined : status,
+      targetType: targetType === 'ALL' ? undefined : targetType,
+      reason: reason === 'ALL' ? undefined : reason,
+    },
+    true,
+  );
+  const updateStatusMutation = useUpdateAdminReportStatus();
+  const actionMutation = useAdminReportAction();
+
+  const updateStatus = (reportId: string, nextStatus: ReportStatus) => {
+    updateStatusMutation.mutate(
+      {
+        reportId,
+        status: nextStatus,
+        adminNote: adminNote.trim() || undefined,
+      },
+      {
+        onSuccess: () => setAdminNote(''),
+      },
+    );
+  };
+
+  const confirmAction = (
+    report: Report,
+    action: 'suspend-user' | 'activate-user' | 'close-job' | 'remove-review' | 'hide-message',
+    title: string,
+    body: string,
+    destructive = true,
+  ) => {
+    setConfirmationDialog({
+      title,
+      body,
+      icon: destructive ? XCircle : CheckCircle2,
+      actions: [
+        { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmationDialog(null) },
+        {
+          label: title,
+          variant: destructive ? 'danger' : 'primary',
+          onPress: () => {
+            setConfirmationDialog(null);
+            actionMutation.mutate({ reportId: report.id, action });
+          },
+        },
+      ],
+    });
+  };
+
+  return (
+    <SectionFrame
+      loading={query.isLoading}
+      error={query.error}
+      empty={!query.isLoading && query.data?.data.length === 0}
+      emptyIcon={Flag}
+      emptyTitle="No reports"
+      onRetry={() => void query.refetch()}
+    >
+      {confirmationDialog ? (
+        <AppModal
+          visible
+          title={confirmationDialog.title}
+          body={confirmationDialog.body}
+          icon={confirmationDialog.icon}
+          actions={confirmationDialog.actions}
+          onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
+      <View style={styles.filterGrid}>
+        <OptionSelect label="Status" value={status} options={REPORT_STATUS_FILTER_OPTIONS} onChange={(value) => setStatus(value as 'ALL' | ReportStatus)} />
+        <OptionSelect label="Target" value={targetType} options={REPORT_TARGET_FILTER_OPTIONS} onChange={(value) => setTargetType(value as 'ALL' | ReportTargetType)} />
+        <OptionSelect label="Reason" value={reason} options={REPORT_REASON_FILTER_OPTIONS} onChange={(value) => setReason(value as 'ALL' | Report['reason'])} />
+      </View>
+      <TextField
+        label="Admin note for status changes"
+        value={adminNote}
+        onChangeText={setAdminNote}
+        multiline
+        maxLength={1500}
+        placeholder="Optional note saved with the next status update."
+      />
+      {query.data?.data.map((report) => (
+        <Card key={report.id}>
+          <View style={styles.row}>
+            <View style={styles.flex}>
+              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+                {report.targetSummary?.title ?? reportTargetLabel(report.targetType)}
+              </Text>
+              <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
+                {reportTargetLabel(report.targetType)} / {reportReasonLabel(report.reason)} / {formatDate(report.createdAt)}
+              </Text>
+              <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
+                Reporter: {report.reporter?.email ?? report.reporterId ?? 'Unknown'}
+              </Text>
+            </View>
+            <Badge status={report.status} />
+          </View>
+          {report.targetSummary?.subtitle ? (
+            <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{report.targetSummary.subtitle}</Text>
+          ) : null}
+          {report.description ? (
+            <Text style={[styles.messageBody, { color: theme.colors.text }]}>{report.description}</Text>
+          ) : null}
+          {report.adminNote ? (
+            <View style={[styles.note, { borderColor: theme.colors.border }]}>
+              <Text style={[styles.metaStrong, { color: theme.colors.text }]}>Admin note</Text>
+              <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{report.adminNote}</Text>
+            </View>
+          ) : null}
+          {report.targetSummary?.metadata ? (
+            <Text style={[styles.metadata, { color: theme.colors.textMuted }]} numberOfLines={4}>
+              {JSON.stringify(report.targetSummary.metadata)}
+            </Text>
+          ) : null}
+          <View style={styles.actions}>
+            <Button
+              title="Under Review"
+              icon={Eye}
+              variant="secondary"
+              loading={updateStatusMutation.isPending}
+              onPress={() => updateStatus(report.id, 'UNDER_REVIEW')}
+              style={styles.action}
+            />
+            <Button
+              title="Resolve"
+              icon={CheckCircle2}
+              loading={updateStatusMutation.isPending}
+              onPress={() => updateStatus(report.id, 'RESOLVED')}
+              style={styles.action}
+            />
+            <Button
+              title="Dismiss"
+              icon={XCircle}
+              variant="secondary"
+              loading={updateStatusMutation.isPending}
+              onPress={() => updateStatus(report.id, 'DISMISSED')}
+              style={styles.action}
+            />
+          </View>
+          <ReportModerationActions
+            report={report}
+            loading={actionMutation.isPending}
+            onAction={confirmAction}
+          />
+        </Card>
+      ))}
+    </SectionFrame>
+  );
+}
+
+function ReportModerationActions({
+  report,
+  loading,
+  onAction,
+}: {
+  report: Report;
+  loading: boolean;
+  onAction: (
+    report: Report,
+    action: 'suspend-user' | 'activate-user' | 'close-job' | 'remove-review' | 'hide-message',
+    title: string,
+    body: string,
+    destructive?: boolean,
+  ) => void;
+}) {
+  if (report.targetType === 'USER') {
+    return (
+      <View style={styles.actions}>
+        <Button
+          title="Suspend User"
+          icon={UserX}
+          variant="danger"
+          loading={loading}
+          onPress={() => onAction(report, 'suspend-user', 'Suspend User', 'Suspend this reported user account?')}
+          style={styles.action}
+        />
+        <Button
+          title="Activate User"
+          icon={UserCheck}
+          variant="secondary"
+          loading={loading}
+          onPress={() => onAction(report, 'activate-user', 'Activate User', 'Activate this reported user account?', false)}
+          style={styles.action}
+        />
+      </View>
+    );
+  }
+
+  if (report.targetType === 'JOB') {
+    return (
+      <Button
+        title="Close Job"
+        icon={XCircle}
+        variant="danger"
+        loading={loading}
+        onPress={() => onAction(report, 'close-job', 'Close Job', 'Close this reported job request?')}
+      />
+    );
+  }
+
+  if (report.targetType === 'REVIEW') {
+    return (
+      <Button
+        title="Remove Review"
+        icon={XCircle}
+        variant="danger"
+        loading={loading}
+        onPress={() => onAction(report, 'remove-review', 'Remove Review', 'Soft-remove this reported review?')}
+      />
+    );
+  }
+
+  if (report.targetType === 'MESSAGE') {
+    return (
+      <Button
+        title="Hide Message"
+        icon={XCircle}
+        variant="danger"
+        loading={loading}
+        onPress={() => onAction(report, 'hide-message', 'Hide Message', 'Soft-hide this reported message?')}
+      />
+    );
+  }
+
+  return null;
 }
 
 function VerificationsSection() {
@@ -552,6 +801,9 @@ const styles = StyleSheet.create({
   section: {
     gap: 12,
   },
+  filterGrid: {
+    gap: 12,
+  },
   itemGroup: {
     gap: 8,
   },
@@ -580,6 +832,16 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: 13,
     lineHeight: 19,
+  },
+  metaStrong: {
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 19,
+  },
+  note: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    paddingTop: 8,
   },
   message: {
     borderTopWidth: StyleSheet.hairlineWidth,

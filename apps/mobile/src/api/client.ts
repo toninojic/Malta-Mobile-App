@@ -36,6 +36,10 @@ import {
   PushTokenDebugResponse,
   RefundRequest,
   RefundStatus,
+  Report,
+  ReportReason,
+  ReportStatus,
+  ReportTargetType,
   Review,
   ContractorServiceAreasResponse,
   ContractorServiceCategoriesResponse,
@@ -644,6 +648,37 @@ export const api = {
       `/reviews/mine/given${queryString({ page: input.page, limit: input.limit })}`,
     );
   },
+  createReport(input: {
+    targetType: ReportTargetType;
+    targetId: string;
+    reason: ReportReason;
+    description?: string;
+  }) {
+    return request<Report>('/reports', {
+      method: 'POST',
+      body: input,
+    });
+  },
+  myReports(input: {
+    page?: number;
+    limit?: number;
+    status?: ReportStatus;
+    targetType?: ReportTargetType;
+    reason?: ReportReason;
+  } = {}) {
+    return request<PaginatedResponse<Report>>(
+      `/reports/mine${queryString({
+        page: input.page,
+        limit: input.limit,
+        status: input.status,
+        targetType: input.targetType,
+        reason: input.reason,
+      })}`,
+    );
+  },
+  report(reportId: string) {
+    return request<Report>(`/reports/${reportId}`);
+  },
   contractorProfile(contractorId: string) {
     return request<ContractorProfile>(`/contractors/${contractorId}/profile`);
   },
@@ -843,6 +878,42 @@ export const api = {
         entityId: input.entityId?.trim(),
       })}`,
     );
+  },
+  adminReports(input: {
+    page?: number;
+    limit?: number;
+    status?: ReportStatus;
+    targetType?: ReportTargetType;
+    reason?: ReportReason;
+    reporterId?: string;
+  } = {}) {
+    return request<PaginatedResponse<Report>>(
+      `/admin/reports${queryString({
+        page: input.page,
+        limit: input.limit,
+        status: input.status,
+        targetType: input.targetType,
+        reason: input.reason,
+        reporterId: input.reporterId,
+      })}`,
+    );
+  },
+  adminReport(reportId: string) {
+    return request<Report>(`/admin/reports/${reportId}`);
+  },
+  updateAdminReportStatus(reportId: string, input: { status: ReportStatus; adminNote?: string }) {
+    return request<Report>(`/admin/reports/${reportId}/status`, {
+      method: 'PATCH',
+      body: input,
+    });
+  },
+  adminReportAction(
+    reportId: string,
+    action: 'suspend-user' | 'activate-user' | 'close-job' | 'remove-review' | 'hide-message',
+  ) {
+    return request<Report>(`/admin/reports/${reportId}/actions/${action}`, {
+      method: 'POST',
+    });
   },
   adminConversationMessages(id: string) {
     return request<ChatMessage[]>(`/admin/conversations/${id}/messages`);

@@ -1,4 +1,5 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
+import { ReportTargetType } from '../types/domain';
 
 export type AuthStackParamList = {
   Onboarding: undefined;
@@ -47,6 +48,8 @@ export type ActivityStackParamList = {
   LeaveReview: { contactId: string; target?: 'contractor' | 'employer' };
   ReviewDetails: { reviewId: string; admin?: boolean; target?: 'contractor' | 'employer' };
   MyReviews: { initialTab?: 'received' | 'given' | 'toLeave' } | undefined;
+  MyReports: undefined;
+  ReportForm: { targetType: ReportTargetType; targetId: string; targetSummary?: string };
   ContractorProfile: { contractorId: string };
   AdminReviews: undefined;
   NotificationsHome: undefined;

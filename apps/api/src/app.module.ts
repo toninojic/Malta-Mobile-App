@@ -19,6 +19,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { PushModule } from './push/push.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { ReportsModule } from './reports/reports.module';
 import { TokensModule } from './tokens/tokens.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
@@ -58,6 +59,7 @@ import { StorageResponseInterceptor } from './modules/storage/storage-response.i
     ConversationsModule,
     MessagesModule,
     ReviewsModule,
+    ReportsModule,
     UploadsModule,
     AdminModule,
   ],

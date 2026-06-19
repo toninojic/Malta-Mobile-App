@@ -64,6 +64,8 @@ import { ContractorProfileScreen } from '../screens/reviews/ContractorProfileScr
 import { LeaveReviewScreen } from '../screens/reviews/LeaveReviewScreen';
 import { MyReviewsScreen } from '../screens/reviews/MyReviewsScreen';
 import { ReviewDetailsScreen } from '../screens/reviews/ReviewDetailsScreen';
+import { MyReportsScreen } from '../screens/reports/MyReportsScreen';
+import { ReportFormScreen } from '../screens/reports/ReportFormScreen';
 import {
   AppTabParamList,
   ActivityStackParamList,
@@ -282,6 +284,18 @@ function navigateFromPush(data: PushNotificationData) {
     return;
   }
 
+  const currentUser = useAuthStore.getState().user;
+
+  if (data.type === 'NEW_REPORT' && currentUser?.role === 'ADMIN') {
+    navigationRef.navigate('AdminModerationTab');
+    return;
+  }
+
+  if (data.type === 'REPORT_STATUS_UPDATED' && data.reportId) {
+    navigationRef.navigate('ActivityTab', { screen: 'MyReports' });
+    return;
+  }
+
   if (data.conversationId) {
     navigationRef.navigate('MessagesTab', {
       screen: 'ConversationThread',
@@ -358,6 +372,8 @@ function ActivityRoutes() {
       <ActivityStack.Screen name="LeaveReview" component={LeaveReviewScreen} options={{ title: 'Leave Review' }} />
       <ActivityStack.Screen name="ReviewDetails" component={ReviewDetailsScreen} options={{ title: 'Review Details' }} />
       <ActivityStack.Screen name="MyReviews" component={MyReviewsScreen} options={{ title: 'My Reviews' }} />
+      <ActivityStack.Screen name="MyReports" component={MyReportsScreen} options={{ title: 'My Reports' }} />
+      <ActivityStack.Screen name="ReportForm" component={ReportFormScreen} options={{ title: 'Report' }} />
       <ActivityStack.Screen name="ContractorProfile" component={ContractorProfileScreen} options={{ title: 'Contractor Profile' }} />
       <ActivityStack.Screen name="AdminReviews" component={AdminReviewsScreen} options={{ title: 'Review Moderation' }} />
       <ActivityStack.Screen name="NotificationsHome" component={NotificationsScreen} options={{ title: 'Alerts' }} />

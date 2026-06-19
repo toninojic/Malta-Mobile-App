@@ -120,6 +120,7 @@ enum NotificationType {
   CONTRACTOR_VERIFICATION_REJECTED
   SYSTEM_ALERT
   NEW_REPORT
+  REPORT_STATUS_UPDATED
   NEW_VERIFICATION_REQUEST
   NEW_REFUND_REQUEST
 }
@@ -146,6 +147,33 @@ enum AiJobDraftStatus {
   DRAFT
   PUBLISHED
   DISCARDED
+}
+
+enum ReportTargetType {
+  USER
+  JOB
+  OFFER
+  CONVERSATION
+  MESSAGE
+  REVIEW
+}
+
+enum ReportReason {
+  SPAM
+  SCAM_OR_FRAUD
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  FAKE_PROFILE
+  CONTACT_DETAILS_BYPASS
+  PAYMENT_ISSUE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
 }
 
 model User {
@@ -192,6 +220,8 @@ model User {
   aiConversations  AiConversation[] @relation("EmployerAiConversations")
   aiJobDrafts      AiJobDraft[] @relation("EmployerAiJobDrafts")
   aiUsage          AiUsage[]
+  reportsFiled     Report[] @relation("ReporterReports")
+  reportsReviewed  Report[] @relation("ReportAdminReviews")
   contractorOnboardingRequiredAt DateTime?
   contractorOnboardingCompletedAt DateTime?
   contractorOnboardingSkippedAt DateTime?
@@ -695,6 +725,28 @@ model AuditLog {
   @@index([adminId, createdAt])
   @@index([action, createdAt])
   @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Report {
+  id                String           @id @default(uuid()) @db.Uuid
+  reporterId        String           @db.Uuid
+  reporter          User             @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType        ReportTargetType
+  targetId          String           @db.Uuid
+  reason            ReportReason
+  description       String?          @db.VarChar(1500)
+  status            ReportStatus     @default(PENDING)
+  reviewedByAdminId String?          @db.Uuid
+  reviewedByAdmin   User?            @relation("ReportAdminReviews", fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+  adminNote         String?          @db.VarChar(1500)
+  reviewedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([reporterId, createdAt])
+  @@index([targetType, targetId])
+  @@index([status, createdAt])
   @@index([createdAt])
 }
 

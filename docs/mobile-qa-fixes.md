@@ -1,35 +1,32 @@
-# MaltaPro Mobile QA Fixes
+# Mobile QA Fixes
 
-## Token Wallet Refund UI
+## Report System
 
-Contractor wallet UI no longer shows refund request actions or a "My refund requests" section.
+- Job details include Report Job for contractors.
+- Employer offer cards include Report Offer.
+- Offer / Work Details includes contextual reporting: employers can report the offer; contractors can report the job and report the employer from the employer info modal.
+- Contractor profile includes Report Contractor.
+- Conversations include Report Conversation.
+- Long-pressing another user's message opens a Report Message modal.
+- Review details include Report Review when the current user is not the review author.
+- Profile includes My Reports.
+- Admin Moderation includes a Reports queue.
 
-Expected QA result:
+## Contact Detail Blocking
 
-- Contractors can still view balance, packages, purchase history, and transaction history.
-- Contractors cannot request a token refund from mobile UI.
-- Admin refund queue remains available to admins where legacy/internal refund review is still needed.
-- Store monetary refunds are handled through Apple/Google/RevenueCat support flows, outside the contractor wallet.
+Offer and message submissions are rejected when obvious contact information is detected. Normal prices and durations should still pass.
 
-## Welcome Bonus
+## Privacy Checks
 
-New contractors receive welcome tokens only after completing contractor setup. Registration alone must not credit tokens.
+- Users can see only their own reports.
+- Admins can see all reports.
+- Reported users do not see reporter identity.
+- Contractor verification documents are not exposed through reports.
 
-Expected QA result:
+## Smoke Test
 
-- Complete contractor setup once, then wallet receives a `WELCOME_BONUS` transaction.
-- Restarting the app or logging in again does not grant a second bonus.
-- Skipping contractor setup does not grant welcome tokens.
-- Existing contractor accounts are not automatically granted welcome tokens.
+Run:
 
-## Admin Token Adjustments
-
-Admin users can grant or revoke contractor tokens from the Admin Users screen.
-
-Expected QA result:
-
-- Grant tokens requires a reason and defaults to 10 tokens.
-- Revoke tokens requires amount and reason.
-- Revoke cannot exceed current contractor balance.
-- Employers and admins cannot receive promotional token grants.
-- Contractor sees wallet transaction history and notification for grant/revoke.
+```bash
+npm run smoke:report-system --workspace @malta-marketplace/api
+```
