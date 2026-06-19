@@ -129,6 +129,10 @@ export class AdminService {
       purchaseSum,
       spendSum,
       refundSum,
+      welcomeBonusSum,
+      adminGrantSum,
+      adminRevokeSum,
+      referralBonusSum,
       tokenBalanceSum,
       purchaseTransactions,
       totalReviews,
@@ -176,6 +180,22 @@ export class AdminService {
         where: { type: TokenTransactionType.REFUND },
         _sum: { amount: true },
       }),
+      this.prisma.tokenTransaction.aggregate({
+        where: { type: TokenTransactionType.WELCOME_BONUS },
+        _sum: { amount: true },
+      }),
+      this.prisma.tokenTransaction.aggregate({
+        where: { type: TokenTransactionType.ADMIN_GRANT },
+        _sum: { amount: true },
+      }),
+      this.prisma.tokenTransaction.aggregate({
+        where: { type: TokenTransactionType.ADMIN_REVOKE },
+        _sum: { amount: true },
+      }),
+      this.prisma.tokenTransaction.aggregate({
+        where: { type: TokenTransactionType.REFERRAL_BONUS },
+        _sum: { amount: true },
+      }),
       this.prisma.userTokenBalance.aggregate({ _sum: { balance: true } }),
       this.prisma.tokenTransaction.findMany({
         where: { type: TokenTransactionType.PURCHASE },
@@ -207,6 +227,10 @@ export class AdminService {
       (sum, transaction) => sum + (transaction.package ? Number(transaction.package.price) : 0),
       0,
     );
+    const welcomeBonusTokensGranted = welcomeBonusSum._sum.amount ?? 0;
+    const adminGrantedTokens = adminGrantSum._sum.amount ?? 0;
+    const adminRevokedTokens = Math.abs(adminRevokeSum._sum.amount ?? 0);
+    const referralBonusTokensGranted = referralBonusSum._sum.amount ?? 0;
 
     return {
       users: {
@@ -240,6 +264,10 @@ export class AdminService {
         activeTokenBalance: tokenBalanceSum._sum.balance ?? 0,
         purchaseRevenue: tokenPurchaseRevenue,
         mockRevenue: tokenPurchaseRevenue,
+        promoTokensGranted: welcomeBonusTokensGranted + adminGrantedTokens + referralBonusTokensGranted,
+        welcomeBonusTokensGranted,
+        adminGrantedTokens,
+        adminRevokedTokens,
       },
       reviews: {
         total: totalReviews,

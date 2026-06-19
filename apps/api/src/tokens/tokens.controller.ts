@@ -33,6 +33,20 @@ export class TokensController {
     return this.tokensService.getBalance(user);
   }
 
+  @Post('welcome-bonus/claim')
+  @Roles(UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  claimWelcomeBonus(@CurrentUser() user: AuthenticatedUser) {
+    return this.tokensService.claimWelcomeBonus(user);
+  }
+
+  @Post('welcome-bonus/skip')
+  @Roles(UserRole.CONTRACTOR)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  skipWelcomeBonusOnboarding(@CurrentUser() user: AuthenticatedUser) {
+    return this.tokensService.skipWelcomeBonusOnboarding(user);
+  }
+
   @Get('transactions')
   @Throttle({ default: { limit: 180, ttl: 60_000 } })
   transactions(@CurrentUser() user: AuthenticatedUser, @Query() query: PaginationQueryDto) {

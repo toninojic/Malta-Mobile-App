@@ -6,7 +6,14 @@ export type OfferRejectionReason =
   | 'AUTO_REJECTED_BY_SELECTION'
   | 'MANUALLY_REJECTED_BY_EMPLOYER'
   | 'SELECTION_CANCELLED_BY_EMPLOYER';
-export type TokenTransactionType = 'PURCHASE' | 'SPEND' | 'REFUND';
+export type TokenTransactionType =
+  | 'PURCHASE'
+  | 'SPEND'
+  | 'REFUND'
+  | 'ADMIN_GRANT'
+  | 'ADMIN_REVOKE'
+  | 'WELCOME_BONUS'
+  | 'REFERRAL_BONUS';
 export type RefundStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type PaymentStatus = 'PENDING' | 'PAID' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | 'IGNORED';
 export type PaymentProvider = 'MOCK' | 'REVENUECAT' | 'LEGACY_STRIPE';
@@ -311,6 +318,18 @@ export type TokenTransaction = {
   relatedRefundRequestId?: string | null;
   package?: TokenPackage | null;
   createdAt: string;
+};
+
+export type AdminTokenAdjustmentResponse = {
+  balance: TokenBalance;
+  transaction: TokenTransaction;
+};
+
+export type WelcomeBonusResponse = {
+  granted: boolean;
+  reason?: string | null;
+  balance: TokenBalance;
+  transaction: TokenTransaction | null;
 };
 
 export type RefundRequest = {
@@ -752,6 +771,10 @@ export type AdminStatistics = {
     activeTokenBalance: number;
     purchaseRevenue: number;
     mockRevenue: number;
+    promoTokensGranted: number;
+    welcomeBonusTokensGranted: number;
+    adminGrantedTokens: number;
+    adminRevokedTokens: number;
   };
   reviews: {
     total: number;

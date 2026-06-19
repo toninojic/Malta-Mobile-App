@@ -89,6 +89,42 @@ export function useActivateUser() {
   });
 }
 
+export function useAdminGrantTokens() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, amount, reason }: { userId: string; amount?: number; reason: string }) =>
+      api.adminGrantTokens(userId, { amount, reason }),
+    onSuccess: async () => {
+      await invalidateQueryKeys(queryClient, [
+        ['admin', 'users'],
+        ['admin', 'statistics'],
+        ['admin', 'audit-logs'],
+        ['tokens'],
+        ['notifications'],
+      ]);
+    },
+  });
+}
+
+export function useAdminRevokeTokens() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userId, amount, reason }: { userId: string; amount: number; reason: string }) =>
+      api.adminRevokeTokens(userId, { amount, reason }),
+    onSuccess: async () => {
+      await invalidateQueryKeys(queryClient, [
+        ['admin', 'users'],
+        ['admin', 'statistics'],
+        ['admin', 'audit-logs'],
+        ['tokens'],
+        ['notifications'],
+      ]);
+    },
+  });
+}
+
 export function useCloseAdminJob() {
   const queryClient = useQueryClient();
 

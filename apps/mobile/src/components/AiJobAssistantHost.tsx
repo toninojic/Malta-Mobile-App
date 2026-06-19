@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useAiJobAssistant,
   useCreateAiJobAssistantConversation,
@@ -46,6 +46,7 @@ const HIDDEN_ROUTES = new Set([
   'PaymentFailed',
   'PaymentPending',
 ]);
+const ANDROID_SUGGESTION_BAR_CLEARANCE = 47;
 
 export function AiJobAssistantHost({ currentRouteName, onEditManually, onPublished }: Props) {
   const theme = useTheme();
@@ -111,9 +112,11 @@ function AiJobAssistantModal({
   onPublished: (job: JobRequest) => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [createRequested, setCreateRequested] = useState(false);
+  const [keyboardClearance, setKeyboardClearance] = useState(0);
   const assistantQuery = useAiJobAssistant(visible);
   const createConversationMutation = useCreateAiJobAssistantConversation();
   const sendMutation = useSendAiJobAssistantMessage();
@@ -149,7 +152,26 @@ function AiJobAssistantModal({
       setMessage('');
       setError('');
       setCreateRequested(false);
+      setKeyboardClearance(0);
     }
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      return undefined;
+    }
+
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardClearance(Platform.OS === 'android' ? ANDROID_SUGGESTION_BAR_CLEARANCE : 0);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardClearance(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
   }, [visible]);
 
   const canSend = Boolean(
@@ -211,7 +233,7 @@ function AiJobAssistantModal({
       <SafeAreaView style={[styles.modalRoot, { backgroundColor: theme.colors.background }]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
           style={styles.modalRoot}
         >
           <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border }]}>
@@ -305,7 +327,17 @@ function AiJobAssistantModal({
           </ScrollView>
 
           {!unavailable ? (
-            <View style={[styles.inputBar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+            <View
+              style={[
+                styles.inputBar,
+                {
+                  borderTopColor: theme.colors.border,
+                  backgroundColor: theme.colors.surface,
+                  marginBottom: keyboardClearance,
+                  paddingBottom: Math.max(insets.bottom, 10),
+                },
+              ]}
+            >
               <View style={[styles.inputWrap, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
                 <TextInput
                   value={message}
@@ -391,7 +423,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   floatingButton: {
     position: 'absolute',
-    bottom: 86,
+    bottom: 112,
     left: 18,
     width: 54,
     height: 54,
@@ -529,7 +561,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 10,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 10,
   },
   inputWrap: {
     flex: 1,

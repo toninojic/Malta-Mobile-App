@@ -5,6 +5,7 @@ import {
   AiJobAssistantState,
   AiMessageResponse,
   AiPublishResponse,
+  AdminTokenAdjustmentResponse,
   AdminStatistics,
   AdminUser,
   AuditLog,
@@ -42,6 +43,7 @@ import {
   TokenBalance,
   TokenPackage,
   TokenTransaction,
+  WelcomeBonusResponse,
   UnlockResult,
   UnlockStatusResponse,
   UploadedJobImage,
@@ -477,6 +479,16 @@ export const api = {
       `/tokens/transactions${queryString({ page: input.page, limit: input.limit })}`,
     );
   },
+  claimWelcomeBonus() {
+    return request<WelcomeBonusResponse>('/tokens/welcome-bonus/claim', {
+      method: 'POST',
+    });
+  },
+  skipWelcomeBonusOnboarding() {
+    return request<{ success: true }>('/tokens/welcome-bonus/skip', {
+      method: 'POST',
+    });
+  },
   mockPurchase(tokenPackageId: string) {
     return request<{ balance: TokenBalance; transaction: TokenTransaction }>('/tokens/mock-purchase', {
       method: 'POST',
@@ -776,6 +788,18 @@ export const api = {
   activateUser(userId: string) {
     return request<AdminUser>(`/admin/users/${userId}/activate`, {
       method: 'PATCH',
+    });
+  },
+  adminGrantTokens(userId: string, input: { amount?: number; reason: string }) {
+    return request<AdminTokenAdjustmentResponse>(`/admin/users/${userId}/tokens/grant`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+  adminRevokeTokens(userId: string, input: { amount: number; reason: string }) {
+    return request<AdminTokenAdjustmentResponse>(`/admin/users/${userId}/tokens/revoke`, {
+      method: 'POST',
+      body: input,
     });
   },
   adminJobs(input: { page?: number; limit?: number; status?: string; category?: string; location?: string; employerId?: string } = {}) {

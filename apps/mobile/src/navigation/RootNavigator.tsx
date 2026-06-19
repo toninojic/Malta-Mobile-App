@@ -12,6 +12,7 @@ import { Bell, BriefcaseBusiness, ClipboardList, LayoutDashboard, MessageCircle,
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useActivitySummary } from '../api/activityHooks';
+import { api } from '../api/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useConversations } from '../api/messageHooks';
 import { useUnreadNotificationCount } from '../api/notificationHooks';
@@ -233,17 +234,37 @@ function AuthenticatedExperience() {
 
   if (user?.role === 'CONTRACTOR' && setupDecision.contractorOnboardingRequired) {
     const finishSetup = (outcome: ContractorSetupCompletion) => {
-      void finishContractorSetup(user.id, outcome).finally(() => {
-        console.info('[contractor-setup] setup screen closed', {
-          userId: user.id,
-          role: user.role,
-          outcome,
-          contractorOnboardingCompleted: outcome === 'completed',
-          contractorOnboardingSkipped: outcome === 'skipped',
-          finalNavigationTarget: 'app',
+      const persistServerOnboardingOutcome =
+        outcome === 'completed' ? api.claimWelcomeBonus() : api.skipWelcomeBonusOnboarding();
+
+      void persistServerOnboardingOutcome
+        .then((result) => {
+          console.info('[contractor-setup] backend onboarding outcome saved', {
+            userId: user.id,
+            outcome,
+            welcomeBonusGranted: outcome === 'completed' && 'granted' in result ? result.granted : false,
+            welcomeBonusReason: outcome === 'completed' && 'reason' in result ? result.reason : null,
+          });
+        })
+        .catch((error) => {
+          console.warn('[contractor-setup] backend onboarding outcome failed; allowing app entry', {
+            userId: user.id,
+            outcome,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => finishContractorSetup(user.id, outcome))
+        .finally(() => {
+          console.info('[contractor-setup] setup screen closed', {
+            userId: user.id,
+            role: user.role,
+            outcome,
+            contractorOnboardingCompleted: outcome === 'completed',
+            contractorOnboardingSkipped: outcome === 'skipped',
+            finalNavigationTarget: 'app',
+          });
+          setSetupRevision((current) => current + 1);
         });
-        setSetupRevision((current) => current + 1);
-      });
     };
 
     return (

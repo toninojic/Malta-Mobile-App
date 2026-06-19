@@ -22,6 +22,7 @@ import { AuthenticatedUser } from '../common/types/authenticated-user.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminRefundDecisionDto } from './dto/admin-refund-decision.dto';
+import { AdminGrantTokensDto, AdminRevokeTokensDto } from './dto/admin-token-adjustment.dto';
 import { CreateRefundRequestDto } from './dto/create-refund-request.dto';
 import { CreateTokenPackageDto } from './dto/create-token-package.dto';
 import { MockPurchaseDto } from './dto/mock-purchase.dto';
@@ -196,6 +197,148 @@ export class TokensService {
     return this.toBalance(wallet);
   }
 
+  async claimWelcomeBonus(user: AuthenticatedUser) {
+    this.assertContractor(user);
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        role: true,
+        contractorOnboardingRequiredAt: true,
+        contractorOnboardingCompletedAt: true,
+        contractorOnboardingSkippedAt: true,
+        welcomeBonusGrantedAt: true,
+      },
+    });
+
+    if (!target || target.role !== UserRole.CONTRACTOR) {
+      throw new ForbiddenException('Only contractors can receive welcome tokens.');
+    }
+
+    if (!target.contractorOnboardingRequiredAt) {
+      return {
+        granted: false,
+        reason: 'WELCOME_BONUS_NOT_AVAILABLE',
+        balance: this.toBalance(await this.ensureWallet(user.id)),
+        transaction: null,
+      };
+    }
+
+    if (target.contractorOnboardingSkippedAt && !target.contractorOnboardingCompletedAt) {
+      return {
+        granted: false,
+        reason: 'WELCOME_BONUS_SKIPPED',
+        balance: this.toBalance(await this.ensureWallet(user.id)),
+        transaction: null,
+      };
+    }
+
+    if (target.welcomeBonusGrantedAt) {
+      return {
+        granted: false,
+        reason: 'WELCOME_BONUS_ALREADY_GRANTED',
+        balance: this.toBalance(await this.ensureWallet(user.id)),
+        transaction: null,
+      };
+    }
+
+    if (!this.welcomeBonusEnabled()) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { contractorOnboardingCompletedAt: target.contractorOnboardingCompletedAt ?? new Date() },
+      });
+      return {
+        granted: false,
+        reason: 'WELCOME_BONUS_DISABLED',
+        balance: this.toBalance(await this.ensureWallet(user.id)),
+        transaction: null,
+      };
+    }
+
+    const tokenAmount = this.welcomeBonusTokens();
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.ensureWallet(user.id, tx);
+
+      const marked = await tx.user.updateMany({
+        where: {
+          id: user.id,
+          role: UserRole.CONTRACTOR,
+          contractorOnboardingRequiredAt: { not: null },
+          contractorOnboardingSkippedAt: null,
+          welcomeBonusGrantedAt: null,
+        },
+        data: {
+          contractorOnboardingCompletedAt: target.contractorOnboardingCompletedAt ?? new Date(),
+          welcomeBonusGrantedAt: new Date(),
+        },
+      });
+
+      if (marked.count !== 1) {
+        const wallet = await tx.userTokenBalance.findUniqueOrThrow({ where: { userId: user.id } });
+        return { granted: false, wallet, transaction: null };
+      }
+
+      const wallet = await tx.userTokenBalance.update({
+        where: { userId: user.id },
+        data: {
+          balance: { increment: tokenAmount },
+          version: { increment: 1 },
+        },
+      });
+
+      const transaction = await tx.tokenTransaction.create({
+        data: {
+          userId: user.id,
+          type: TokenTransactionType.WELCOME_BONUS,
+          amount: tokenAmount,
+          balanceAfter: wallet.balance,
+          description: 'Welcome bonus',
+          externalRef: `welcome-bonus:${user.id}`,
+        },
+        include: { package: true },
+      });
+
+      await this.notificationsService.create(
+        {
+          userId: user.id,
+          type: NotificationType.SYSTEM_ALERT,
+          title: 'Welcome tokens added',
+          body: `You received ${tokenAmount} welcome tokens.`,
+          data: {
+            type: 'WELCOME_BONUS',
+            amount: tokenAmount,
+            transactionId: transaction.id,
+            target: 'wallet',
+          },
+        },
+        tx,
+      );
+
+      return { granted: true, wallet, transaction };
+    });
+
+    return {
+      granted: result.granted,
+      reason: result.granted ? null : 'WELCOME_BONUS_ALREADY_GRANTED',
+      balance: this.toBalance(result.wallet),
+      transaction: result.transaction ? this.toTransaction(result.transaction) : null,
+    };
+  }
+
+  async skipWelcomeBonusOnboarding(user: AuthenticatedUser) {
+    this.assertContractor(user);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        contractorOnboardingSkippedAt: new Date(),
+      },
+    });
+
+    return { success: true };
+  }
+
   async findTransactions(
     user: AuthenticatedUser,
     query: PaginationQueryDto,
@@ -269,6 +412,149 @@ export class TokensService {
           status: PaymentStatus.COMPLETED,
         },
       });
+
+      return { wallet, transaction };
+    });
+
+    return {
+      balance: this.toBalance(result.wallet),
+      transaction: this.toTransaction(result.transaction),
+    };
+  }
+
+  async adminGrantTokens(admin: AuthenticatedUser, userId: string, dto: AdminGrantTokensDto) {
+    this.assertAdmin(admin);
+    const contractor = await this.getContractorTarget(userId);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.ensureWallet(contractor.id, tx);
+
+      const wallet = await tx.userTokenBalance.update({
+        where: { userId: contractor.id },
+        data: {
+          balance: { increment: dto.amount },
+          version: { increment: 1 },
+        },
+      });
+
+      const transaction = await tx.tokenTransaction.create({
+        data: {
+          userId: contractor.id,
+          type: TokenTransactionType.ADMIN_GRANT,
+          amount: dto.amount,
+          balanceAfter: wallet.balance,
+          description: `Admin grant: ${dto.reason}`,
+        },
+        include: { package: true },
+      });
+
+      await this.auditLogsService.create(
+        {
+          adminId: admin.id,
+          action: 'TOKENS_ADMIN_GRANTED',
+          entityType: 'User',
+          entityId: contractor.id,
+          metadata: {
+            amount: dto.amount,
+            reason: dto.reason,
+            transactionId: transaction.id,
+          },
+        },
+        tx,
+      );
+
+      await this.notificationsService.create(
+        {
+          userId: contractor.id,
+          type: NotificationType.SYSTEM_ALERT,
+          title: 'Promotional tokens added',
+          body: `You received ${dto.amount} promotional tokens.`,
+          data: {
+            type: 'ADMIN_GRANT',
+            amount: dto.amount,
+            transactionId: transaction.id,
+            target: 'wallet',
+          },
+        },
+        tx,
+      );
+
+      return { wallet, transaction };
+    });
+
+    return {
+      balance: this.toBalance(result.wallet),
+      transaction: this.toTransaction(result.transaction),
+    };
+  }
+
+  async adminRevokeTokens(admin: AuthenticatedUser, userId: string, dto: AdminRevokeTokensDto) {
+    this.assertAdmin(admin);
+    const contractor = await this.getContractorTarget(userId);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.ensureWallet(contractor.id, tx);
+
+      const updated = await tx.userTokenBalance.updateMany({
+        where: {
+          userId: contractor.id,
+          balance: { gte: dto.amount },
+        },
+        data: {
+          balance: { decrement: dto.amount },
+          version: { increment: 1 },
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new BadRequestException('Cannot revoke more tokens than current balance.');
+      }
+
+      const wallet = await tx.userTokenBalance.findUniqueOrThrow({
+        where: { userId: contractor.id },
+      });
+
+      const transaction = await tx.tokenTransaction.create({
+        data: {
+          userId: contractor.id,
+          type: TokenTransactionType.ADMIN_REVOKE,
+          amount: -dto.amount,
+          balanceAfter: wallet.balance,
+          description: `Admin revoke: ${dto.reason}`,
+        },
+        include: { package: true },
+      });
+
+      await this.auditLogsService.create(
+        {
+          adminId: admin.id,
+          action: 'TOKENS_ADMIN_REVOKED',
+          entityType: 'User',
+          entityId: contractor.id,
+          metadata: {
+            amount: dto.amount,
+            reason: dto.reason,
+            transactionId: transaction.id,
+          },
+        },
+        tx,
+      );
+
+      await this.notificationsService.create(
+        {
+          userId: contractor.id,
+          type: NotificationType.SYSTEM_ALERT,
+          title: 'Tokens removed',
+          body: `${dto.amount} tokens were removed from your wallet by admin.`,
+          data: {
+            type: 'ADMIN_REVOKE',
+            amount: dto.amount,
+            transactionId: transaction.id,
+            target: 'wallet',
+          },
+        },
+        tx,
+      );
 
       return { wallet, transaction };
     });
@@ -559,8 +845,45 @@ export class TokensService {
 
   private assertAdmin(user: AuthenticatedUser) {
     if (user.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only admins can manage token refunds.');
+      throw new ForbiddenException('Only admins can manage tokens.');
     }
+  }
+
+  private assertContractor(user: AuthenticatedUser) {
+    if (user.role !== UserRole.CONTRACTOR) {
+      throw new ForbiddenException('Only contractors can receive tokens.');
+    }
+  }
+
+  private async getContractorTarget(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, status: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    if (user.role !== UserRole.CONTRACTOR) {
+      throw new BadRequestException('Promo tokens can be granted only to contractors.');
+    }
+
+    return user;
+  }
+
+  private welcomeBonusEnabled() {
+    const value = this.config.get<string>('WELCOME_BONUS_ENABLED');
+    if (value === undefined || value === '') {
+      return true;
+    }
+
+    return parseBooleanEnv(value);
+  }
+
+  private welcomeBonusTokens() {
+    const configured = Number(this.config.get<string>('WELCOME_BONUS_TOKENS') ?? 10);
+    return Number.isInteger(configured) && configured > 0 ? configured : 10;
   }
 
   private isPrismaError(error: unknown, code: string) {

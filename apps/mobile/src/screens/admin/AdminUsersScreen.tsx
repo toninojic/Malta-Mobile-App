@@ -1,7 +1,13 @@
-import { RefreshCw, ShieldOff, UserCheck, UsersRound } from 'lucide-react-native';
+import { Coins, MinusCircle, RefreshCw, ShieldOff, UserCheck, UsersRound } from 'lucide-react-native';
 import { ComponentType, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { useActivateUser, useAdminUsers, useSuspendUser } from '../../api/adminHooks';
+import {
+  useActivateUser,
+  useAdminGrantTokens,
+  useAdminRevokeTokens,
+  useAdminUsers,
+  useSuspendUser,
+} from '../../api/adminHooks';
 import { AppModal, AppModalAction } from '../../components/AppModal';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
@@ -34,6 +40,14 @@ type ConfirmationDialog = {
   actions: AppModalAction[];
 };
 
+type TokenDialog = {
+  mode: 'grant' | 'revoke';
+  user: AdminUser;
+  amount: string;
+  reason: string;
+  error?: string;
+};
+
 export function AdminUsersScreen() {
   const theme = useTheme();
   const currentUser = useAuthStore((state) => state.user);
@@ -41,6 +55,7 @@ export function AdminUsersScreen() {
   const [role, setRole] = useState('ALL');
   const [status, setStatus] = useState('ALL');
   const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialog | null>(null);
+  const [tokenDialog, setTokenDialog] = useState<TokenDialog | null>(null);
   const filters = useMemo(
     () => ({
       search: search.trim() || undefined,
@@ -52,6 +67,8 @@ export function AdminUsersScreen() {
   const usersQuery = useAdminUsers(filters);
   const suspendMutation = useSuspendUser();
   const activateMutation = useActivateUser();
+  const grantTokensMutation = useAdminGrantTokens();
+  const revokeTokensMutation = useAdminRevokeTokens();
 
   const confirmSuspend = (user: AdminUser) => {
     setConfirmationDialog({
@@ -91,6 +108,72 @@ export function AdminUsersScreen() {
     });
   };
 
+  const openTokenDialog = (mode: TokenDialog['mode'], user: AdminUser) => {
+    setTokenDialog({
+      mode,
+      user,
+      amount: mode === 'grant' ? '10' : '',
+      reason: '',
+    });
+  };
+
+  const submitTokenDialog = () => {
+    if (!tokenDialog) {
+      return;
+    }
+
+    const amount = Number(tokenDialog.amount);
+    const reason = tokenDialog.reason.trim();
+    const currentBalance = tokenDialog.user.tokenBalance?.balance ?? 0;
+
+    if (!Number.isInteger(amount) || amount < 1) {
+      setTokenDialog({ ...tokenDialog, error: 'Amount must be a whole number greater than zero.' });
+      return;
+    }
+
+    if (amount > 1000) {
+      setTokenDialog({ ...tokenDialog, error: 'Amount must be 1000 or less.' });
+      return;
+    }
+
+    if (tokenDialog.mode === 'revoke' && amount > currentBalance) {
+      setTokenDialog({ ...tokenDialog, error: 'Cannot revoke more tokens than the current balance.' });
+      return;
+    }
+
+    if (!reason) {
+      setTokenDialog({ ...tokenDialog, error: 'Reason is required.' });
+      return;
+    }
+
+    if (tokenDialog.mode === 'grant') {
+      grantTokensMutation.mutate(
+        { userId: tokenDialog.user.id, amount, reason },
+        {
+          onSuccess: () => setTokenDialog(null),
+          onError: (error) =>
+            setTokenDialog({
+              ...tokenDialog,
+              error: error instanceof Error ? error.message : 'Could not grant tokens.',
+            }),
+        },
+      );
+      return;
+    }
+
+    revokeTokensMutation.mutate(
+      { userId: tokenDialog.user.id, amount, reason },
+      {
+        onSuccess: () => setTokenDialog(null),
+        onError: (error) =>
+          setTokenDialog({
+            ...tokenDialog,
+            error: error instanceof Error ? error.message : 'Could not revoke tokens.',
+          }),
+      },
+    );
+  };
+
   return (
     <Screen contentTopPadding={28} refreshing={usersQuery.isRefetching} onRefresh={() => void usersQuery.refetch({ cancelRefetch: false })}>
       {confirmationDialog ? (
@@ -101,6 +184,53 @@ export function AdminUsersScreen() {
           icon={confirmationDialog.icon}
           actions={confirmationDialog.actions}
           onRequestClose={() => setConfirmationDialog(null)}
+        />
+      ) : null}
+      {tokenDialog ? (
+        <AppModal
+          visible
+          title={tokenDialog.mode === 'grant' ? 'Grant Tokens' : 'Revoke Tokens'}
+          body={
+            tokenDialog.mode === 'grant'
+              ? 'Grant promotional tokens to this contractor. The adjustment will be recorded in the wallet ledger and audit log.'
+              : 'Revoke tokens from this contractor. The balance cannot go below zero and a reason is required.'
+          }
+          icon={tokenDialog.mode === 'grant' ? Coins : MinusCircle}
+          media={
+            <View style={styles.dialogFields}>
+              <Text style={[styles.dialogMeta, { color: theme.colors.textMuted }]}>
+                {tokenDialog.user.profile?.displayName ?? tokenDialog.user.email} / Balance:{' '}
+                {tokenDialog.user.tokenBalance?.balance ?? 0}
+              </Text>
+              <TextField
+                label="Amount"
+                value={tokenDialog.amount}
+                onChangeText={(amount) => setTokenDialog({ ...tokenDialog, amount, error: undefined })}
+                keyboardType="number-pad"
+                placeholder={tokenDialog.mode === 'grant' ? '10' : '5'}
+              />
+              <TextField
+                label="Reason"
+                value={tokenDialog.reason}
+                onChangeText={(reason) => setTokenDialog({ ...tokenDialog, reason, error: undefined })}
+                placeholder={tokenDialog.mode === 'grant' ? 'Launch promotion' : 'Correction'}
+                multiline
+              />
+              {tokenDialog.error ? (
+                <Text style={[styles.dialogError, { color: theme.colors.danger }]}>{tokenDialog.error}</Text>
+              ) : null}
+            </View>
+          }
+          actions={[
+            { label: 'Cancel', variant: 'secondary', onPress: () => setTokenDialog(null) },
+            {
+              label: tokenDialog.mode === 'grant' ? 'Grant Tokens' : 'Revoke Tokens',
+              variant: tokenDialog.mode === 'grant' ? 'primary' : 'danger',
+              disabled: grantTokensMutation.isPending || revokeTokensMutation.isPending,
+              onPress: submitTokenDialog,
+            },
+          ]}
+          onRequestClose={() => setTokenDialog(null)}
         />
       ) : null}
       <View style={styles.header}>
@@ -137,6 +267,8 @@ export function AdminUsersScreen() {
           const isSelf = user.id === currentUser?.id;
           const canSuspend = user.status === 'ACTIVE' && !isSelf;
           const canActivate = user.status === 'SUSPENDED';
+          const canAdjustTokens = user.role === 'CONTRACTOR';
+          const tokenBalance = user.tokenBalance?.balance ?? 0;
 
           return (
             <Card key={user.id}>
@@ -175,6 +307,27 @@ export function AdminUsersScreen() {
                   onPress={() => confirmActivate(user)}
                   style={styles.action}
                 />
+                {canAdjustTokens ? (
+                  <>
+                    <Button
+                      title="Grant Tokens"
+                      icon={Coins}
+                      variant="primary"
+                      loading={grantTokensMutation.isPending}
+                      onPress={() => openTokenDialog('grant', user)}
+                      style={styles.action}
+                    />
+                    <Button
+                      title="Revoke Tokens"
+                      icon={MinusCircle}
+                      variant="secondary"
+                      disabled={tokenBalance <= 0}
+                      loading={revokeTokensMutation.isPending}
+                      onPress={() => openTokenDialog('revoke', user)}
+                      style={styles.action}
+                    />
+                  </>
+                ) : null}
               </View>
             </Card>
           );
@@ -225,9 +378,22 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   action: {
     flex: 1,
+    minWidth: '47%',
+  },
+  dialogFields: {
+    gap: 12,
+  },
+  dialogMeta: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  dialogError: {
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

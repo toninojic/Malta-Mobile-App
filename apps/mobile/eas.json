@@ -10,7 +10,8 @@
       "environment": "development",
       "env": {
         "EXPO_PUBLIC_API_LOGGING": "true",
-        "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true"
+        "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true",
+        "EXPO_PUBLIC_API_URL": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1"
       }
     },
     "preview": {
@@ -20,7 +21,8 @@
       "env": {
         "EXPO_PUBLIC_API_LOGGING": "true",
         "EXPO_PUBLIC_ALLOW_MOCK_PURCHASES": "true",
-        "EXPO_PUBLIC_PUSH_DEBUG": "false"
+        "EXPO_PUBLIC_PUSH_DEBUG": "false",
+        "EXPO_PUBLIC_API_URL": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1"
       },
       "android": {
         "buildType": "apk"

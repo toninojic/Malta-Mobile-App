@@ -5,7 +5,6 @@ import { ComponentType, ReactNode, useCallback, useState } from 'react';
 import { Alert, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   useAdminRefunds,
-  useMyRefunds,
   useTokenBalance,
   useTokenPackages,
   useTokenTransactions,
@@ -42,7 +41,6 @@ export function WalletScreen({ navigation }: Props) {
   const packagesQuery = useTokenPackages();
   const balanceQuery = useTokenBalance();
   const transactionsQuery = useTokenTransactions();
-  const refundsQuery = useMyRefunds();
   const paymentsQuery = usePayments();
   const paymentConfigQuery = usePaymentConfig();
   const adminRefundsQuery = useAdminRefunds(isAdmin);
@@ -61,7 +59,6 @@ export function WalletScreen({ navigation }: Props) {
       void packagesQuery.refetch({ cancelRefetch: false });
       void balanceQuery.refetch({ cancelRefetch: false });
       void transactionsQuery.refetch({ cancelRefetch: false });
-      void refundsQuery.refetch({ cancelRefetch: false });
       void paymentsQuery.refetch({ cancelRefetch: false });
       void paymentConfigQuery.refetch({ cancelRefetch: false });
       if (isAdmin) {
@@ -74,7 +71,6 @@ export function WalletScreen({ navigation }: Props) {
       packagesQuery.refetch,
       paymentConfigQuery.refetch,
       paymentsQuery.refetch,
-      refundsQuery.refetch,
       transactionsQuery.refetch,
     ]),
   );
@@ -136,14 +132,12 @@ export function WalletScreen({ navigation }: Props) {
     packagesQuery.isLoading ||
     balanceQuery.isLoading ||
     transactionsQuery.isLoading ||
-    refundsQuery.isLoading ||
     paymentsQuery.isLoading ||
     paymentConfigQuery.isLoading;
   const firstError =
     packagesQuery.error ??
     balanceQuery.error ??
     transactionsQuery.error ??
-    refundsQuery.error ??
     paymentsQuery.error ??
     paymentConfigQuery.error;
 
@@ -151,7 +145,6 @@ export function WalletScreen({ navigation }: Props) {
     packagesQuery.isRefetching ||
     balanceQuery.isRefetching ||
     transactionsQuery.isRefetching ||
-    refundsQuery.isRefetching ||
     paymentsQuery.isRefetching ||
     paymentConfigQuery.isRefetching ||
     adminRefundsQuery.isRefetching;
@@ -160,7 +153,6 @@ export function WalletScreen({ navigation }: Props) {
     if (!packagesQuery.isFetching) void packagesQuery.refetch({ cancelRefetch: false });
     if (!balanceQuery.isFetching) void balanceQuery.refetch({ cancelRefetch: false });
     if (!transactionsQuery.isFetching) void transactionsQuery.refetch({ cancelRefetch: false });
-    if (!refundsQuery.isFetching) void refundsQuery.refetch({ cancelRefetch: false });
     if (!paymentsQuery.isFetching) void paymentsQuery.refetch({ cancelRefetch: false });
     if (!paymentConfigQuery.isFetching) void paymentConfigQuery.refetch({ cancelRefetch: false });
     if (isAdmin && !adminRefundsQuery.isFetching) void adminRefundsQuery.refetch({ cancelRefetch: false });
@@ -205,7 +197,6 @@ export function WalletScreen({ navigation }: Props) {
             void packagesQuery.refetch();
             void balanceQuery.refetch();
             void transactionsQuery.refetch();
-            void refundsQuery.refetch();
             void paymentsQuery.refetch();
             void paymentConfigQuery.refetch();
           }}
@@ -239,27 +230,13 @@ export function WalletScreen({ navigation }: Props) {
 
       <Section title="Transaction history">
         {transactionsQuery.data?.data.length === 0 ? (
-          <EmptyState icon={ReceiptText} title="No transactions" message="Purchases and refunds will appear here." />
+          <EmptyState icon={ReceiptText} title="No transactions" message="Purchases and token activity will appear here." />
         ) : null}
         {transactionsQuery.data?.data.map((transaction) => (
           <TransactionCard
             key={transaction.id}
             transaction={transaction}
-            onRefund={
-              transaction.type === 'PURCHASE'
-                ? () => navigation.navigate('RefundRequest', { transactionId: transaction.id })
-                : undefined
-            }
           />
-        ))}
-      </Section>
-
-      <Section title="My refund requests">
-        {refundsQuery.data?.data.length === 0 ? (
-          <EmptyState icon={RotateCcw} title="No refund requests" message="Requested refunds will be listed here." />
-        ) : null}
-        {refundsQuery.data?.data.map((refund) => (
-          <RefundCard key={refund.id} refund={refund} />
         ))}
       </Section>
 

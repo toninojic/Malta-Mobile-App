@@ -10,5 +10,6 @@ import { TokensService } from './tokens.service';
   imports: [PrismaModule, AuditLogsModule, NotificationsModule],
   controllers: [TokensController, AdminTokensController],
   providers: [TokensService],
+  exports: [TokensService],
 })
 export class TokensModule {}

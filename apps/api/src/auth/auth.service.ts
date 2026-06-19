@@ -43,6 +43,7 @@ export class AuthService {
         email: dto.email,
         passwordHash,
         role: dto.role,
+        contractorOnboardingRequiredAt: dto.role === UserRole.CONTRACTOR ? new Date() : undefined,
         profile: {
           create: {
             displayName,

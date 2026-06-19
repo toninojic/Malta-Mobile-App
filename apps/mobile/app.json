@@ -49,7 +49,7 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://localhost:3000/api/v1",
+      "apiUrl": "https://condiment-ransack-ducky.ngrok-free.dev/api/v1",
       "apiDebug": false,
       "revenueCatApiKeyAndroid": "",
       "revenueCatApiKeyIos": "",
