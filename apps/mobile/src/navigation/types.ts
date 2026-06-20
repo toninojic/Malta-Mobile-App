@@ -5,6 +5,9 @@ export type AuthStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Register: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { token?: string } | undefined;
+  VerifyEmail: { token?: string } | undefined;
 };
 
 export type JobsStackParamList = {
@@ -33,6 +36,8 @@ export type WalletStackParamList = {
   PaymentSuccess: { paymentId?: string } | undefined;
   PaymentFailed: { paymentId?: string } | undefined;
   PaymentPending: { paymentId?: string } | undefined;
+  ResetPassword: { token?: string } | undefined;
+  VerifyEmail: { token?: string } | undefined;
 };
 
 export type ActivityStackParamList = {
@@ -59,6 +64,8 @@ export type ActivityStackParamList = {
   PaymentSuccess: { paymentId?: string } | undefined;
   PaymentFailed: { paymentId?: string } | undefined;
   PaymentPending: { paymentId?: string } | undefined;
+  ResetPassword: { token?: string } | undefined;
+  VerifyEmail: { token?: string } | undefined;
 };
 
 export type MessagesStackParamList = {

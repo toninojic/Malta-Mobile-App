@@ -34,7 +34,8 @@
     "smoke:milestone10": "node scripts/milestone10-smoke.mjs",
     "smoke:ai-job-assistant": "node scripts/ai-job-assistant-smoke.mjs",
     "smoke:admin-token-grants": "node scripts/admin-token-grants-smoke.mjs",
-    "smoke:report-system": "node scripts/report-system-smoke.mjs"
+    "smoke:report-system": "node scripts/report-system-smoke.mjs",
+    "smoke:auth-google-resend": "node scripts/auth-google-resend-smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",

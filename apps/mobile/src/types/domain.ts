@@ -1,5 +1,6 @@
 export type UserRole = 'EMPLOYER' | 'CONTRACTOR' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'SUSPENDED';
+export type UserAuthProvider = 'EMAIL' | 'GOOGLE' | 'BOTH';
 export type JobStatus = 'ACTIVE' | 'IN_PROGRESS' | 'EXPIRED' | 'COMPLETED' | 'CLOSED';
 export type OfferStatus = 'PENDING' | 'SELECTED' | 'REJECTED' | 'WITHDRAWN' | 'COMPLETED';
 export type OfferRejectionReason =
@@ -82,6 +83,8 @@ export type AuthUser = {
   email: string;
   role: UserRole;
   status: UserStatus;
+  authProvider?: UserAuthProvider;
+  emailVerifiedAt?: string | null;
   profile?: UserProfile | null;
 };
 
@@ -163,6 +166,27 @@ export type AuthResponse = {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
+  verificationEmailSent?: boolean;
+  debugEmailVerificationToken?: string;
+  debugPasswordResetToken?: string;
+};
+
+export type EmailVerificationResponse = {
+  success: true;
+  alreadyVerified?: boolean;
+  user?: AuthUser;
+  debugEmailVerificationToken?: string;
+};
+
+export type ForgotPasswordResponse = {
+  success: true;
+  message: string;
+  debugPasswordResetToken?: string;
+};
+
+export type ResetPasswordResponse = {
+  success: true;
+  user?: AuthUser;
 };
 
 export type JobFormValues = {

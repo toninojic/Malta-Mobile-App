@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArrowLeft, Building2, HardHat, LockKeyhole, Mail, UserRound } from 'lucide-react-native';
 import { ComponentType } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
@@ -11,6 +11,7 @@ import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
 import { getContractorSetupDecision, markContractorSetupRequired } from '../../services/contractorSetup';
+import { googleAuthIsConfigured, useGoogleIdTokenRequest } from '../../services/googleSignIn';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 import { UserRole } from '../../types/domain';
@@ -29,31 +30,59 @@ export function RegisterScreen({ navigation }: Props) {
   const [location, setLocation] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [tradeCategories, setTradeCategories] = useState('');
+  const [googleRequest, googleResponse, promptGoogleAsync] = useGoogleIdTokenRequest();
+
+  const completeRegistration = async (session: Awaited<ReturnType<typeof api.register>>, authAction: 'register' | 'google-register') => {
+    if (session.user.role === 'CONTRACTOR') {
+      await markSetupRequiredWithTimeout(session.user.id);
+    }
+    const setupDecision = getContractorSetupDecision(session.user);
+    console.info('[contractor-setup] auth action', {
+      authAction,
+      userId: session.user.id,
+      role: session.user.role,
+      isNewlyRegistered: session.user.role === 'CONTRACTOR',
+      contractorOnboardingRequired: setupDecision.contractorOnboardingRequired,
+      contractorOnboardingCompleted: setupDecision.contractorOnboardingCompleted,
+      contractorOnboardingSkipped: setupDecision.contractorOnboardingSkipped,
+      finalNavigationTarget: setupDecision.finalNavigationTarget,
+    });
+    await setSession(session);
+    await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
+    if (authAction === 'register' && session.verificationEmailSent) {
+      Alert.alert('Check your email', 'We sent you a MaltaPro verification link. You can continue using the app and verify from Profile.');
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: api.register,
-    onSuccess: async (session) => {
-      if (session.user.role === 'CONTRACTOR') {
-        await markSetupRequiredWithTimeout(session.user.id);
-      }
-      const setupDecision = getContractorSetupDecision(session.user);
-      console.info('[contractor-setup] auth action', {
-        authAction: 'register',
-        userId: session.user.id,
-        role: session.user.role,
-        isNewlyRegistered: session.user.role === 'CONTRACTOR',
-        contractorOnboardingRequired: setupDecision.contractorOnboardingRequired,
-        contractorOnboardingCompleted: setupDecision.contractorOnboardingCompleted,
-        contractorOnboardingSkipped: setupDecision.contractorOnboardingSkipped,
-        finalNavigationTarget: setupDecision.finalNavigationTarget,
-      });
-      await setSession(session);
-      await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
-    },
+    onSuccess: (session) => completeRegistration(session, 'register'),
     onError: (error) => {
       Alert.alert('Registration failed', error instanceof Error ? error.message : 'Please try again.');
     },
   });
+
+  const googleMutation = useMutation({
+    mutationFn: api.googleAuth,
+    onSuccess: (session) => completeRegistration(session, 'google-register'),
+    onError: (error) => {
+      Alert.alert('Google registration failed', error instanceof Error ? error.message : 'Please try again.');
+    },
+  });
+
+  useEffect(() => {
+    if (googleResponse?.type !== 'success') {
+      return;
+    }
+
+    const idToken = googleResponse.params.id_token;
+    if (!idToken) {
+      Alert.alert('Google registration failed', 'Google did not return an ID token.');
+      return;
+    }
+
+    googleMutation.mutate({ idToken, role });
+  }, [googleResponse?.type]);
 
   const submit = () => {
     mutation.mutate({
@@ -97,6 +126,13 @@ export function RegisterScreen({ navigation }: Props) {
         </>
       ) : null}
       <Button title="Create Account" loading={mutation.isPending} onPress={submit} />
+      <Button
+        title={`Continue with Google as ${role === 'EMPLOYER' ? 'Employer' : 'Contractor'}`}
+        variant="secondary"
+        loading={googleMutation.isPending}
+        disabled={!googleAuthIsConfigured() || !googleRequest}
+        onPress={() => void promptGoogleAsync()}
+      />
       <Button title="Log In" variant="secondary" onPress={() => navigation.navigate('Login')} />
     </Screen>
   );

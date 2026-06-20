@@ -34,6 +34,12 @@ const configuredPushDebug = parseBooleanEnv(
   process.env.EXPO_PUBLIC_PUSH_DEBUG,
   baseConfig.extra?.pushDebug ?? false,
 );
+const configuredGoogleAndroidClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim() || baseConfig.extra?.googleAndroidClientId;
+const configuredGoogleIosClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() || baseConfig.extra?.googleIosClientId;
+const configuredGoogleWebClientId =
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() || baseConfig.extra?.googleWebClientId;
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? baseConfig.extra?.buildProfile;
 const buildPlatform = process.env.EAS_BUILD_PLATFORM;
 const googleServicesFile = resolveGoogleServicesFile();
@@ -80,6 +86,9 @@ module.exports = () => {
       revenueCatApiKeyIos: configuredRevenueCatIosKey,
       allowMockPurchases: configuredAllowMockPurchases,
       pushDebug: configuredPushDebug,
+      googleAndroidClientId: configuredGoogleAndroidClientId,
+      googleIosClientId: configuredGoogleIosClientId,
+      googleWebClientId: configuredGoogleWebClientId,
       buildProfile,
     },
   };

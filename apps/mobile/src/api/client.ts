@@ -19,6 +19,8 @@ import {
   Conversation,
   EmployerRatingSummary,
   EmployerReview,
+  EmailVerificationResponse,
+  ForgotPasswordResponse,
   InAppNotification,
   JobCompletion,
   JobBrowseFilters,
@@ -36,6 +38,7 @@ import {
   PushTokenDebugResponse,
   RefundRequest,
   RefundStatus,
+  ResetPasswordResponse,
   Report,
   ReportReason,
   ReportStatus,
@@ -310,6 +313,39 @@ export const api = {
       },
       authenticated: false,
       debugLabel: 'login',
+    });
+  },
+  googleAuth(input: { idToken: string; role?: Exclude<UserRole, 'ADMIN'> }) {
+    return request<AuthResponse>('/auth/google', {
+      method: 'POST',
+      body: input,
+      authenticated: false,
+    });
+  },
+  sendEmailVerification() {
+    return request<EmailVerificationResponse>('/auth/send-email-verification', {
+      method: 'POST',
+    });
+  },
+  verifyEmail(token: string) {
+    return request<EmailVerificationResponse>('/auth/verify-email', {
+      method: 'POST',
+      body: { token },
+      authenticated: false,
+    });
+  },
+  forgotPassword(email: string) {
+    return request<ForgotPasswordResponse>('/auth/forgot-password', {
+      method: 'POST',
+      body: { email },
+      authenticated: false,
+    });
+  },
+  resetPassword(input: { token: string; newPassword: string }) {
+    return request<ResetPasswordResponse>('/auth/reset-password', {
+      method: 'POST',
+      body: input,
+      authenticated: false,
     });
   },
   logout() {

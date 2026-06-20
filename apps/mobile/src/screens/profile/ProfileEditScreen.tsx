@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import { BellRing, ChevronDown, ChevronRight, Flag, ImagePlus, LogOut, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
+import { BellRing, ChevronDown, ChevronRight, Flag, ImagePlus, LogOut, MailCheck, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -83,6 +83,7 @@ export function ProfileEditScreen() {
   const [tradeCategories, setTradeCategories] = useState('');
   const [avatarViewerOpen, setAvatarViewerOpen] = useState(false);
   const [profileSavedOpen, setProfileSavedOpen] = useState(false);
+  const [verificationSentOpen, setVerificationSentOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [notificationSettingsExpanded, setNotificationSettingsExpanded] = useState(false);
   const [serviceAreasExpanded, setServiceAreasExpanded] = useState(false);
@@ -124,6 +125,14 @@ export function ProfileEditScreen() {
   const uploadPortfolioMutation = useUploadPortfolioImages();
   const removePortfolioMutation = useRemovePortfolioImage();
   const uploadVerificationMutation = useUploadContractorVerification();
+  const sendVerificationMutation = useMutation({
+    mutationFn: api.sendEmailVerification,
+    onSuccess: async () => {
+      await query.refetch();
+      setVerificationSentOpen(true);
+    },
+    onError: (error) => Alert.alert('Could not send verification email', error instanceof Error ? error.message : 'Please try again.'),
+  });
 
   useEffect(() => {
     const profile = query.data?.profile;
@@ -236,7 +245,8 @@ export function ProfileEditScreen() {
       ? 'Loading'
       : serviceCategoriesQuery.isError
         ? 'Error'
-        : `${selectedCategoryKeys.length} selected`;
+      : `${selectedCategoryKeys.length} selected`;
+  const isEmailVerified = Boolean(query.data?.emailVerifiedAt ?? currentUser?.emailVerifiedAt);
 
   useEffect(() => {
     if (notificationPreferencesQuery.error) {
@@ -525,6 +535,14 @@ export function ProfileEditScreen() {
         onRequestClose={() => setProfileSavedOpen(false)}
       />
       <AppModal
+        visible={verificationSentOpen}
+        title={isEmailVerified ? 'Email Verified' : 'Verification Email Sent'}
+        body={isEmailVerified ? 'Your email is already verified.' : 'Check your inbox for the MaltaPro verification link.'}
+        icon={MailCheck}
+        actions={[{ label: 'Close', variant: 'primary', onPress: () => setVerificationSentOpen(false) }]}
+        onRequestClose={() => setVerificationSentOpen(false)}
+      />
+      <AppModal
         visible={deleteAccountOpen}
         title="Delete Account"
         body="Your account will be deactivated and you will be signed out. Existing jobs, offers, messages, wallet records, and reviews are retained for marketplace history and admin audit."
@@ -571,6 +589,27 @@ export function ProfileEditScreen() {
           </View>
           {role ? <Badge status={role} /> : null}
         </View>
+      </Card>
+
+      <Card>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Email Verification</Text>
+          <Badge status={isEmailVerified ? 'VERIFIED' : 'NOT VERIFIED'} />
+        </View>
+        <Text style={[styles.email, { color: theme.colors.textMuted }]}>
+          {isEmailVerified
+            ? 'Your email is verified.'
+            : 'Verify your email for account recovery and production notifications.'}
+        </Text>
+        {!isEmailVerified ? (
+          <Button
+            title="Resend Verification Email"
+            icon={MailCheck}
+            variant="secondary"
+            loading={sendVerificationMutation.isPending}
+            onPress={() => sendVerificationMutation.mutate()}
+          />
+        ) : null}
       </Card>
 
       <TextField label="Display name" value={displayName} onChangeText={setDisplayName} />

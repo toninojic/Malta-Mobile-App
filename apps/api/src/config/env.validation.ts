@@ -21,7 +21,10 @@ export function validateRuntimeEnvironment(config: ConfigService) {
     'JWT_REFRESH_SECRET',
     'API_PORT',
     'APP_BASE_URL',
+    'APP_PUBLIC_URL',
     'MOBILE_DEEP_LINK_SCHEME',
+    'RESEND_API_KEY',
+    'RESEND_FROM_EMAIL',
     'STORAGE_DRIVER',
     'LOG_LEVEL',
   ]);
@@ -44,6 +47,16 @@ export function validateRuntimeEnvironment(config: ConfigService) {
 
   if (!parseBooleanEnv(config.get<string>('ALLOW_MOCK_PURCHASES'))) {
     missing.push(...requiredValues(config, ['REVENUECAT_WEBHOOK_SECRET', 'REVENUECAT_API_KEY']));
+  }
+
+  const googleClientIds = [
+    config.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
+    config.get<string>('GOOGLE_IOS_CLIENT_ID'),
+    config.get<string>('GOOGLE_WEB_CLIENT_ID'),
+    config.get<string>('GOOGLE_ALLOWED_CLIENT_IDS'),
+  ].filter((value) => value?.trim());
+  if (!googleClientIds.length) {
+    missing.push('GOOGLE_ANDROID_CLIENT_ID or GOOGLE_WEB_CLIENT_ID');
   }
 
   if (missing.length) {

@@ -37,7 +37,10 @@ import { ActivityScreen } from '../screens/activity/ActivityScreen';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
+import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
+import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { ContractorSetupScreen } from '../screens/auth/ContractorSetupScreen';
+import { VerifyEmailScreen } from '../screens/auth/VerifyEmailScreen';
 import { EmployerJobsScreen } from '../screens/employer/EmployerJobsScreen';
 import { JobDetailsScreen } from '../screens/employer/JobDetailsScreen';
 import { JobFormScreen } from '../screens/employer/JobFormScreen';
@@ -81,12 +84,16 @@ const MessagesStack = createNativeStackNavigator<MessagesStackParamList>();
 const Tabs = createBottomTabNavigator<AppTabParamList>();
 const navigationRef = createNavigationContainerRef<AppTabParamList>();
 
-const linking: LinkingOptions<AppTabParamList> = {
+const linking: LinkingOptions<any> = {
   prefixes: ['maltapro://'],
   config: {
     screens: {
+      VerifyEmail: 'verify-email',
+      ResetPassword: 'reset-password',
       ActivityTab: {
         screens: {
+          VerifyEmail: 'verify-email',
+          ResetPassword: 'reset-password',
           WalletHome: 'wallet',
           PaymentSuccess: 'payment-success',
           PaymentFailed: 'payment-failed',
@@ -345,6 +352,9 @@ function AuthRoutes() {
       <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
+      <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <AuthStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
     </AuthStack.Navigator>
   );
 }
@@ -383,6 +393,8 @@ function ActivityRoutes() {
       <ActivityStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ title: 'Payment' }} />
       <ActivityStack.Screen name="PaymentFailed" component={PaymentFailedScreen} options={{ title: 'Payment' }} />
       <ActivityStack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ title: 'Payment' }} />
+      <ActivityStack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ title: 'Reset Password' }} />
+      <ActivityStack.Screen name="VerifyEmail" component={VerifyEmailScreen} options={{ title: 'Verify Email' }} />
     </ActivityStack.Navigator>
   );
 }
