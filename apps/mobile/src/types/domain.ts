@@ -83,10 +83,12 @@ export type AuthUser = {
   email: string;
   role: UserRole;
   status: UserStatus;
-  authProvider?: UserAuthProvider;
-  emailVerifiedAt?: string | null;
-  profile?: UserProfile | null;
-};
+    authProvider?: UserAuthProvider;
+    emailVerifiedAt?: string | null;
+    termsAcceptedAt?: string | null;
+    privacyAcceptedAt?: string | null;
+    profile?: UserProfile | null;
+  };
 
 export type AdminUser = AuthUser & {
   tokenBalance?: TokenBalance | null;

@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsOptional,
@@ -64,4 +65,10 @@ export class RegisterDto {
   @IsString({ each: true })
   @MaxLength(80, { each: true })
   tradeCategories?: string[];
+
+  @IsBoolean()
+  termsAccepted!: boolean;
+
+  @IsBoolean()
+  privacyAccepted!: boolean;
 }

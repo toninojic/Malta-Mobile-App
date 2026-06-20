@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ArrowLeft, Building2, HardHat, LockKeyhole, Mail, UserRound } from 'lucide-react-native';
+import { ArrowLeft, Building2, Check, HardHat, LockKeyhole, Mail, Square, UserRound } from 'lucide-react-native';
 import { ComponentType } from 'react';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,6 +8,7 @@ import { api } from '../../api/client';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
+import { legalLinks, openLegalLink } from '../../config/legalLinks';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
 import { getContractorSetupDecision, markContractorSetupRequired } from '../../services/contractorSetup';
@@ -30,6 +31,7 @@ export function RegisterScreen({ navigation }: Props) {
   const [location, setLocation] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [tradeCategories, setTradeCategories] = useState('');
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [googleRequest, googleResponse, promptGoogleAsync] = useGoogleIdTokenRequest();
 
   const completeRegistration = async (session: Awaited<ReturnType<typeof api.register>>, authAction: 'register' | 'google-register') => {
@@ -81,10 +83,20 @@ export function RegisterScreen({ navigation }: Props) {
       return;
     }
 
-    googleMutation.mutate({ idToken, role });
+    googleMutation.mutate({
+      idToken,
+      role,
+      termsAccepted: legalAccepted,
+      privacyAccepted: legalAccepted,
+    });
   }, [googleResponse?.type]);
 
   const submit = () => {
+    if (!legalAccepted) {
+      Alert.alert('Consent required', 'You must accept the Terms of Use and Privacy Policy to continue.');
+      return;
+    }
+
     mutation.mutate({
       role,
       displayName,
@@ -100,11 +112,21 @@ export function RegisterScreen({ navigation }: Props) {
               .map((category) => category.trim())
               .filter(Boolean)
           : [],
+      termsAccepted: legalAccepted,
+      privacyAccepted: legalAccepted,
     });
   };
 
+  const startGoogleRegistration = () => {
+    if (!legalAccepted) {
+      Alert.alert('Consent required', 'You must accept the Terms of Use and Privacy Policy to continue.');
+      return;
+    }
+    void promptGoogleAsync();
+  };
+
   return (
-    <Screen safeAreaTop>
+    <Screen safeAreaTop safeAreaBottom contentBottomPadding={32}>
       <Button title="Back" variant="ghost" icon={ArrowLeft} onPress={() => navigation.goBack()} style={styles.back} />
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Create account</Text>
@@ -125,16 +147,71 @@ export function RegisterScreen({ navigation }: Props) {
           <TextField label="Trade categories" value={tradeCategories} onChangeText={setTradeCategories} />
         </>
       ) : null}
-      <Button title="Create Account" loading={mutation.isPending} onPress={submit} />
+      <LegalConsent checked={legalAccepted} onChange={setLegalAccepted} />
+      <Button
+        title="Create Account"
+        loading={mutation.isPending}
+        disabled={!legalAccepted}
+        onPress={submit}
+      />
       <Button
         title={`Continue with Google as ${role === 'EMPLOYER' ? 'Employer' : 'Contractor'}`}
         variant="secondary"
         loading={googleMutation.isPending}
-        disabled={!googleAuthIsConfigured() || !googleRequest}
-        onPress={() => void promptGoogleAsync()}
+        disabled={!legalAccepted || !googleAuthIsConfigured() || !googleRequest}
+        onPress={startGoogleRegistration}
       />
       <Button title="Log In" variant="secondary" onPress={() => navigation.navigate('Login')} />
     </Screen>
+  );
+}
+
+function LegalConsent({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <View style={[styles.legalConsent, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked }}
+        onPress={() => onChange(!checked)}
+        hitSlop={8}
+        style={[
+          styles.checkbox,
+          {
+            backgroundColor: checked ? theme.colors.success : theme.colors.surfaceMuted,
+            borderColor: checked ? theme.colors.success : theme.colors.border,
+          },
+        ]}
+      >
+        {checked ? <Check color="#FFFFFF" size={16} /> : <Square color="transparent" size={16} />}
+      </Pressable>
+      <Text style={[styles.legalText, { color: theme.colors.textMuted }]}>
+        I agree to the{' '}
+        <Text
+          accessibilityRole="link"
+          onPress={() => void openLegalLink(legalLinks.termsOfUse)}
+          style={[styles.legalLink, { color: theme.colors.success }]}
+        >
+          Terms of Use
+        </Text>
+        {' '}and{' '}
+        <Text
+          accessibilityRole="link"
+          onPress={() => void openLegalLink(legalLinks.privacyPolicy)}
+          style={[styles.legalLink, { color: theme.colors.success }]}
+        >
+          Privacy Policy
+        </Text>
+        .
+      </Text>
+    </View>
   );
 }
 
@@ -221,5 +298,30 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 14,
     fontWeight: '800',
+  },
+  legalConsent: {
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  checkbox: {
+    alignItems: 'center',
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 24,
+    justifyContent: 'center',
+    marginTop: 1,
+    width: 24,
+  },
+  legalText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  legalLink: {
+    fontWeight: '900',
+    textDecorationLine: 'underline',
   },
 });

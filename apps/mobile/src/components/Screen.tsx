@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Edge, SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../design/theme';
 
 type ScreenProps = {
@@ -11,7 +11,9 @@ type ScreenProps = {
   onRefresh?: () => void;
   keyboardAware?: boolean;
   safeAreaTop?: boolean;
+  safeAreaBottom?: boolean;
   contentTopPadding?: number;
+  contentBottomPadding?: number;
 };
 
 export function Screen({
@@ -22,12 +24,29 @@ export function Screen({
   onRefresh,
   keyboardAware = true,
   safeAreaTop = false,
+  safeAreaBottom = false,
   contentTopPadding,
+  contentBottomPadding,
 }: ScreenProps) {
   const theme = useTheme();
-  const safeAreaEdges = safeAreaTop ? (['top', 'left', 'right'] as const) : (['left', 'right'] as const);
+  const safeAreaEdges: Edge[] = ['left', 'right'];
+  if (safeAreaTop) {
+    safeAreaEdges.unshift('top');
+  }
+  if (safeAreaBottom) {
+    safeAreaEdges.push('bottom');
+  }
   const content = (
-    <View style={[styles.content, { padding: theme.spacing.lg, paddingTop: contentTopPadding ?? theme.spacing.lg }]}>
+    <View
+      style={[
+        styles.content,
+        {
+          padding: theme.spacing.lg,
+          paddingTop: contentTopPadding ?? theme.spacing.lg,
+          paddingBottom: contentBottomPadding ?? theme.spacing.lg,
+        },
+      ]}
+    >
       {children}
     </View>
   );

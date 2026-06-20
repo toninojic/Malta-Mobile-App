@@ -297,6 +297,8 @@ export const api = {
     location?: string;
     companyName?: string;
     tradeCategories?: string[];
+    termsAccepted: boolean;
+    privacyAccepted: boolean;
   }) {
     return request<AuthResponse>('/auth/register', {
       method: 'POST',
@@ -315,7 +317,12 @@ export const api = {
       debugLabel: 'login',
     });
   },
-  googleAuth(input: { idToken: string; role?: Exclude<UserRole, 'ADMIN'> }) {
+  googleAuth(input: {
+    idToken: string;
+    role?: Exclude<UserRole, 'ADMIN'>;
+    termsAccepted?: boolean;
+    privacyAccepted?: boolean;
+  }) {
     return request<AuthResponse>('/auth/google', {
       method: 'POST',
       body: input,

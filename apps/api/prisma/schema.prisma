@@ -194,6 +194,8 @@ model User {
   passwordResetTokenHash String?
   passwordResetExpiresAt DateTime?
   passwordResetUsedAt DateTime?
+  termsAcceptedAt DateTime?
+  privacyAcceptedAt DateTime?
   role             UserRole
   status           UserStatus         @default(ACTIVE)
   refreshTokenHash String?

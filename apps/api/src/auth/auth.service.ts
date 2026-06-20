@@ -30,6 +30,8 @@ type AuthUserRecord = {
   authProvider: UserAuthProvider;
   googleId?: string | null;
   emailVerifiedAt?: Date | null;
+  termsAcceptedAt?: Date | null;
+  privacyAcceptedAt?: Date | null;
   role: UserRole;
   status: UserStatus;
   profile?: unknown;
@@ -54,6 +56,8 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    this.assertLegalConsent(dto.termsAccepted, dto.privacyAccepted);
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
       select: { id: true },
@@ -66,6 +70,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, this.bcryptRounds());
     const displayName = dto.displayName?.trim() || dto.email.split('@')[0] || dto.email;
     const verificationToken = this.createSecureToken();
+    const consentAcceptedAt = new Date();
 
     const user = await this.prisma.user.create({
       data: {
@@ -74,6 +79,8 @@ export class AuthService {
         authProvider: UserAuthProvider.EMAIL,
         emailVerificationTokenHash: this.hashToken(verificationToken),
         emailVerificationExpiresAt: this.expiresInHours(24),
+        termsAcceptedAt: consentAcceptedAt,
+        privacyAcceptedAt: consentAcceptedAt,
         role: dto.role,
         contractorOnboardingRequiredAt: dto.role === UserRole.CONTRACTOR ? new Date() : undefined,
         profile: {
@@ -169,6 +176,8 @@ export class AuthService {
     if (!dto.role) {
       throw new BadRequestException('Role is required for first-time Google sign-up.');
     }
+    this.assertLegalConsent(dto.termsAccepted, dto.privacyAccepted);
+    const consentAcceptedAt = new Date();
 
     user = await this.prisma.user.create({
       data: {
@@ -177,6 +186,8 @@ export class AuthService {
         authProvider: UserAuthProvider.GOOGLE,
         googleId: identity.googleId,
         emailVerifiedAt: identity.emailVerified ? new Date() : null,
+        termsAcceptedAt: consentAcceptedAt,
+        privacyAcceptedAt: consentAcceptedAt,
         role: dto.role,
         contractorOnboardingRequiredAt: dto.role === UserRole.CONTRACTOR ? new Date() : undefined,
         profile: {
@@ -416,8 +427,16 @@ export class AuthService {
       status: user.status,
       authProvider: user.authProvider,
       emailVerifiedAt: user.emailVerifiedAt,
+      termsAcceptedAt: user.termsAcceptedAt,
+      privacyAcceptedAt: user.privacyAcceptedAt,
       profile: user.profile,
     };
+  }
+
+  private assertLegalConsent(termsAccepted: boolean | undefined, privacyAccepted: boolean | undefined) {
+    if (!termsAccepted || !privacyAccepted) {
+      throw new BadRequestException('You must accept the Terms of Use and Privacy Policy to continue.');
+    }
   }
 
   private async verifyGoogleIdentity(idToken: string): Promise<GoogleIdentity> {

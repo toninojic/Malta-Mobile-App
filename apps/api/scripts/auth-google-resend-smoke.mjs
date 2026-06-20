@@ -65,6 +65,8 @@ async function register(role, label, password = 'Password123!') {
       location: role === 'CONTRACTOR' ? 'Sliema' : 'Valletta',
       companyName: role === 'CONTRACTOR' ? `M12 ${label} Trades` : undefined,
       tradeCategories: role === 'CONTRACTOR' ? ['Plumbing'] : [],
+      termsAccepted: true,
+      privacyAccepted: true,
     },
   });
 }
@@ -78,6 +80,18 @@ function requireDebugToken(response, field, label) {
 }
 
 async function main() {
+  await expectStatus('registration without legal consent blocked', 400, () =>
+    request('/auth/register', {
+      method: 'POST',
+      body: {
+        email: `m12.no-consent.${suffix}@malta.test`,
+        password: 'Password123!',
+        role: 'EMPLOYER',
+        displayName: 'No Consent User',
+      },
+    }),
+  );
+
   const verificationUser = await register('EMPLOYER', 'verify');
   const verificationToken = requireDebugToken(verificationUser, 'debugEmailVerificationToken', 'registration');
   const verified = await request('/auth/verify-email', {
@@ -170,6 +184,21 @@ async function main() {
     }),
   );
 
+  await expectStatus('new Google signup without legal consent blocked', 400, () =>
+    request('/auth/google', {
+      method: 'POST',
+      body: {
+        idToken: mockGoogleToken({
+          googleId: `google-no-consent-${suffix}`,
+          email: `m12.google.no-consent.${suffix}@malta.test`,
+          emailVerified: true,
+          audience: 'mock',
+        }),
+        role: 'EMPLOYER',
+      },
+    }),
+  );
+
   const googleEmail = `m12.google.${suffix}@malta.test`;
   const googleToken = mockGoogleToken({
     googleId: `google-${suffix}`,
@@ -181,7 +210,7 @@ async function main() {
   });
   const googleCreated = await request('/auth/google', {
     method: 'POST',
-    body: { idToken: googleToken, role: 'EMPLOYER' },
+    body: { idToken: googleToken, role: 'EMPLOYER', termsAccepted: true, privacyAccepted: true },
   });
   if (googleCreated.user.email !== googleEmail || googleCreated.user.authProvider !== 'GOOGLE' || !googleCreated.user.emailVerifiedAt) {
     throw new Error('Google auth did not create a verified Google user.');

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import { BellRing, ChevronDown, ChevronRight, Flag, ImagePlus, LogOut, MailCheck, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
+import { BellRing, ChevronDown, ChevronRight, ExternalLink, Flag, ImagePlus, LogOut, MailCheck, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -25,6 +25,7 @@ import { Card } from '../../components/Card';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
+import { legalLinks, openLegalLink } from '../../config/legalLinks';
 import { MALTA_SERVICE_LOCATIONS } from '../../config/maltaLocations';
 import { SERVICE_CATEGORIES, serviceCategoryLabel, serviceSubcategoryLabel } from '../../config/serviceCategories';
 import { useTheme } from '../../design/theme';
@@ -1002,6 +1003,24 @@ export function ProfileEditScreen() {
         onPress={() => navigation.navigate('ActivityTab', { screen: 'MyReports' })}
       />
       <Card>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Legal</Text>
+        <View style={styles.legalLinkList}>
+          {legalDocumentLinks.map((link) => (
+            <Pressable
+              accessibilityRole="link"
+              key={link.url}
+              onPress={() => void openLegalLink(link.url)}
+              style={[styles.legalLinkRow, { borderColor: theme.colors.border }]}
+            >
+              <View style={styles.sectionHeaderText}>
+                <Text style={[styles.preferenceTitle, { color: theme.colors.text }]}>{link.label}</Text>
+              </View>
+              <ExternalLink color={theme.colors.success} size={18} />
+            </Pressable>
+          ))}
+        </View>
+      </Card>
+      <Card>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Account</Text>
         <Text style={[styles.email, { color: theme.colors.textMuted }]}>
           Delete account deactivates login access while keeping marketplace history intact.
@@ -1209,12 +1228,33 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 17,
   },
+  legalLinkList: {
+    gap: 8,
+  },
+  legalLinkRow: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
 });
 
 const appearanceOptions: Array<{ label: string; value: AppearanceMode }> = [
   { label: 'System', value: 'system' },
   { label: 'Light', value: 'light' },
   { label: 'Dark', value: 'dark' },
+];
+
+const legalDocumentLinks = [
+  { label: 'Privacy Policy', url: legalLinks.privacyPolicy },
+  { label: 'Terms of Use', url: legalLinks.termsOfUse },
+  { label: 'Account Deletion Policy', url: legalLinks.accountDeletionPolicy },
+  { label: 'Community Guidelines', url: legalLinks.communityGuidelines },
+  { label: 'Contractor Verification Policy', url: legalLinks.contractorVerificationPolicy },
 ];
 
 function notificationPreferenceOptions(role: string | undefined): Array<{

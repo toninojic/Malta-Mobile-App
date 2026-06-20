@@ -30,3 +30,27 @@ Run:
 ```bash
 npm run smoke:report-system --workspace @malta-marketplace/api
 ```
+
+## Final Pre-Launch Legal Consent
+
+- Employer and contractor registration require acceptance of the Terms of Use and Privacy Policy before account creation.
+- The backend stores `termsAcceptedAt` and `privacyAcceptedAt` and rejects email/password registration or first-time Google signup without consent.
+- Existing users logging in are not blocked by the new consent requirement.
+- Legal links used during registration:
+  - Terms of Use: https://maltaproapp.online/wp-content/uploads/2026/06/Terms-of-Use.pdf
+  - Privacy Policy: https://maltaproapp.online/wp-content/uploads/2026/06/Privacy-Policy.pdf
+
+## Profile Legal Links
+
+Profile / Settings includes external links for:
+
+- Privacy Policy: https://maltaproapp.online/wp-content/uploads/2026/06/Privacy-Policy.pdf
+- Terms of Use: https://maltaproapp.online/wp-content/uploads/2026/06/Terms-of-Use.pdf
+- Account Deletion Policy: https://maltaproapp.online/wp-content/uploads/2026/06/Account-Deletion-Policy.pdf
+- Community Guidelines: https://maltaproapp.online/wp-content/uploads/2026/06/Community-Guidelines.pdf
+- Contractor Verification Policy: https://maltaproapp.online/wp-content/uploads/2026/06/Contractor-Verification-Policy.pdf
+
+## Registration Safe Padding
+
+- Registration uses bottom safe-area padding so the consent checkbox and account creation actions are not glued to the device edge.
+- The same spacing applies to employer and contractor registration.
