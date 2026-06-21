@@ -6,7 +6,8 @@ export type OfferStatus = 'PENDING' | 'SELECTED' | 'REJECTED' | 'WITHDRAWN' | 'C
 export type OfferRejectionReason =
   | 'AUTO_REJECTED_BY_SELECTION'
   | 'MANUALLY_REJECTED_BY_EMPLOYER'
-  | 'SELECTION_CANCELLED_BY_EMPLOYER';
+  | 'SELECTION_CANCELLED_BY_EMPLOYER'
+  | 'JOB_CLOSED';
 export type TokenTransactionType =
   | 'PURCHASE'
   | 'SPEND'
@@ -34,6 +35,17 @@ export type ReportReason =
   | 'PAYMENT_ISSUE'
   | 'OTHER';
 export type ReportStatus = 'PENDING' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
+export type AnalyticsEntityType =
+  | 'JOB'
+  | 'OFFER'
+  | 'CONTACT'
+  | 'CONVERSATION'
+  | 'MESSAGE'
+  | 'REVIEW'
+  | 'REPORT'
+  | 'PAYMENT'
+  | 'TOKEN'
+  | 'USER';
 export type WorkDetailsAction =
   | 'EDIT_OFFER'
   | 'WITHDRAW_OFFER'
@@ -189,6 +201,52 @@ export type ForgotPasswordResponse = {
 export type ResetPasswordResponse = {
   success: true;
   user?: AuthUser;
+};
+
+export type AnalyticsEventInput = {
+  sessionId: string;
+  eventName: string;
+  screen: string;
+  entityType?: AnalyticsEntityType;
+  entityId?: string;
+  metadata?: Record<string, unknown>;
+  platform: string;
+  appVersion?: string;
+};
+
+export type AnalyticsEvent = AnalyticsEventInput & {
+  id: string;
+  userId?: string | null;
+  role?: UserRole | null;
+  createdAt: string;
+};
+
+export type AdminAnalyticsOverview = {
+  activeUsers: {
+    last24h: number;
+    last7d: number;
+  };
+  totalEvents: number;
+  mostViewedScreens: Array<{ screen: string; count: number }>;
+  topActions: Array<{ eventName: string; count: number }>;
+  topFailures: Array<{ eventName: string; count: number }>;
+};
+
+export type AdminAnalyticsFunnels = {
+  employer: Array<{ eventName: string; count: number }>;
+  contractor: Array<{ eventName: string; count: number }>;
+};
+
+export type AdminAnalyticsErrors = {
+  byEvent: Array<{ eventName: string; count: number }>;
+  byScreen: Array<{ screen: string; count: number }>;
+  counts: {
+    failedOfferCreation: number;
+    failedJobCreation: number;
+    failedUnlock: number;
+    failedGoogleLogin: number;
+    failedEmailVerification: number;
+  };
 };
 
 export type JobFormValues = {

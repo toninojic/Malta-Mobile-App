@@ -2,6 +2,11 @@ import {
   AuthResponse,
   AuthUser,
   ActivitySummary,
+  AnalyticsEvent,
+  AnalyticsEventInput,
+  AdminAnalyticsErrors,
+  AdminAnalyticsFunnels,
+  AdminAnalyticsOverview,
   AiJobAssistantState,
   AiMessageResponse,
   AiPublishResponse,
@@ -62,6 +67,7 @@ import {
 import { getAccessToken, getRefreshToken, useAuthStore } from '../store/auth.store';
 import { apiConfig } from '../config/apiConfig';
 import { MALTA_SERVICE_LOCATIONS } from '../config/maltaLocations';
+import { track, trackApiFailure } from '../services/analytics';
 
 const API_URL = apiConfig.baseUrl;
 
@@ -150,6 +156,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const message = extractErrorMessage(response.status, payload);
+    trackApiFailure({ path, method, status: response.status, message });
     throw new ApiError(message, response.status, payload);
   }
 
@@ -300,10 +307,21 @@ export const api = {
     termsAccepted: boolean;
     privacyAccepted: boolean;
   }) {
+    track(input.role === 'EMPLOYER' ? 'EMPLOYER_REGISTER_STARTED' : 'CONTRACTOR_REGISTER_STARTED', { screen: 'Register' });
     return request<AuthResponse>('/auth/register', {
       method: 'POST',
       body: input,
       authenticated: false,
+    }).then((session) => {
+      track(session.user.role === 'EMPLOYER' ? 'EMPLOYER_REGISTER_COMPLETED' : 'CONTRACTOR_REGISTER_COMPLETED', {
+        screen: 'Register',
+        entityType: 'USER',
+        entityId: session.user.id,
+      });
+      return session;
+    }).catch((error) => {
+      track('VALIDATION_ERROR', { screen: 'Register', metadata: { action: 'register' } });
+      throw error;
     });
   },
   login(input: { email: string; password: string }) {
@@ -327,6 +345,17 @@ export const api = {
       method: 'POST',
       body: input,
       authenticated: false,
+    }).then((session) => {
+      track('GOOGLE_LOGIN_COMPLETED', {
+        screen: input.role ? 'Register' : 'Login',
+        entityType: 'USER',
+        entityId: session.user.id,
+        metadata: { role: session.user.role },
+      });
+      return session;
+    }).catch((error) => {
+      track('GOOGLE_LOGIN_FAILED', { screen: input.role ? 'Register' : 'Login' });
+      throw error;
     });
   },
   sendEmailVerification() {
@@ -339,9 +368,16 @@ export const api = {
       method: 'POST',
       body: { token },
       authenticated: false,
+    }).then((response) => {
+      track('EMAIL_VERIFIED', { screen: 'VerifyEmail', entityType: 'USER', entityId: response.user?.id });
+      return response;
+    }).catch((error) => {
+      track('EMAIL_VERIFY_FAILED', { screen: 'VerifyEmail' });
+      throw error;
     });
   },
   forgotPassword(email: string) {
+    track('PASSWORD_RESET_REQUESTED', { screen: 'ForgotPassword' });
     return request<ForgotPasswordResponse>('/auth/forgot-password', {
       method: 'POST',
       body: { email },
@@ -353,6 +389,9 @@ export const api = {
       method: 'POST',
       body: input,
       authenticated: false,
+    }).then((response) => {
+      track('PASSWORD_RESET_COMPLETED', { screen: 'ResetPassword', entityType: 'USER', entityId: response.user?.id });
+      return response;
     });
   },
   logout() {
@@ -422,15 +461,36 @@ export const api = {
     return request<JobRequest>(`/jobs/${id}`);
   },
   createJob(input: JobFormValues) {
+    track('JOB_CREATE_STARTED', {
+      screen: 'JobForm',
+      metadata: { category: input.category, subcategory: input.subcategory, location: input.location },
+    });
     return request<JobRequest>('/jobs', {
       method: 'POST',
       body: input,
+    }).then((job) => {
+      track('JOB_CREATED', {
+        screen: 'JobForm',
+        entityType: 'JOB',
+        entityId: job.id,
+        metadata: { category: job.category, subcategory: job.subcategory, location: job.location },
+      });
+      return job;
+    }).catch((error) => {
+      track('JOB_CREATE_FAILED', {
+        screen: 'JobForm',
+        metadata: { category: input.category, subcategory: input.subcategory, location: input.location },
+      });
+      throw error;
     });
   },
   updateJob(id: string, input: JobFormValues) {
     return request<JobRequest>(`/jobs/${id}`, {
       method: 'PATCH',
       body: input,
+    }).then((job) => {
+      track('JOB_EDITED', { screen: 'JobForm', entityType: 'JOB', entityId: job.id });
+      return job;
     });
   },
   renewJob(id: string) {
@@ -447,6 +507,7 @@ export const api = {
     return request<AiJobAssistantState>('/ai/job-assistant/conversations/current');
   },
   createAiJobAssistantConversation() {
+    track('AI_ASSISTANT_OPENED', { screen: 'AiJobAssistant' });
     return request<AiJobAssistantState>('/ai/job-assistant/conversations', {
       method: 'POST',
     });
@@ -481,15 +542,25 @@ export const api = {
     );
   },
   createOffer(jobId: string, input: OfferFormValues) {
+    track('OFFER_CREATE_STARTED', { screen: 'OfferForm', entityType: 'JOB', entityId: jobId });
     return request<Offer>(`/jobs/${jobId}/offers`, {
       method: 'POST',
       body: input,
+    }).then((offer) => {
+      track('OFFER_CREATED', { screen: 'OfferForm', entityType: 'OFFER', entityId: offer.id });
+      return offer;
+    }).catch((error) => {
+      track('OFFER_CREATE_FAILED', { screen: 'OfferForm', entityType: 'JOB', entityId: jobId });
+      throw error;
     });
   },
   updateOffer(offerId: string, input: OfferFormValues) {
     return request<Offer>(`/offers/${offerId}`, {
       method: 'PATCH',
       body: input,
+    }).then((offer) => {
+      track('OFFER_EDITED', { screen: 'OfferForm', entityType: 'OFFER', entityId: offer.id });
+      return offer;
     });
   },
   offerWorkDetails(offerId: string) {
@@ -498,6 +569,9 @@ export const api = {
   selectOffer(offerId: string) {
     return request<Offer>(`/offers/${offerId}/select`, {
       method: 'POST',
+    }).then((offer) => {
+      track('OFFER_SELECTED', { screen: 'JobDetails', entityType: 'OFFER', entityId: offer.id });
+      return offer;
     });
   },
   rejectOffer(offerId: string) {
@@ -508,11 +582,17 @@ export const api = {
   cancelOfferSelection(offerId: string) {
     return request<Offer>(`/offers/${offerId}/cancel-selection`, {
       method: 'POST',
+    }).then((offer) => {
+      track('OFFER_SELECTION_CANCELLED', { screen: 'JobDetails', entityType: 'OFFER', entityId: offer.id });
+      return offer;
     });
   },
   withdrawOffer(offerId: string) {
     return request<Offer>(`/offers/${offerId}/withdraw`, {
       method: 'POST',
+    }).then((offer) => {
+      track('OFFER_WITHDRAWN', { screen: 'OfferWorkDetails', entityType: 'OFFER', entityId: offer.id });
+      return offer;
     });
   },
   tokenPackages() {
@@ -537,9 +617,16 @@ export const api = {
     });
   },
   mockPurchase(tokenPackageId: string) {
+    track('TOKEN_PURCHASE_STARTED', { screen: 'Wallet', entityType: 'TOKEN', entityId: tokenPackageId });
     return request<{ balance: TokenBalance; transaction: TokenTransaction }>('/tokens/mock-purchase', {
       method: 'POST',
       body: { tokenPackageId },
+    }).then((result) => {
+      track('TOKEN_PURCHASE_COMPLETED', { screen: 'Wallet', entityType: 'TOKEN', entityId: tokenPackageId });
+      return result;
+    }).catch((error) => {
+      track('TOKEN_PURCHASE_FAILED', { screen: 'Wallet', entityType: 'TOKEN', entityId: tokenPackageId });
+      throw error;
     });
   },
   paymentConfig() {
@@ -606,8 +693,15 @@ export const api = {
     });
   },
   unlockOffer(offerId: string) {
+    track('CONTACT_UNLOCK_STARTED', { screen: 'OfferWorkDetails', entityType: 'OFFER', entityId: offerId });
     return request<UnlockResult>(`/offers/${offerId}/unlock`, {
       method: 'POST',
+    }).then((result) => {
+      track('CONTACT_UNLOCKED', { screen: 'OfferWorkDetails', entityType: 'OFFER', entityId: offerId });
+      return result;
+    }).catch((error) => {
+      track('CONTACT_UNLOCK_FAILED', { screen: 'OfferWorkDetails', entityType: 'OFFER', entityId: offerId });
+      throw error;
     });
   },
   requestContact(offerId: string) {
@@ -642,11 +736,17 @@ export const api = {
   completeContact(contactId: string) {
     return request<JobCompletion>(`/contacts/${contactId}/complete`, {
       method: 'POST',
+    }).then((completion) => {
+      track('JOB_MARKED_COMPLETED', { screen: 'ContactDetails', entityType: 'CONTACT', entityId: contactId });
+      return completion;
     });
   },
   confirmCompletion(contactId: string) {
     return request<JobCompletion>(`/contacts/${contactId}/confirm-completion`, {
       method: 'POST',
+    }).then((completion) => {
+      track('COMPLETION_CONFIRMED', { screen: 'ContactDetails', entityType: 'CONTACT', entityId: contactId });
+      return completion;
     });
   },
   completionStatus(contactId: string) {
@@ -656,12 +756,18 @@ export const api = {
     return request<Review>(`/contacts/${contactId}/review`, {
       method: 'POST',
       body: input,
+    }).then((review) => {
+      track('CONTRACTOR_REVIEW_LEFT', { screen: 'LeaveReview', entityType: 'REVIEW', entityId: review.id });
+      return review;
     });
   },
   createEmployerReview(contactId: string, input: { rating: number; comment?: string }) {
     return request<EmployerReview>(`/contacts/${contactId}/employer-review`, {
       method: 'POST',
       body: input,
+    }).then((review) => {
+      track('EMPLOYER_REVIEW_LEFT', { screen: 'LeaveReview', entityType: 'REVIEW', entityId: review.id });
+      return review;
     });
   },
   review(reviewId: string) {
@@ -697,9 +803,16 @@ export const api = {
     reason: ReportReason;
     description?: string;
   }) {
+    track('REPORT_STARTED', { screen: 'ReportForm', entityType: input.targetType, entityId: input.targetId });
     return request<Report>('/reports', {
       method: 'POST',
       body: input,
+    }).then((report) => {
+      track('REPORT_SUBMITTED', { screen: 'ReportForm', entityType: 'REPORT', entityId: report.id });
+      return report;
+    }).catch((error) => {
+      track('REPORT_FAILED', { screen: 'ReportForm', entityType: input.targetType, entityId: input.targetId });
+      throw error;
     });
   },
   myReports(input: {
@@ -761,9 +874,16 @@ export const api = {
     return request<ChatMessage[]>(`/conversations/${id}/messages`);
   },
   sendMessage(id: string, content: string) {
+    track('MESSAGE_SEND_STARTED', { screen: 'ConversationThread', entityType: 'CONVERSATION', entityId: id });
     return request<{ conversation: Conversation; message: ChatMessage }>(`/conversations/${id}/messages`, {
       method: 'POST',
       body: { content },
+    }).then((result) => {
+      track('MESSAGE_SENT', { screen: 'ConversationThread', entityType: 'MESSAGE', entityId: result.message.id });
+      return result;
+    }).catch((error) => {
+      track('MESSAGE_SEND_FAILED', { screen: 'ConversationThread', entityType: 'CONVERSATION', entityId: id });
+      throw error;
     });
   },
   markMessageRead(messageId: string) {
@@ -843,6 +963,42 @@ export const api = {
   },
   adminStatistics() {
     return request<AdminStatistics>('/admin/statistics');
+  },
+  trackAnalyticsEvent(input: AnalyticsEventInput) {
+    return request<AnalyticsEvent>('/analytics/events', {
+      method: 'POST',
+      body: input,
+      authenticated: false,
+      retryOnUnauthorized: false,
+    });
+  },
+  trackAnalyticsBatch(events: AnalyticsEventInput[]) {
+    return request<{ created: number }>('/analytics/events/batch', {
+      method: 'POST',
+      body: { events },
+      authenticated: false,
+      retryOnUnauthorized: false,
+    });
+  },
+  adminAnalyticsOverview() {
+    return request<AdminAnalyticsOverview>('/admin/analytics/overview');
+  },
+  adminAnalyticsFunnels() {
+    return request<AdminAnalyticsFunnels>('/admin/analytics/funnels');
+  },
+  adminAnalyticsErrors() {
+    return request<AdminAnalyticsErrors>('/admin/analytics/errors');
+  },
+  adminAnalyticsEvents(input: { page?: number; limit?: number; role?: UserRole; eventName?: string; screen?: string } = {}) {
+    return request<PaginatedResponse<AnalyticsEvent>>(
+      `/admin/analytics/events${queryString({
+        page: input.page,
+        limit: input.limit,
+        role: input.role,
+        eventName: input.eventName?.trim(),
+        screen: input.screen?.trim(),
+      })}`,
+    );
   },
   adminUsers(input: { page?: number; limit?: number; role?: UserRole; status?: UserStatus; search?: string } = {}) {
     return request<PaginatedResponse<AdminUser>>(

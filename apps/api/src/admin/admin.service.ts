@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import {
   JobStatus,
   NotificationType,
+  OfferRejectionReason,
   OfferStatus,
   PaymentStatus,
   Prisma,
@@ -413,6 +414,23 @@ export class AdminService {
         where: { id: job.id },
         data: { status: JobStatus.CLOSED },
         include: adminJobInclude,
+      });
+
+      await tx.offer.updateMany({
+        where: {
+          jobRequestId: job.id,
+          status: { in: [OfferStatus.PENDING, OfferStatus.REJECTED] },
+          deletedAt: null,
+          OR: [
+            { rejectionReason: null },
+            { rejectionReason: OfferRejectionReason.AUTO_REJECTED_BY_SELECTION },
+          ],
+        },
+        data: {
+          status: OfferStatus.REJECTED,
+          selectedByEmployer: false,
+          rejectionReason: OfferRejectionReason.JOB_CLOSED,
+        },
       });
 
       await this.auditLogsService.create(

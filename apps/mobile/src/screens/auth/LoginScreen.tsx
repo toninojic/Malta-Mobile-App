@@ -9,6 +9,7 @@ import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
+import { track } from '../../services/analytics';
 import { clearContractorSetupRequirement, getContractorSetupDecision } from '../../services/contractorSetup';
 import { googleAuthIsConfigured, useGoogleIdTokenRequest } from '../../services/googleSignIn';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
@@ -108,7 +109,10 @@ export function LoginScreen({ navigation }: Props) {
         variant="secondary"
         loading={googleMutation.isPending}
         disabled={!googleAuthIsConfigured() || !googleRequest}
-        onPress={() => void promptGoogleAsync()}
+        onPress={() => {
+          track('GOOGLE_LOGIN_STARTED', { screen: 'Login' });
+          void promptGoogleAsync();
+        }}
       />
       <Button title="Forgot your password?" variant="ghost" onPress={() => navigation.navigate('ForgotPassword')} />
       <Button title="Create Account" variant="secondary" onPress={() => navigation.navigate('Register')} />

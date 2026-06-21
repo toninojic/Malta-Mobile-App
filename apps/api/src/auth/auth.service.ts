@@ -316,6 +316,34 @@ export class AuthService {
     return { success: true, alreadyVerified: false, user: this.toAuthUser(updated) };
   }
 
+  emailVerificationHtml(input: { title: string; body: string; success: boolean }) {
+    const appLink = `${this.config.get<string>('MOBILE_DEEP_LINK_SCHEME')?.trim() || 'maltapro'}://`;
+    const color = input.success ? '#16A34A' : '#ED3A35';
+
+    return `<!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>${escapeHtml(input.title)} - MaltaPro</title>
+        </head>
+        <body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a">
+          <main style="max-width:560px;margin:48px auto;padding:24px">
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
+              <div style="width:44px;height:44px;border-radius:999px;background:${color};margin-bottom:18px"></div>
+              <h1 style="margin:0 0 12px;font-size:28px">${escapeHtml(input.title)}</h1>
+              <p style="font-size:16px;line-height:1.5;color:#475569">${escapeHtml(input.body)}</p>
+              <p>
+                <a href="${escapeHtml(appLink)}" style="display:inline-block;background:#16A34A;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">
+                  Open MaltaPro
+                </a>
+              </p>
+            </div>
+          </main>
+        </body>
+      </html>`;
+  }
+
   async forgotPassword(dto: ForgotPasswordDto) {
     const generic = { success: true, message: 'If an account exists, password reset instructions were sent.' };
     const user = await this.prisma.user.findUnique({
@@ -537,4 +565,13 @@ export class AuthService {
     const parsedRounds = Number(configuredRounds);
     return Number.isInteger(parsedRounds) && parsedRounds >= 10 ? parsedRounds : 12;
   }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }

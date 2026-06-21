@@ -11,6 +11,7 @@ import { TextField } from '../../components/TextField';
 import { legalLinks, openLegalLink } from '../../config/legalLinks';
 import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
+import { track } from '../../services/analytics';
 import { getContractorSetupDecision, markContractorSetupRequired } from '../../services/contractorSetup';
 import { googleAuthIsConfigured, useGoogleIdTokenRequest } from '../../services/googleSignIn';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
@@ -122,6 +123,7 @@ export function RegisterScreen({ navigation }: Props) {
       Alert.alert('Consent required', 'You must accept the Terms of Use and Privacy Policy to continue.');
       return;
     }
+    track('GOOGLE_LOGIN_STARTED', { screen: 'Register', metadata: { role } });
     void promptGoogleAsync();
   };
 

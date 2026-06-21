@@ -23,7 +23,7 @@ export class EmailService {
         title: 'Verify your email',
         greeting: `Hi ${input.displayName ?? 'there'},`,
         body: 'Confirm your email address so your MaltaPro account is ready for production notifications and account recovery.',
-        primaryLabel: 'Verify email',
+        primaryLabel: 'Verify Email',
         primaryUrl: links.deepLink,
         fallbackUrl: links.webUrl,
       }),
@@ -104,7 +104,10 @@ export class EmailService {
 
   private authLinks(path: 'verify-email' | 'reset-password', token: string) {
     const scheme = this.config.get<string>('MOBILE_DEEP_LINK_SCHEME')?.trim() || 'maltapro';
-    const publicUrl = this.config.get<string>('APP_PUBLIC_URL')?.trim() || this.config.get<string>('APP_BASE_URL')?.trim();
+    const publicUrl =
+      this.config.get<string>('AUTH_WEB_FALLBACK_URL')?.trim() ||
+      this.config.get<string>('APP_PUBLIC_URL')?.trim() ||
+      this.config.get<string>('APP_BASE_URL')?.trim();
     const encodedToken = encodeURIComponent(token);
 
     return {

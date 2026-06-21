@@ -10,6 +10,8 @@ import {
 import {
   JobStatus,
   NotificationType,
+  OfferRejectionReason,
+  OfferStatus,
   Prisma,
   Report,
   ReportReason,
@@ -334,6 +336,23 @@ export class ReportsService {
       await tx.jobRequest.update({
         where: { id: job.id },
         data: { status: JobStatus.CLOSED },
+      });
+
+      await tx.offer.updateMany({
+        where: {
+          jobRequestId: job.id,
+          status: { in: [OfferStatus.PENDING, OfferStatus.REJECTED] },
+          deletedAt: null,
+          OR: [
+            { rejectionReason: null },
+            { rejectionReason: OfferRejectionReason.AUTO_REJECTED_BY_SELECTION },
+          ],
+        },
+        data: {
+          status: OfferStatus.REJECTED,
+          selectedByEmployer: false,
+          rejectionReason: OfferRejectionReason.JOB_CLOSED,
+        },
       });
 
       await this.auditLogsService.create(

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -60,6 +60,34 @@ export class AuthController {
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token);
+  }
+
+  @Get('verify-email')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async verifyEmailWeb(@Query('token') token?: string) {
+    if (!token) {
+      return this.authService.emailVerificationHtml({
+        title: 'Verification link missing',
+        body: 'The verification link is missing a token. Open MaltaPro and request a new verification email from Profile.',
+        success: false,
+      });
+    }
+
+    try {
+      const result = await this.authService.verifyEmail(token);
+      return this.authService.emailVerificationHtml({
+        title: result.alreadyVerified ? 'Email already verified' : 'Email verified',
+        body: 'You can now return to MaltaPro and continue using your account.',
+        success: true,
+      });
+    } catch {
+      return this.authService.emailVerificationHtml({
+        title: 'Verification link expired',
+        body: 'This verification link is invalid or expired. Open MaltaPro and request a new verification email from Profile.',
+        success: false,
+      });
+    }
   }
 
   @Post('forgot-password')

@@ -14,6 +14,36 @@ export function useAdminStatistics(enabled = true) {
   });
 }
 
+export function useAdminAnalyticsOverview(enabled = true) {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'overview'],
+    queryFn: api.adminAnalyticsOverview,
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useAdminAnalyticsFunnels(enabled = true) {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'funnels'],
+    queryFn: api.adminAnalyticsFunnels,
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useAdminAnalyticsErrors(enabled = true) {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'errors'],
+    queryFn: api.adminAnalyticsErrors,
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
 export function useAdminUsers(input: { role?: UserRole; status?: UserStatus; search?: string } = {}, enabled = true) {
   return useQuery({
     queryKey: ['admin', 'users', input],

@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ActivityModule } from './activity/activity.module';
 import { AiJobAssistantModule } from './ai-job-assistant/ai-job-assistant.module';
 import { AdminModule } from './admin/admin.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { ContractorsModule } from './contractors/contractors.module';
@@ -42,6 +43,7 @@ import { StorageResponseInterceptor } from './modules/storage/storage-response.i
     ]),
     PrismaModule,
     StorageModule,
+    AnalyticsModule,
     AiJobAssistantModule,
     HealthModule,
     AuthModule,

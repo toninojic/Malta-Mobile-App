@@ -44,6 +44,7 @@ enum OfferRejectionReason {
   AUTO_REJECTED_BY_SELECTION
   MANUALLY_REJECTED_BY_EMPLOYER
   SELECTION_CANCELLED_BY_EMPLOYER
+  JOB_CLOSED
 }
 
 enum TokenTransactionType {
@@ -238,6 +239,7 @@ model User {
   aiUsage          AiUsage[]
   reportsFiled     Report[] @relation("ReporterReports")
   reportsReviewed  Report[] @relation("ReportAdminReviews")
+  analyticsEvents  AnalyticsEvent[]
   contractorOnboardingRequiredAt DateTime?
   contractorOnboardingCompletedAt DateTime?
   contractorOnboardingSkippedAt DateTime?
@@ -766,6 +768,28 @@ model Report {
   @@index([targetType, targetId])
   @@index([status, createdAt])
   @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String?   @db.Uuid
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  role       UserRole?
+  sessionId  String    @db.VarChar(120)
+  eventName  String    @db.VarChar(120)
+  screen     String    @db.VarChar(120)
+  entityType String?   @db.VarChar(60)
+  entityId   String?   @db.VarChar(120)
+  metadata   Json?
+  platform   String    @db.VarChar(40)
+  appVersion String?   @db.VarChar(40)
+  createdAt  DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([eventName])
+  @@index([screen])
+  @@index([role])
 }
 
 model AiConversation {

@@ -22,6 +22,7 @@ import { AppModal } from '../components/AppModal';
 import { AiJobAssistantHost } from '../components/AiJobAssistantHost';
 import { MALTA_SERVICE_LOCATIONS } from '../config/maltaLocations';
 import { useTheme } from '../design/theme';
+import { trackScreenView } from '../services/analytics';
 import { ContractorSetupCompletion, finishContractorSetup, getContractorSetupDecision } from '../services/contractorSetup';
 import { configureRevenueCatForCurrentUser } from '../services/revenueCatPurchases';
 import {
@@ -181,8 +182,16 @@ export function RootNavigator() {
       ref={navigationRef}
       theme={navTheme}
       linking={linking}
-      onReady={() => setCurrentRouteName(navigationRef.getCurrentRoute()?.name)}
-      onStateChange={() => setCurrentRouteName(navigationRef.getCurrentRoute()?.name)}
+      onReady={() => {
+        const routeName = navigationRef.getCurrentRoute()?.name;
+        setCurrentRouteName(routeName);
+        trackScreenView(routeName);
+      }}
+      onStateChange={() => {
+        const routeName = navigationRef.getCurrentRoute()?.name;
+        setCurrentRouteName(routeName);
+        trackScreenView(routeName);
+      }}
     >
       {user ? <AuthenticatedExperience /> : <AuthRoutes />}
       {user ? (
