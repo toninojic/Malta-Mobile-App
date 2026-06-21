@@ -24,10 +24,11 @@ export class EmailService {
         greeting: `Hi ${input.displayName ?? 'there'},`,
         body: 'Confirm your email address so your MaltaPro account is ready for production notifications and account recovery.',
         primaryLabel: 'Verify Email',
-        primaryUrl: links.deepLink,
+        primaryUrl: links.webUrl,
         fallbackUrl: links.webUrl,
+        appDeepLink: links.deepLink,
       }),
-      text: `Verify your MaltaPro email: ${links.deepLink}\nFallback: ${links.webUrl}`,
+      text: `Verify your MaltaPro email: ${links.webUrl}\nIf the button does not work, copy and paste this link: ${links.webUrl}\nOpen in MaltaPro app: ${links.deepLink}`,
     });
   }
 
@@ -40,11 +41,12 @@ export class EmailService {
         title: 'Reset your password',
         greeting: `Hi ${input.displayName ?? 'there'},`,
         body: 'Use this secure link to choose a new password. The link expires soon and can be used once.',
-        primaryLabel: 'Reset password',
-        primaryUrl: links.deepLink,
+        primaryLabel: 'Reset Password',
+        primaryUrl: links.webUrl,
         fallbackUrl: links.webUrl,
+        appDeepLink: links.deepLink,
       }),
-      text: `Reset your MaltaPro password: ${links.deepLink}\nFallback: ${links.webUrl}`,
+      text: `Reset your MaltaPro password: ${links.webUrl}\nIf the button does not work, copy and paste this link: ${links.webUrl}\nOpen in MaltaPro app: ${links.deepLink}`,
     });
   }
 
@@ -109,10 +111,17 @@ export class EmailService {
       this.config.get<string>('APP_PUBLIC_URL')?.trim() ||
       this.config.get<string>('APP_BASE_URL')?.trim();
     const encodedToken = encodeURIComponent(token);
+    const deepLink = `${scheme}://${path}?token=${encodedToken}`;
+
+    if (!publicUrl) {
+      this.logger.error(
+        `APP_PUBLIC_URL or AUTH_WEB_FALLBACK_URL is not configured. Falling back to app deep link for ${path} email.`,
+      );
+    }
 
     return {
-      deepLink: `${scheme}://${path}?token=${encodedToken}`,
-      webUrl: publicUrl ? `${publicUrl.replace(/\/$/, '')}/${path}?token=${encodedToken}` : `${scheme}://${path}?token=${encodedToken}`,
+      deepLink,
+      webUrl: publicUrl ? `${publicUrl.replace(/\/$/, '')}/${path}?token=${encodedToken}` : deepLink,
     };
   }
 
@@ -123,12 +132,16 @@ export class EmailService {
     primaryLabel?: string;
     primaryUrl?: string;
     fallbackUrl?: string;
+    appDeepLink?: string;
   }) {
     const action = input.primaryLabel && input.primaryUrl
       ? `<p><a href="${escapeHtml(input.primaryUrl)}" style="display:inline-block;background:#16A34A;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">${escapeHtml(input.primaryLabel)}</a></p>`
       : '';
     const fallback = input.fallbackUrl
-      ? `<p style="color:#64748b;font-size:13px">If the button does not open, copy this link:<br>${escapeHtml(input.fallbackUrl)}</p>`
+      ? `<p style="color:#64748b;font-size:13px">If the button does not work, copy and paste this link:<br><a href="${escapeHtml(input.fallbackUrl)}" style="color:#16A34A">${escapeHtml(input.fallbackUrl)}</a></p>`
+      : '';
+    const appDeepLink = input.appDeepLink
+      ? `<p style="color:#64748b;font-size:13px">If MaltaPro is installed, this app link can also open it:<br>${escapeHtml(input.appDeepLink)}</p>`
       : '';
 
     return `
@@ -138,6 +151,7 @@ export class EmailService {
         <p>${escapeHtml(input.body)}</p>
         ${action}
         ${fallback}
+        ${appDeepLink}
         <p style="color:#64748b;font-size:13px">MaltaPro</p>
       </div>
     `;

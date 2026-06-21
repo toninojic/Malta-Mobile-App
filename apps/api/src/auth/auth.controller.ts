@@ -102,6 +102,13 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
+  @Get('reset-password')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  resetPasswordWeb(@Query('token') token?: string) {
+    return this.authService.passwordResetHtml(token);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: AuthenticatedUser) {

@@ -344,6 +344,41 @@ export class AuthService {
       </html>`;
   }
 
+  passwordResetHtml(token?: string) {
+    const scheme = this.config.get<string>('MOBILE_DEEP_LINK_SCHEME')?.trim() || 'maltapro';
+    const appLink = token ? `${scheme}://reset-password?token=${encodeURIComponent(token)}` : `${scheme}://`;
+    const title = token ? 'Reset your password' : 'Reset link missing';
+    const body = token
+      ? 'Open MaltaPro to choose a new password. If the button does not open the app, copy this link into your browser on the device where MaltaPro is installed.'
+      : 'This password reset link is missing a token. Open MaltaPro and request a new reset email.';
+
+    return `<!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>${escapeHtml(title)} - MaltaPro</title>
+        </head>
+        <body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a">
+          <main style="max-width:560px;margin:48px auto;padding:24px">
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">
+              <div style="width:44px;height:44px;border-radius:999px;background:#16A34A;margin-bottom:18px"></div>
+              <h1 style="margin:0 0 12px;font-size:28px">${escapeHtml(title)}</h1>
+              <p style="font-size:16px;line-height:1.5;color:#475569">${escapeHtml(body)}</p>
+              <p>
+                <a href="${escapeHtml(appLink)}" style="display:inline-block;background:#16A34A;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">
+                  Open MaltaPro
+                </a>
+              </p>
+              <p style="font-size:13px;line-height:1.5;color:#64748b;word-break:break-all">
+                App link: ${escapeHtml(appLink)}
+              </p>
+            </div>
+          </main>
+        </body>
+      </html>`;
+  }
+
   async forgotPassword(dto: ForgotPasswordDto) {
     const generic = { success: true, message: 'If an account exists, password reset instructions were sent.' };
     const user = await this.prisma.user.findUnique({
