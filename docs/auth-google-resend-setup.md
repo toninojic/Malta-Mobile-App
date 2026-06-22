@@ -4,36 +4,48 @@ This guide is for MaltaPro owner setup and QA.
 
 ## Google OAuth
 
-The mobile app currently uses the Expo AuthSession proxy ID-token flow because the Google Web OAuth client is configured with this redirect URI:
+For Google Play Internal Testing and production EAS Android builds, MaltaPro uses the native Android Google OAuth client.
+
+Do not use a Web OAuth client with a custom scheme redirect such as:
 
 ```text
-https://auth.expo.io/@toninojic/malta-craftsman-marketplace
+maltapro://
+maltapro://redirect
+maltapro://auth
 ```
 
-In Google Cloud Console, the Web OAuth client must include that exact value under **Authorized redirect URIs**. Keep these values aligned:
+Google rejects that combination with:
 
 ```text
-Expo owner: toninojic
-Expo slug: malta-craftsman-marketplace
-App scheme: maltapro
-Android package: mt.marketplace.craftsman
+custom scheme URIs are not allowed for WEB client type
+```
+
+## Android OAuth Client
+
+In Google Cloud Console create/use an **Android** OAuth client with:
+
+```text
+Package name: mt.marketplace.craftsman
+SHA-1: Google Play App Signing SHA-1 for the uploaded app
 ```
 
 Mobile env:
 
 ```env
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 EXPO_PUBLIC_AUTH_DEBUG=true
 ```
 
 Backend env:
 
 ```env
-GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 GOOGLE_ANDROID_CLIENT_ID=your-android-client-id.apps.googleusercontent.com
-GOOGLE_ALLOWED_CLIENT_IDS=your-web-client-id.apps.googleusercontent.com,your-android-client-id.apps.googleusercontent.com
+GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+GOOGLE_ALLOWED_CLIENT_IDS=your-android-client-id.apps.googleusercontent.com,your-web-client-id.apps.googleusercontent.com
 ```
+
+The Android app lets `expo-auth-session/providers/google` generate the native redirect URI and select `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` on Android.
 
 The app requests:
 
@@ -55,42 +67,75 @@ Temporary safe diagnostics are logged with the prefix:
 [google-auth]
 ```
 
-They show platform, redirect URI, whether client IDs are present, response type, and whether an ID token was returned.
+They show platform, generated redirect URI, selected client ID masked, response type, client IDs present, and whether an ID token was returned.
 
-If Google still shows `400 invalid_request`, verify:
+After changing `EXPO_PUBLIC_GOOGLE_*` values, publish an EAS Update or create a new EAS build so the installed app receives the new public config. If the Android OAuth client SHA-1 or native app config changed, create a new EAS build.
 
-- the redirect URI is exactly `https://auth.expo.io/@toninojic/malta-craftsman-marketplace`
-- the mobile build/update contains the correct `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
-- the Web client ID is not swapped with the Android client ID
-- the OAuth consent screen includes tester Gmail accounts while Google app publishing status is Testing
-- the backend allows the same Web client ID in `GOOGLE_WEB_CLIENT_ID` or `GOOGLE_ALLOWED_CLIENT_IDS`
+## Expo Proxy Note
 
-After changing `EXPO_PUBLIC_GOOGLE_*` values, publish an EAS Update or create a new EAS build so the installed app receives the new public config.
+The old Expo proxy redirect URI is:
+
+```text
+https://auth.expo.io/@toninojic/malta-craftsman-marketplace
+```
+
+That URI is valid only for an Expo proxy/Web-client flow. It must not be mixed with native custom scheme redirects. The Google Play build should use the Android OAuth client instead.
 
 ## Email Verification And Password Reset
 
-Email action buttons use HTTPS links first, then show the app deep link as fallback text.
+Email action buttons use HTTPS links first. Custom app links are shown only as fallback text because many email clients block custom schemes in buttons.
 
 Backend env:
 
 ```env
+APP_BASE_URL=https://maltapro-api.onrender.com/api/v1
+AUTH_WEB_FALLBACK_URL=https://maltapro-api.onrender.com/api/v1/auth
 APP_PUBLIC_URL=https://maltaproapp.online
 MOBILE_DEEP_LINK_SCHEME=maltapro
 RESEND_API_KEY=your-resend-key
 RESEND_FROM_EMAIL=MaltaPro <your-verified-sender@your-domain.com>
 ```
 
+`AUTH_WEB_FALLBACK_URL` is optional but recommended. If it is missing, the API derives the auth page base from `APP_BASE_URL`.
+
 Verification email button:
 
 ```text
-https://maltaproapp.online/verify-email?token=TOKEN
+https://maltapro-api.onrender.com/api/v1/auth/verify-email?token=TOKEN
+```
+
+The API also supports a short redirect route:
+
+```text
+https://maltapro-api.onrender.com/verify-email?token=TOKEN
 ```
 
 Password reset email button:
 
 ```text
-https://maltaproapp.online/reset-password?token=TOKEN
+https://maltapro-api.onrender.com/api/v1/auth/reset-password?token=TOKEN
 ```
+
+The API also supports a short redirect route:
+
+```text
+https://maltapro-api.onrender.com/reset-password?token=TOKEN
+```
+
+Verification behavior:
+
+- reads the token from query string
+- verifies it on the backend
+- shows success or invalid/expired state
+- offers an `Open MaltaPro` app link
+
+Password reset behavior:
+
+- reads the token from query string
+- shows a password form
+- submits to `POST /api/v1/auth/reset-password`
+- shows success or invalid/expired state
+- offers an `Open MaltaPro` app link after success
 
 Fallback app links:
 
@@ -99,4 +144,10 @@ maltapro://verify-email?token=TOKEN
 maltapro://reset-password?token=TOKEN
 ```
 
-If `APP_PUBLIC_URL` or `AUTH_WEB_FALLBACK_URL` is missing, the API logs a clear error and falls back to the app deep link instead of creating an undefined button URL.
+If you later create real pages on `https://maltaproapp.online/verify-email` and `https://maltaproapp.online/reset-password`, set:
+
+```env
+AUTH_WEB_FALLBACK_URL=https://maltaproapp.online
+```
+
+Until those public-site routes exist, do not use `APP_PUBLIC_URL` as the primary auth email link because the WordPress/frontpage route will swallow the token page.

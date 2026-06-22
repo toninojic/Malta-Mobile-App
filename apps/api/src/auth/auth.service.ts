@@ -347,9 +347,65 @@ export class AuthService {
   passwordResetHtml(token?: string) {
     const scheme = this.config.get<string>('MOBILE_DEEP_LINK_SCHEME')?.trim() || 'maltapro';
     const appLink = token ? `${scheme}://reset-password?token=${encodeURIComponent(token)}` : `${scheme}://`;
+    const form = token
+      ? `<form id="reset-form" style="display:grid;gap:12px;margin-top:20px">
+          <label style="display:grid;gap:6px;font-size:14px;font-weight:700;color:#334155">
+            New password
+            <input id="password" type="password" minlength="8" maxlength="128" required autocomplete="new-password" style="border:1px solid #cbd5e1;border-radius:8px;font-size:16px;padding:12px" />
+          </label>
+          <label style="display:grid;gap:6px;font-size:14px;font-weight:700;color:#334155">
+            Confirm password
+            <input id="confirm-password" type="password" minlength="8" maxlength="128" required autocomplete="new-password" style="border:1px solid #cbd5e1;border-radius:8px;font-size:16px;padding:12px" />
+          </label>
+          <button id="submit-button" type="submit" style="background:#16A34A;border:0;border-radius:8px;color:#fff;font-size:15px;font-weight:700;padding:13px 18px">
+            Reset Password
+          </button>
+        </form>`
+      : '';
+    const script = token
+      ? `<script>
+          const form = document.getElementById('reset-form');
+          const status = document.getElementById('status');
+          const submitButton = document.getElementById('submit-button');
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            if (password !== confirmPassword) {
+              status.textContent = 'Passwords do not match.';
+              status.style.color = '#dc2626';
+              return;
+            }
+            submitButton.disabled = true;
+            submitButton.textContent = 'Resetting...';
+            status.textContent = 'Resetting your password...';
+            status.style.color = '#475569';
+            try {
+              const response = await fetch(window.location.pathname, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: ${jsonForHtmlScript(token)}, newPassword: password }),
+              });
+              const body = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                throw new Error(body.message || 'This reset link is invalid or expired.');
+              }
+              form.style.display = 'none';
+              status.textContent = 'Your password has been reset.';
+              status.style.color = '#16A34A';
+              document.getElementById('open-app').style.display = 'inline-block';
+            } catch (error) {
+              status.textContent = error instanceof Error ? error.message : 'This reset link is invalid or expired.';
+              status.style.color = '#dc2626';
+              submitButton.disabled = false;
+              submitButton.textContent = 'Reset Password';
+            }
+          });
+        </script>`
+      : '';
     const title = token ? 'Reset your password' : 'Reset link missing';
     const body = token
-      ? 'Open MaltaPro to choose a new password. If the button does not open the app, copy this link into your browser on the device where MaltaPro is installed.'
+      ? 'Choose a new password for your MaltaPro account.'
       : 'This password reset link is missing a token. Open MaltaPro and request a new reset email.';
 
     return `<!doctype html>
@@ -365,8 +421,10 @@ export class AuthService {
               <div style="width:44px;height:44px;border-radius:999px;background:#16A34A;margin-bottom:18px"></div>
               <h1 style="margin:0 0 12px;font-size:28px">${escapeHtml(title)}</h1>
               <p style="font-size:16px;line-height:1.5;color:#475569">${escapeHtml(body)}</p>
+              <p id="status" style="font-size:15px;line-height:1.5;color:#475569"></p>
+              ${form}
               <p>
-                <a href="${escapeHtml(appLink)}" style="display:inline-block;background:#16A34A;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">
+                <a id="open-app" href="${escapeHtml(appLink)}" style="display:${token ? 'none' : 'inline-block'};background:#16A34A;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">
                   Open MaltaPro
                 </a>
               </p>
@@ -375,6 +433,7 @@ export class AuthService {
               </p>
             </div>
           </main>
+          ${script}
         </body>
       </html>`;
   }
@@ -609,4 +668,8 @@ function escapeHtml(value: string) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function jsonForHtmlScript(value: string) {
+  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 }

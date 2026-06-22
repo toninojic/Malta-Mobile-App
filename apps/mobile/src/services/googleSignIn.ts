@@ -8,10 +8,10 @@ import { googleAuthConfig } from '../config/googleAuthConfig';
 WebBrowser.maybeCompleteAuthSession();
 
 export function useGoogleIdTokenRequest() {
-  const requestState = Google.useAuthRequest({
-    clientId: googleAuthConfig.webClientId,
-    redirectUri: googleAuthConfig.redirectUri,
-    responseType: ResponseType.IdToken,
+  const requestState = Google.useIdTokenAuthRequest({
+    androidClientId: googleAuthConfig.androidClientId,
+    iosClientId: googleAuthConfig.iosClientId,
+    responseType: Platform.OS === 'web' ? ResponseType.IdToken : undefined,
     scopes: googleAuthConfig.scopes,
     selectAccount: true,
     webClientId: googleAuthConfig.webClientId,
@@ -26,14 +26,12 @@ export function useGoogleIdTokenRequest() {
     console.info('[google-auth] request config', {
       platform: Platform.OS,
       authMode: googleAuthConfig.authMode,
-      redirectUri: googleAuthConfig.redirectUri,
       scheme: googleAuthConfig.scheme,
-      useProxy: true,
-      projectFullNameForProxy: googleAuthConfig.projectFullNameForProxy,
+      useProxy: false,
       hasAndroidClientId: Boolean(googleAuthConfig.androidClientId),
       hasWebClientId: Boolean(googleAuthConfig.webClientId),
       hasIosClientId: Boolean(googleAuthConfig.iosClientId),
-      usesExpoProxy: true,
+      usesExpoProxy: false,
     });
   }, []);
 

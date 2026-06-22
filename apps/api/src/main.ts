@@ -31,6 +31,13 @@ async function bootstrap() {
     origin: config.get<string>('APP_ORIGIN') ?? '*',
     credentials: true,
   });
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('/verify-email', (request: Request, response: Response) => {
+    response.redirect(302, `/api/v1/auth/verify-email${authTokenQuery(request)}`);
+  });
+  expressApp.get('/reset-password', (request: Request, response: Response) => {
+    response.redirect(302, `/api/v1/auth/reset-password${authTokenQuery(request)}`);
+  });
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,
@@ -73,4 +80,9 @@ function resolveLoggerLevels(level: string | undefined): LogLevel[] {
     default:
       return ['error', 'warn', 'log'];
   }
+}
+
+function authTokenQuery(request: Request) {
+  const token = typeof request.query.token === 'string' ? request.query.token : '';
+  return token ? `?token=${encodeURIComponent(token)}` : '';
 }

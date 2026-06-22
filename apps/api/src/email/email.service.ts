@@ -106,23 +106,46 @@ export class EmailService {
 
   private authLinks(path: 'verify-email' | 'reset-password', token: string) {
     const scheme = this.config.get<string>('MOBILE_DEEP_LINK_SCHEME')?.trim() || 'maltapro';
-    const publicUrl =
-      this.config.get<string>('AUTH_WEB_FALLBACK_URL')?.trim() ||
-      this.config.get<string>('APP_PUBLIC_URL')?.trim() ||
-      this.config.get<string>('APP_BASE_URL')?.trim();
+    const webBaseUrl = this.authWebBaseUrl();
     const encodedToken = encodeURIComponent(token);
     const deepLink = `${scheme}://${path}?token=${encodedToken}`;
 
-    if (!publicUrl) {
+    if (!webBaseUrl) {
       this.logger.error(
-        `APP_PUBLIC_URL or AUTH_WEB_FALLBACK_URL is not configured. Falling back to app deep link for ${path} email.`,
+        `AUTH_WEB_FALLBACK_URL or APP_BASE_URL is not configured. Falling back to app deep link for ${path} email.`,
       );
     }
 
     return {
       deepLink,
-      webUrl: publicUrl ? `${publicUrl.replace(/\/$/, '')}/${path}?token=${encodedToken}` : deepLink,
+      webUrl: webBaseUrl ? `${webBaseUrl}/${path}?token=${encodedToken}` : deepLink,
     };
+  }
+
+  private authWebBaseUrl() {
+    const explicitFallback = this.config.get<string>('AUTH_WEB_FALLBACK_URL')?.trim();
+    if (explicitFallback) {
+      return explicitFallback.replace(/\/$/, '');
+    }
+
+    const appBaseUrl = this.config.get<string>('APP_BASE_URL')?.trim();
+    if (appBaseUrl) {
+      return this.withAuthPath(appBaseUrl);
+    }
+
+    const publicUrl = this.config.get<string>('APP_PUBLIC_URL')?.trim();
+    return publicUrl ? publicUrl.replace(/\/$/, '') : null;
+  }
+
+  private withAuthPath(value: string) {
+    const normalized = value.replace(/\/+$/, '');
+    if (/\/api\/v\d+\/auth$/i.test(normalized)) {
+      return normalized;
+    }
+    if (/\/api\/v\d+$/i.test(normalized)) {
+      return `${normalized}/auth`;
+    }
+    return `${normalized}/api/v1/auth`;
   }
 
   private authEmailHtml(input: {

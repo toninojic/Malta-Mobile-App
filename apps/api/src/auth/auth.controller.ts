@@ -104,6 +104,7 @@ export class AuthController {
 
   @Get('reset-password')
   @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:")
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   resetPasswordWeb(@Query('token') token?: string) {
     return this.authService.passwordResetHtml(token);
