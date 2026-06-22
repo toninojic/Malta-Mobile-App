@@ -6,13 +6,14 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { cacheOffer, invalidateMarketplaceState } from '../../api/invalidation';
 import { Button } from '../../components/Button';
+import { DatePickerField } from '../../components/DatePickerField';
 import { EmptyState } from '../../components/EmptyState';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { useTheme } from '../../design/theme';
 import { JobsStackParamList } from '../../navigation/types';
 import { OfferFormValues } from '../../types/domain';
-import { formatDate, parseDateInput, toDateInputValue, toIsoDate } from '../../utils/date';
+import { toIsoDate } from '../../utils/date';
 
 type Props = NativeStackScreenProps<JobsStackParamList, 'OfferForm'>;
 const OFFER_CONTACT_DETAILS_ERROR =
@@ -24,7 +25,7 @@ export function OfferFormScreen({ route, navigation }: Props) {
   const { jobId, offerId } = route.params;
   const isEditing = Boolean(offerId);
   const [estimatedPrice, setEstimatedPrice] = useState('');
-  const [startDate, setStartDate] = useState(toDateInputValue(new Date()));
+  const [startDate, setStartDate] = useState(startOfDay(new Date()));
   const [estimatedCompletionDays, setEstimatedCompletionDays] = useState('');
   const [message, setMessage] = useState('');
 
@@ -46,7 +47,7 @@ export function OfferFormScreen({ route, navigation }: Props) {
     }
 
     setEstimatedPrice(existingOffer.estimatedPrice);
-    setStartDate(toDateInputValue(existingOffer.startDate));
+    setStartDate(startOfDay(new Date(existingOffer.startDate)));
     setEstimatedCompletionDays(String(existingOffer.estimatedCompletionDays));
     setMessage(existingOffer.message ?? '');
   }, [existingOffer]);
@@ -54,7 +55,7 @@ export function OfferFormScreen({ route, navigation }: Props) {
   const values = useMemo<OfferFormValues>(
     () => ({
       estimatedPrice: Number(estimatedPrice),
-      startDate: parsedStartDateToIso(startDate) ?? '',
+      startDate: toIsoDate(startDate),
       estimatedCompletionDays: Number(estimatedCompletionDays),
       message: message.trim() ? message.trim() : undefined,
     }),
@@ -83,15 +84,9 @@ export function OfferFormScreen({ route, navigation }: Props) {
       return;
     }
 
-    const parsedStartDate = parseDateInput(startDate);
-    if (!parsedStartDate) {
-      Alert.alert('Start date needed', 'Use DD/MM/YYYY for the start date.');
-      return;
-    }
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (parsedStartDate < today) {
+    if (startDate < today) {
       Alert.alert('Start date needed', 'Start date cannot be in the past.');
       return;
     }
@@ -158,12 +153,11 @@ export function OfferFormScreen({ route, navigation }: Props) {
       <Text style={[styles.helperText, { color: theme.colors.textMuted }]}>
         Enter the total price for the job, not an hourly rate.
       </Text>
-      <TextField
+      <DatePickerField
         label="When can you start?"
         value={startDate}
-        onChangeText={setStartDate}
-        keyboardType="number-pad"
-        placeholder={formatDate(new Date())}
+        minimumDate={new Date()}
+        onChange={setStartDate}
       />
       <TextField
         label="How many days will it take?"
@@ -203,9 +197,10 @@ const styles = StyleSheet.create({
   },
 });
 
-function parsedStartDateToIso(value: string) {
-  const parsed = parseDateInput(value);
-  return parsed ? toIsoDate(parsed) : null;
+function startOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 function containsContactDetails(value: string) {

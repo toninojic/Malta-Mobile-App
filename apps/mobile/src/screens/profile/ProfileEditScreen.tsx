@@ -23,6 +23,7 @@ import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { ImageViewerModal } from '../../components/ImageViewerModal';
+import { PhoneNumberInput } from '../../components/PhoneNumberInput';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { legalLinks, openLegalLink } from '../../config/legalLinks';
@@ -614,7 +615,7 @@ export function ProfileEditScreen() {
       </Card>
 
       <TextField label="Display name" value={displayName} onChangeText={setDisplayName} />
-      <TextField label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <PhoneNumberInput label="Phone" value={phone} onChangeText={setPhone} />
       <TextField label="Location" value={location} onChangeText={setLocation} />
       <TextField label="Bio" value={bio} onChangeText={setBio} multiline />
       {canUploadAvatar ? (

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
+import { normalizePhoneNumber } from '../common/phone';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -44,13 +45,14 @@ export class UsersService {
 
     const displayName =
       dto.displayName?.trim() || user.profile?.displayName || user.email.split('@')[0] || user.email;
+    const phone = dto.phone === undefined ? undefined : normalizePhoneNumber(dto.phone) ?? null;
 
     const profile = await this.prisma.userProfile.upsert({
       where: { userId },
       create: {
         userId,
         displayName,
-        phone: dto.phone,
+        phone,
         location: dto.location,
         bio: dto.bio,
         avatarUrl: dto.avatarKey ?? dto.avatarUrl,
@@ -59,7 +61,7 @@ export class UsersService {
       },
       update: {
         displayName,
-        phone: dto.phone,
+        phone,
         location: dto.location,
         bio: dto.bio,
         avatarUrl: dto.avatarKey ?? dto.avatarUrl,

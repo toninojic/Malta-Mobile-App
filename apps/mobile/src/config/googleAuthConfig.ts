@@ -10,7 +10,10 @@ type GoogleAuthExtra = {
 export const googleAuthConfig = resolveGoogleAuthConfig();
 
 const googleAuthScheme = 'maltapro';
+const googleAuthRedirectPath = 'redirect';
 const googleAuthScopes = ['openid', 'email', 'profile'];
+const googleAuthProxyProjectFullName = '@toninojic/malta-craftsman-marketplace';
+const googleAuthProxyRedirectUri = `https://auth.expo.io/${googleAuthProxyProjectFullName}`;
 
 function resolveGoogleAuthConfig() {
   const extra = (Constants.expoConfig?.extra ?? {}) as GoogleAuthExtra;
@@ -20,16 +23,19 @@ function resolveGoogleAuthConfig() {
 
   return {
     androidClientId,
-    authMode: Platform.OS === 'android' ? 'native-android' as const : Platform.OS === 'ios' ? 'native-ios' as const : 'web' as const,
+    authMode: 'expo-proxy-id-token' as const,
     iosClientId,
+    projectFullNameForProxy: googleAuthProxyProjectFullName,
+    redirectPath: googleAuthRedirectPath,
+    redirectUri: googleAuthProxyRedirectUri,
     scheme: googleAuthScheme,
     scopes: googleAuthScopes,
     webClientId,
     isConfigured:
       Platform.OS === 'android'
-        ? Boolean(androidClientId)
+        ? Boolean(webClientId)
         : Platform.OS === 'ios'
-          ? Boolean(iosClientId)
+          ? Boolean(webClientId)
           : Boolean(webClientId),
   };
 }

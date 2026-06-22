@@ -36,6 +36,7 @@
     "smoke:admin-token-grants": "node scripts/admin-token-grants-smoke.mjs",
     "smoke:report-system": "node scripts/report-system-smoke.mjs",
     "smoke:auth-google-resend": "node scripts/auth-google-resend-smoke.mjs",
+    "smoke:auth-verification-gate": "node scripts/auth-verification-gate-smoke.mjs",
     "smoke:analytics": "node scripts/analytics-smoke.mjs",
     "smoke:final-prelaunch-fixes": "node scripts/final-prelaunch-fixes-smoke.mjs"
   },

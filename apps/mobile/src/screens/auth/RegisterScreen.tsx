@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
+import { PhoneNumberInput } from '../../components/PhoneNumberInput';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { legalLinks, openLegalLink } from '../../config/legalLinks';
@@ -53,7 +54,7 @@ export function RegisterScreen({ navigation }: Props) {
     await setSession(session);
     await configureRevenueCatForCurrentUser({ forceDiagnostics: true });
     if (authAction === 'register' && session.verificationEmailSent) {
-      Alert.alert('Check your email', 'We sent you a MaltaPro verification link. You can continue using the app and verify from Profile.');
+      Alert.alert('Check your email', 'We sent you a MaltaPro verification link. You must verify your email before using the marketplace.');
     }
   };
 
@@ -141,7 +142,7 @@ export function RegisterScreen({ navigation }: Props) {
       <TextField label="Display name" icon={UserRound} value={displayName} onChangeText={setDisplayName} />
       <TextField label="Email" icon={Mail} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <TextField label="Password" icon={LockKeyhole} value={password} onChangeText={setPassword} secureTextEntry />
-      <TextField label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <PhoneNumberInput label="Phone" value={phone} onChangeText={setPhone} />
       <TextField label="Location" value={location} onChangeText={setLocation} />
       {role === 'CONTRACTOR' ? (
         <>

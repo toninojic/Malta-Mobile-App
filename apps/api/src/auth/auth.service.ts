@@ -10,6 +10,7 @@ import { UserAuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { EmailService } from '../email/email.service';
+import { normalizePhoneNumber } from '../common/phone';
 import { PrismaService } from '../prisma/prisma.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
@@ -86,7 +87,7 @@ export class AuthService {
         profile: {
           create: {
             displayName,
-            phone: dto.phone,
+            phone: normalizePhoneNumber(dto.phone),
             location: dto.location,
             avatarUrl: dto.avatarKey ?? dto.avatarUrl,
             companyName: dto.companyName,

@@ -42,6 +42,7 @@ import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
 import { ContractorSetupScreen } from '../screens/auth/ContractorSetupScreen';
 import { VerifyEmailScreen } from '../screens/auth/VerifyEmailScreen';
+import { VerifyEmailRequiredScreen } from '../screens/auth/VerifyEmailRequiredScreen';
 import { EmployerJobsScreen } from '../screens/employer/EmployerJobsScreen';
 import { JobDetailsScreen } from '../screens/employer/JobDetailsScreen';
 import { JobFormScreen } from '../screens/employer/JobFormScreen';
@@ -110,6 +111,7 @@ export function RootNavigator() {
   const queryClient = useQueryClient();
   const hydrated = useAuthStore((state) => state.hydrated);
   const user = useAuthStore((state) => state.user);
+  const emailVerified = isEmailVerified(user);
   const hydrate = useAuthStore((state) => state.hydrate);
   const hydrateAppearance = useAppearanceStore((state) => state.hydrate);
   const [currentRouteName, setCurrentRouteName] = useState<string | undefined>();
@@ -120,14 +122,14 @@ export function RootNavigator() {
   }, [hydrate, hydrateAppearance]);
 
   useEffect(() => {
-    if (hydrated && user) {
+    if (hydrated && user && emailVerified) {
       void configureRevenueCatForCurrentUser();
       void registerExpoPushTokenForUser(user);
     }
-  }, [hydrated, user?.id]);
+  }, [emailVerified, hydrated, user?.id]);
 
   useEffect(() => {
-    if (!hydrated || !user) {
+    if (!hydrated || !user || !emailVerified) {
       return undefined;
     }
 
@@ -138,10 +140,10 @@ export function RootNavigator() {
     });
 
     return () => subscription.remove();
-  }, [hydrated, user?.id]);
+  }, [emailVerified, hydrated, user?.id]);
 
   useEffect(() => {
-    if (!hydrated || !user) {
+    if (!hydrated || !user || !emailVerified) {
       return undefined;
     }
 
@@ -154,7 +156,7 @@ export function RootNavigator() {
         navigateFromPush(data);
       },
     });
-  }, [hydrated, queryClient, user?.id]);
+  }, [emailVerified, hydrated, queryClient, user?.id]);
 
   const navTheme: Theme = {
     ...(theme.isDark ? DarkTheme : DefaultTheme),
@@ -194,7 +196,7 @@ export function RootNavigator() {
       }}
     >
       {user ? <AuthenticatedExperience /> : <AuthRoutes />}
-      {user ? (
+      {user && emailVerified ? (
         <AiJobAssistantHost
           currentRouteName={currentRouteName}
           onEditManually={(draft) => {
@@ -249,6 +251,10 @@ function AuthenticatedExperience() {
     user?.id,
     user?.role,
   ]);
+
+  if (!isEmailVerified(user)) {
+    return <VerifyEmailRequiredScreen />;
+  }
 
   if (user?.role === 'CONTRACTOR' && setupDecision.contractorOnboardingRequired) {
     const finishSetup = (outcome: ContractorSetupCompletion) => {
@@ -629,6 +635,10 @@ function AdminTabs() {
       />
     </Tabs.Navigator>
   );
+}
+
+function isEmailVerified(user: ReturnType<typeof useAuthStore.getState>['user']) {
+  return Boolean(user?.emailVerifiedAt);
 }
 
 const styles = StyleSheet.create({
