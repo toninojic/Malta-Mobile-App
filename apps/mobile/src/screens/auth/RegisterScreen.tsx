@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArrowLeft, Building2, Check, HardHat, LockKeyhole, Mail, Square, UserRound } from 'lucide-react-native';
 import { ComponentType } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
@@ -14,7 +14,13 @@ import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
 import { track } from '../../services/analytics';
 import { getContractorSetupDecision, markContractorSetupRequired } from '../../services/contractorSetup';
-import { googleAuthIsConfigured, useGoogleIdTokenRequest } from '../../services/googleSignIn';
+import { useGoogleIdTokenRequest } from '../../services/googleSignIn';
+import {
+  getGoogleAuthStartBlockMessage,
+  getGoogleResponseFailureMessage,
+  logGoogleButtonDiagnostics,
+  logGooglePromptResult,
+} from '../../services/googleAuthUi';
 import { configureRevenueCatForCurrentUser } from '../../services/revenueCatPurchases';
 import { useAuthStore } from '../../store/auth.store';
 import { UserRole } from '../../types/domain';
@@ -35,6 +41,7 @@ export function RegisterScreen({ navigation }: Props) {
   const [tradeCategories, setTradeCategories] = useState('');
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [googleRequest, googleResponse, promptGoogleAsync] = useGoogleIdTokenRequest();
+  const handledGoogleResponseRef = useRef<unknown>(null);
 
   const completeRegistration = async (session: Awaited<ReturnType<typeof api.register>>, authAction: 'register' | 'google-register') => {
     if (session.user.role === 'CONTRACTOR') {
@@ -75,7 +82,17 @@ export function RegisterScreen({ navigation }: Props) {
   });
 
   useEffect(() => {
-    if (googleResponse?.type !== 'success') {
+    if (!googleResponse || handledGoogleResponseRef.current === googleResponse) {
+      return;
+    }
+
+    handledGoogleResponseRef.current = googleResponse;
+
+    if (googleResponse.type !== 'success') {
+      const message = getGoogleResponseFailureMessage(googleResponse);
+      if (message) {
+        Alert.alert('Google registration failed', message);
+      }
       return;
     }
 
@@ -91,7 +108,7 @@ export function RegisterScreen({ navigation }: Props) {
       termsAccepted: legalAccepted,
       privacyAccepted: legalAccepted,
     });
-  }, [googleResponse?.type]);
+  }, [googleResponse]);
 
   const submit = () => {
     if (!legalAccepted) {
@@ -119,13 +136,40 @@ export function RegisterScreen({ navigation }: Props) {
     });
   };
 
-  const startGoogleRegistration = () => {
-    if (!legalAccepted) {
-      Alert.alert('Consent required', 'You must accept the Terms of Use and Privacy Policy to continue.');
+  const startGoogleRegistration = async () => {
+    const requestReady = Boolean(googleRequest?.url);
+    const promptAsyncExists = typeof promptGoogleAsync === 'function';
+    logGoogleButtonDiagnostics({
+      screen: 'Register',
+      role,
+      termsAccepted: legalAccepted,
+      termsRequired: true,
+      requestReady,
+      promptAsyncExists,
+    });
+
+    const blockMessage = getGoogleAuthStartBlockMessage({
+      termsAccepted: legalAccepted,
+      termsRequired: true,
+      requestReady,
+      promptAsyncExists,
+    });
+    if (blockMessage) {
+      Alert.alert('Google registration unavailable', blockMessage);
       return;
     }
+
     track('GOOGLE_LOGIN_STARTED', { screen: 'Register', metadata: { role } });
-    void promptGoogleAsync();
+    try {
+      const result = await promptGoogleAsync();
+      logGooglePromptResult('Register', result);
+    } catch (error) {
+      console.warn('[google-auth] prompt failed', {
+        screen: 'Register',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      Alert.alert('Google registration failed', error instanceof Error ? error.message : 'Google Sign-In could not be opened.');
+    }
   };
 
   return (
@@ -161,8 +205,8 @@ export function RegisterScreen({ navigation }: Props) {
         title={`Continue with Google as ${role === 'EMPLOYER' ? 'Employer' : 'Contractor'}`}
         variant="secondary"
         loading={googleMutation.isPending}
-        disabled={!legalAccepted || !googleAuthIsConfigured() || !googleRequest}
-        onPress={startGoogleRegistration}
+        disabled={googleMutation.isPending}
+        onPress={() => void startGoogleRegistration()}
       />
       <Button title="Log In" variant="secondary" onPress={() => navigation.navigate('Login')} />
     </Screen>

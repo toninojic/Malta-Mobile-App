@@ -243,6 +243,24 @@ function logNetworkError(method: string, url: string, error: unknown) {
   });
 }
 
+function logGoogleBackendAuthResult(input: {
+  screen: 'Login' | 'Register';
+  status: number | null;
+  ok: boolean;
+  message?: string;
+}) {
+  if (!(__DEV__ || process.env.EXPO_PUBLIC_AUTH_DEBUG === 'true')) {
+    return;
+  }
+
+  console.info('[google-auth] backend response status', {
+    screen: input.screen,
+    status: input.status,
+    ok: input.ok,
+    message: input.message ?? null,
+  });
+}
+
 function sanitizeLogPayload(payload: unknown): unknown {
   if (!payload || typeof payload !== 'object') {
     return payload;
@@ -346,6 +364,11 @@ export const api = {
       body: input,
       authenticated: false,
     }).then((session) => {
+      logGoogleBackendAuthResult({
+        screen: input.role ? 'Register' : 'Login',
+        status: 200,
+        ok: true,
+      });
       track('GOOGLE_LOGIN_COMPLETED', {
         screen: input.role ? 'Register' : 'Login',
         entityType: 'USER',
@@ -354,6 +377,12 @@ export const api = {
       });
       return session;
     }).catch((error) => {
+      logGoogleBackendAuthResult({
+        screen: input.role ? 'Register' : 'Login',
+        status: error instanceof ApiError ? error.status : null,
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      });
       track('GOOGLE_LOGIN_FAILED', { screen: input.role ? 'Register' : 'Login' });
       throw error;
     });

@@ -50,6 +50,18 @@ if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
   );
 }
 
+if (buildProfile === 'production' && !configuredGoogleWebClientId) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production build. Set the Web OAuth client ID used by the Expo AuthSession proxy redirect.',
+  );
+}
+
+if (buildProfile === 'production' && !configuredGoogleAndroidClientId) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID for production build. Set the Android OAuth client ID for mt.marketplace.craftsman.',
+  );
+}
+
 if (buildProfile === 'preview' && buildPlatform === 'android' && !isUsableDeviceApiUrl(resolvedApiUrl)) {
   throw new Error(
     'Missing usable EXPO_PUBLIC_API_URL for Android preview build. Set the EAS preview environment value to a public HTTPS staging/ngrok API URL, for example https://your-preview-api.example.com/api/v1.',

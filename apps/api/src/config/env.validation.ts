@@ -49,15 +49,7 @@ export function validateRuntimeEnvironment(config: ConfigService) {
     missing.push(...requiredValues(config, ['REVENUECAT_WEBHOOK_SECRET', 'REVENUECAT_API_KEY']));
   }
 
-  const googleClientIds = [
-    config.get<string>('GOOGLE_ANDROID_CLIENT_ID'),
-    config.get<string>('GOOGLE_IOS_CLIENT_ID'),
-    config.get<string>('GOOGLE_WEB_CLIENT_ID'),
-    config.get<string>('GOOGLE_ALLOWED_CLIENT_IDS'),
-  ].filter((value) => value?.trim());
-  if (!googleClientIds.length) {
-    missing.push('GOOGLE_ANDROID_CLIENT_ID or GOOGLE_WEB_CLIENT_ID');
-  }
+  missing.push(...requiredValues(config, ['GOOGLE_ANDROID_CLIENT_ID', 'GOOGLE_WEB_CLIENT_ID']));
 
   if (missing.length) {
     throw new Error(`Missing or invalid production environment variables: ${Array.from(new Set(missing)).join(', ')}`);

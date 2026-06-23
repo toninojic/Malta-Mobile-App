@@ -4,6 +4,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { googleAuthConfig } from '../config/googleAuthConfig';
+import { shouldLogGoogleAuthDiagnostics } from './googleAuthUi';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -52,11 +53,18 @@ export function useGoogleIdTokenRequest() {
       return;
     }
 
+    console.info('[google-auth] platform', { platform: Platform.OS });
+    console.info('[google-auth] redirectUri', { redirectUri: googleAuthConfig.redirectUri });
+    console.info('[google-auth] useProxy', {
+      useProxy: false,
+      manualExpoProxyStartUrl: Platform.OS !== 'web',
+    });
     console.info('[google-auth] request config', {
       platform: Platform.OS,
       authMode: googleAuthConfig.authMode,
       generatedRedirectUri: googleAuthConfig.redirectUri,
       nativeReturnUrl,
+      useProxy: false,
       scheme: googleAuthConfig.scheme,
       proxyEnabled: Platform.OS !== 'web',
       hasAndroidClientId: Boolean(googleAuthConfig.androidClientId),
@@ -89,6 +97,10 @@ export function useGoogleIdTokenRequest() {
       return;
     }
 
+    console.info('[google-auth] auth result type', { type: response.type });
+    console.info('[google-auth] has idToken', {
+      hasIdToken: response.type === 'success' ? Boolean(response.params.id_token) : false,
+    });
     console.info('[google-auth] response', {
       type: response.type,
       requestLoaded: Boolean(request),
@@ -103,10 +115,6 @@ export function useGoogleIdTokenRequest() {
 
 export function googleAuthIsConfigured() {
   return googleAuthConfig.isConfigured;
-}
-
-function shouldLogGoogleAuthDiagnostics() {
-  return __DEV__ || process.env.EXPO_PUBLIC_AUTH_DEBUG === 'true';
 }
 
 function maskClientId(value?: string) {
