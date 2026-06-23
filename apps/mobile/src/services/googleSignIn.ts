@@ -30,6 +30,12 @@ export function useGoogleIdTokenRequest() {
   const response = Platform.OS === 'web' ? providerResponse : proxyResponse;
   const promptGoogleAsync = useCallback(async () => {
     if (Platform.OS === 'web') {
+      if (shouldLogGoogleAuthDiagnostics()) {
+        console.info('[google-auth] browser method', {
+          platform: Platform.OS,
+          method: 'providerPromptAsync',
+        });
+      }
       return providerPromptAsync();
     }
 
@@ -38,7 +44,31 @@ export function useGoogleIdTokenRequest() {
     }
 
     const startUrl = buildExpoProxyStartUrl(request.url, nativeReturnUrl);
-    const browserResult = await WebBrowser.openAuthSessionAsync(startUrl, nativeReturnUrl);
+    if (shouldLogGoogleAuthDiagnostics()) {
+      console.info('[google-auth] browser method', {
+        platform: Platform.OS,
+        method: 'WebBrowser.openAuthSessionAsync',
+      });
+    }
+
+    let browserResult: WebBrowser.WebBrowserAuthSessionResult;
+    try {
+      browserResult = await WebBrowser.openAuthSessionAsync(startUrl, nativeReturnUrl);
+    } catch (error) {
+      const message = errorToMessage(error);
+      console.warn('[google-auth] WebBrowser error', {
+        platform: Platform.OS,
+        method: 'WebBrowser.openAuthSessionAsync',
+        message,
+      });
+
+      if (isNoMatchingBrowserActivityError(message)) {
+        throw new Error('Google sign-in could not open a browser. Please make sure Chrome or another browser is enabled.');
+      }
+
+      throw error instanceof Error ? error : new Error(message);
+    }
+
     const result =
       browserResult.type === 'success'
         ? request.parseReturnUrl(browserResult.url)
@@ -129,4 +159,13 @@ function maskClientId(value?: string) {
 function buildExpoProxyStartUrl(authUrl: string, returnUrl: string) {
   const query = `authUrl=${encodeURIComponent(authUrl)}&returnUrl=${encodeURIComponent(returnUrl)}`;
   return `${googleAuthConfig.redirectUri}/start?${query}`;
+}
+
+function errorToMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isNoMatchingBrowserActivityError(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes('no matching browser activity') || normalized.includes('no activity found to handle intent');
 }

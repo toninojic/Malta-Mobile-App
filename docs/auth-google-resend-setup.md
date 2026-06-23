@@ -23,6 +23,32 @@ Important:
 - The returned ID token has the Web OAuth client ID as its audience.
 - The backend must allow that Web client ID.
 
+## Android Browser Handling
+
+The app declares Android package visibility queries for:
+
+```text
+android.intent.action.VIEW http
+android.intent.action.VIEW https
+android.support.customtabs.action.CustomTabsService
+```
+
+These queries are required on Android 11+ so `expo-web-browser` can discover Chrome or another browser/custom-tabs provider.
+
+The app scheme is:
+
+```text
+maltapro
+```
+
+The Android build also has a `maltapro://` VIEW intent filter so the AuthSession return URL can reopen MaltaPro.
+
+Changing these native settings requires a new EAS build, not only an EAS Update:
+
+```bash
+npx eas-cli@latest build --platform android --profile production --clear-cache
+```
+
 ## Google Cloud Console
 
 Android OAuth Client:

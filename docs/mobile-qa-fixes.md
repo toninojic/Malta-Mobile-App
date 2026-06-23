@@ -41,6 +41,10 @@ The native return URL remains `maltapro://redirect`, but it is used only after t
 
 The Google buttons now show a visible error when auth is not configured, still loading, missing Terms/Privacy consent, or unable to open the auth session. Production EAS builds fail early if the Android or Web Google client ID is missing.
 
+Android builds include browser/custom-tabs package visibility queries and a `maltapro://` intent filter. This fixes Android 11+ cases where `expo-web-browser` reports `No matching browser activity found` even when Chrome is installed.
+
+This native manifest change requires a new EAS build with cache cleared.
+
 ## Phone Country Code Selector
 
 Registration and Profile use a country selector with Malta `+356` selected by default.

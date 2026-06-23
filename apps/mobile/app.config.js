@@ -77,6 +77,7 @@ if (buildProfile && buildPlatform === 'android' && !googleServicesFile) {
 module.exports = () => {
   const android = {
     ...baseConfig.android,
+    intentFilters: ensureMaltaProIntentFilter(baseConfig.android?.intentFilters ?? []),
   };
 
   if (googleServicesFile) {
@@ -88,6 +89,10 @@ module.exports = () => {
   return {
     ...baseConfig,
     android,
+    plugins: ensurePlugin(
+      ensurePlugin(baseConfig.plugins ?? [], 'expo-web-browser'),
+      './plugins/withAndroidBrowserQueries',
+    ),
     extra: {
       ...baseConfig.extra,
       apiUrl: resolvedApiUrl,
@@ -105,6 +110,33 @@ module.exports = () => {
     },
   };
 };
+
+function ensurePlugin(plugins, pluginName) {
+  return plugins.some((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === pluginName)
+    ? plugins
+    : [...plugins, pluginName];
+}
+
+function ensureMaltaProIntentFilter(intentFilters) {
+  const hasSchemeFilter = intentFilters.some((filter) => {
+    const data = Array.isArray(filter.data) ? filter.data : [];
+    return filter.action === 'VIEW' && data.some((entry) => entry?.scheme === 'maltapro');
+  });
+
+  if (hasSchemeFilter) {
+    return intentFilters;
+  }
+
+  return [
+    ...intentFilters,
+    {
+      action: 'VIEW',
+      autoVerify: false,
+      data: [{ scheme: 'maltapro' }],
+      category: ['BROWSABLE', 'DEFAULT'],
+    },
+  ];
+}
 
 function resolveGoogleServicesFile() {
   const encodedGoogleServices = process.env.GOOGLE_SERVICES_JSON_BASE64?.trim();
