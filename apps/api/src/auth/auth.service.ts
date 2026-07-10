@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { UserAuthProvider, UserRole, UserStatus } from '@prisma/client';
+import { NotificationType, Prisma, UserAuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { EmailService } from '../email/email.service';
@@ -47,6 +47,8 @@ type GoogleIdentity = {
   audience?: string | null;
 };
 
+type GoogleAuthUserRecord = Prisma.UserGetPayload<{ include: { profile: true } }>;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -61,10 +63,18 @@ export class AuthService {
 
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      select: { id: true },
+      include: { profile: true },
     });
 
     if (existingUser) {
+      if (existingUser.status === UserStatus.SUSPENDED && existingUser.deactivatedAt) {
+        if (existingUser.role !== dto.role) {
+          throw new BadRequestException(this.reactivationRoleMessage(existingUser.role));
+        }
+
+        return this.reactivateEmailAccount(existingUser, dto);
+      }
+
       throw new ConflictException('Email is already registered.');
     }
 
@@ -117,12 +127,12 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: { profile: true },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE || !user.passwordHash) {
+    if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
@@ -131,21 +141,31 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
+    if (user.status !== UserStatus.ACTIVE) {
+      if (!user.deactivatedAt || user.role === UserRole.ADMIN) {
+        throw new UnauthorizedException('Invalid credentials.');
+      }
+
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          status: UserStatus.ACTIVE,
+          deactivatedAt: null,
+        },
+        include: { profile: true },
+      });
+    }
+
     return this.issueAndPersistTokens(user);
   }
 
   async google(dto: GoogleAuthDto) {
     const identity = await this.verifyGoogleIdentity(dto.idToken);
-    let user = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ googleId: identity.googleId }, { email: identity.email }],
-      },
-      include: { profile: true },
-    });
+    let user = await this.findGoogleAuthUser(identity);
 
     if (user) {
       if (user.status !== UserStatus.ACTIVE) {
-        throw new UnauthorizedException('User is not active.');
+        return this.reactivateGoogleAccount(user, identity, dto);
       }
 
       const nextProvider =
@@ -180,8 +200,10 @@ export class AuthService {
     this.assertLegalConsent(dto.termsAccepted, dto.privacyAccepted);
     const consentAcceptedAt = new Date();
 
-    user = await this.prisma.user.create({
-      data: {
+    user = await this.prisma.user.upsert({
+      where: { email: identity.email },
+      update: {},
+      create: {
         email: identity.email,
         passwordHash: null,
         authProvider: UserAuthProvider.GOOGLE,
@@ -203,7 +225,187 @@ export class AuthService {
       include: { profile: true },
     });
 
+    if (user.status !== UserStatus.ACTIVE) {
+      return this.reactivateGoogleAccount(user, identity, dto);
+    }
+
     return this.issueAndPersistTokens(user);
+  }
+
+  private async findGoogleAuthUser(identity: GoogleIdentity): Promise<GoogleAuthUserRecord | null> {
+    const [userByGoogleId, userByEmail] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { googleId: identity.googleId },
+        include: { profile: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { email: identity.email },
+        include: { profile: true },
+      }),
+    ]);
+
+    if (userByGoogleId && userByEmail && userByGoogleId.id !== userByEmail.id) {
+      throw new ConflictException('This Google account conflicts with another MaltaPro account. Contact support.');
+    }
+
+    if (userByEmail?.googleId && userByEmail.googleId !== identity.googleId) {
+      throw new ConflictException('This email is already linked to another Google account. Contact support.');
+    }
+
+    return userByGoogleId ?? userByEmail;
+  }
+
+  private async reactivateEmailAccount(user: GoogleAuthUserRecord, dto: RegisterDto) {
+    const passwordHash = await bcrypt.hash(dto.password, this.bcryptRounds());
+    const verificationToken = this.createSecureToken();
+    const consentAcceptedAt = new Date();
+    const displayName = dto.displayName?.trim() || user.profile?.displayName || dto.email.split('@')[0] || dto.email;
+    const authProvider =
+      user.authProvider === UserAuthProvider.GOOGLE ? UserAuthProvider.BOTH : user.authProvider;
+
+    const reactivated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        authProvider,
+        status: UserStatus.ACTIVE,
+        deactivatedAt: null,
+        emailVerifiedAt: null,
+        emailVerificationTokenHash: this.hashToken(verificationToken),
+        emailVerificationExpiresAt: this.expiresInHours(24),
+        termsAcceptedAt: consentAcceptedAt,
+        privacyAcceptedAt: consentAcceptedAt,
+        profile: {
+          upsert: {
+            create: {
+              displayName,
+              phone: normalizePhoneNumber(dto.phone),
+              location: dto.location,
+              avatarUrl: dto.avatarKey ?? dto.avatarUrl,
+              companyName: dto.companyName,
+              tradeCategories: dto.tradeCategories ?? [],
+            },
+            update: {
+              displayName,
+              phone: normalizePhoneNumber(dto.phone),
+              location: dto.location,
+              avatarUrl: dto.avatarKey ?? dto.avatarUrl,
+              companyName: dto.companyName,
+              tradeCategories: dto.tradeCategories ?? [],
+            },
+          },
+        },
+      },
+      include: { profile: true },
+    });
+
+    await this.emailService.sendVerificationEmail({
+      to: reactivated.email,
+      token: verificationToken,
+      displayName,
+    });
+
+    return {
+      ...(await this.issueAndPersistTokens(reactivated)),
+      verificationEmailSent: true,
+      accountReactivated: true,
+      ...(this.shouldExposeDebugTokens() ? { debugEmailVerificationToken: verificationToken } : {}),
+    };
+  }
+
+  private async reactivateGoogleAccount(
+    user: GoogleAuthUserRecord,
+    identity: GoogleIdentity,
+    dto: GoogleAuthDto,
+  ) {
+    if (user.role === UserRole.ADMIN) {
+      throw new UnauthorizedException('User is not active.');
+    }
+
+    const canReactivate =
+      Boolean(user.deactivatedAt) || (await this.isLegacyGoogleSelfDeactivation(user.id));
+
+    if (!canReactivate) {
+      throw new UnauthorizedException('User is not active.');
+    }
+
+    if (dto.role && dto.role !== user.role) {
+      throw new BadRequestException(this.reactivationRoleMessage(user.role));
+    }
+
+    if (dto.role) {
+      this.assertLegalConsent(dto.termsAccepted, dto.privacyAccepted);
+    }
+
+    const consentAcceptedAt = dto.role ? new Date() : undefined;
+    const nextProvider =
+      user.authProvider === UserAuthProvider.EMAIL ? UserAuthProvider.BOTH : user.authProvider;
+    const displayName = identity.displayName || user.profile?.displayName || identity.email.split('@')[0] || identity.email;
+
+    const reactivated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        status: UserStatus.ACTIVE,
+        deactivatedAt: null,
+        googleId: user.googleId ?? identity.googleId,
+        authProvider: nextProvider,
+        emailVerifiedAt: user.emailVerifiedAt ?? (identity.emailVerified ? new Date() : null),
+        emailVerificationTokenHash: null,
+        emailVerificationExpiresAt: null,
+        termsAcceptedAt: consentAcceptedAt,
+        privacyAcceptedAt: consentAcceptedAt,
+        profile: {
+          upsert: {
+            create: {
+              displayName,
+              avatarUrl: identity.picture,
+              tradeCategories: [],
+            },
+            update: {
+              displayName,
+              avatarUrl: identity.picture || undefined,
+            },
+          },
+        },
+      },
+      include: { profile: true },
+    });
+
+    return {
+      ...(await this.issueAndPersistTokens(reactivated)),
+      accountReactivated: true,
+    };
+  }
+
+  private async isLegacyGoogleSelfDeactivation(userId: string) {
+    const [moderationAudit, suspensionNotification] = await Promise.all([
+      this.prisma.auditLog.findFirst({
+        where: {
+          entityType: 'User',
+          entityId: userId,
+          action: { in: ['USER_SUSPENDED', 'USER_SUSPENDED_FROM_REPORT'] },
+        },
+        select: { id: true },
+      }),
+      this.prisma.notification.findFirst({
+        where: {
+          userId,
+          type: NotificationType.ACCOUNT_SUSPENDED,
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    return !moderationAudit && !suspensionNotification;
+  }
+
+  private reactivationRoleMessage(role: UserRole) {
+    if (role === UserRole.ADMIN) {
+      return 'Admin accounts can only be reactivated by another admin.';
+    }
+
+    const roleLabel = role === UserRole.CONTRACTOR ? 'Contractor' : 'Employer';
+    return `This account was previously registered as ${roleLabel}. Select ${roleLabel} to reactivate it.`;
   }
 
   async refresh(refreshToken: string) {

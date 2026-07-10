@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArrowLeft, Mail, LockKeyhole, LogIn } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
@@ -11,7 +11,7 @@ import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
 import { track } from '../../services/analytics';
 import { clearContractorSetupRequirement, getContractorSetupDecision } from '../../services/contractorSetup';
-import { useGoogleIdTokenRequest } from '../../services/googleSignIn';
+import { signOutGoogleSession, useGoogleIdTokenRequest } from '../../services/googleSignIn';
 import {
   getGoogleAuthStartBlockMessage,
   getGoogleResponseFailureMessage,
@@ -28,8 +28,8 @@ export function LoginScreen({ navigation }: Props) {
   const setSession = useAuthStore((state) => state.setSession);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [googleRequest, googleResponse, promptGoogleAsync] = useGoogleIdTokenRequest();
-  const handledGoogleResponseRef = useRef<unknown>(null);
+  const [googlePromptPending, setGooglePromptPending] = useState(false);
+  const [googleRequest, , promptGoogleAsync] = useGoogleIdTokenRequest();
 
   const completeLogin = async (session: Awaited<ReturnType<typeof api.login>>, authAction: 'login' | 'google-login') => {
     clearContractorSetupRequirement(session.user.id);
@@ -59,36 +59,17 @@ export function LoginScreen({ navigation }: Props) {
   const googleMutation = useMutation({
     mutationFn: api.googleAuth,
     onSuccess: (session) => completeLogin(session, 'google-login'),
-    onError: (error) => {
+    onError: async (error) => {
+      await signOutGoogleSession();
       Alert.alert('Google login failed', error instanceof Error ? error.message : 'Please use Register with Google if this is a new account.');
     },
   });
 
-  useEffect(() => {
-    if (!googleResponse || handledGoogleResponseRef.current === googleResponse) {
-      return;
-    }
-
-    handledGoogleResponseRef.current = googleResponse;
-
-    if (googleResponse.type !== 'success') {
-      const message = getGoogleResponseFailureMessage(googleResponse);
-      if (message) {
-        Alert.alert('Google login failed', message);
-      }
-      return;
-    }
-
-    const idToken = googleResponse.params.id_token;
-    if (!idToken) {
-      Alert.alert('Google login failed', 'Google did not return an ID token.');
-      return;
-    }
-
-    googleMutation.mutate({ idToken });
-  }, [googleResponse]);
-
   const startGoogleLogin = async () => {
+    if (googlePromptPending || googleMutation.isPending) {
+      return;
+    }
+
     const requestReady = Boolean(googleRequest?.url);
     const promptAsyncExists = typeof promptGoogleAsync === 'function';
     logGoogleButtonDiagnostics({
@@ -107,15 +88,34 @@ export function LoginScreen({ navigation }: Props) {
     }
 
     track('GOOGLE_LOGIN_STARTED', { screen: 'Login' });
+    setGooglePromptPending(true);
     try {
       const result = await promptGoogleAsync();
       logGooglePromptResult('Login', result);
+
+      if (result.type !== 'success') {
+        const message = getGoogleResponseFailureMessage(result);
+        if (message) {
+          Alert.alert('Google login failed', message);
+        }
+        return;
+      }
+
+      const idToken = result.params.id_token;
+      if (!idToken) {
+        Alert.alert('Google login failed', 'Google did not return an ID token.');
+        return;
+      }
+
+      googleMutation.mutate({ idToken });
     } catch (error) {
       console.warn('[google-auth] prompt failed', {
         screen: 'Login',
         message: error instanceof Error ? error.message : String(error),
       });
       Alert.alert('Google login failed', error instanceof Error ? error.message : 'Google Sign-In could not be opened.');
+    } finally {
+      setGooglePromptPending(false);
     }
   };
 
@@ -155,8 +155,8 @@ export function LoginScreen({ navigation }: Props) {
       <Button
         title="Continue with Google"
         variant="secondary"
-        loading={googleMutation.isPending}
-        disabled={googleMutation.isPending}
+        loading={googlePromptPending || googleMutation.isPending}
+        disabled={googlePromptPending || googleMutation.isPending}
         onPress={() => void startGoogleLogin()}
       />
       <Button title="Forgot your password?" variant="ghost" onPress={() => navigation.navigate('ForgotPassword')} />

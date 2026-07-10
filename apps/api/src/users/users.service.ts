@@ -112,6 +112,7 @@ export class UsersService {
         where: { id: userId },
         data: {
           status: UserStatus.SUSPENDED,
+          deactivatedAt: new Date(),
           refreshTokenHash: null,
         },
       }),

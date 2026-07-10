@@ -181,6 +181,7 @@ export type AuthResponse = {
   refreshToken: string;
   user: AuthUser;
   verificationEmailSent?: boolean;
+  accountReactivated?: boolean;
   debugEmailVerificationToken?: string;
   debugPasswordResetToken?: string;
 };

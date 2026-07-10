@@ -199,6 +199,7 @@ model User {
   privacyAcceptedAt DateTime?
   role             UserRole
   status           UserStatus         @default(ACTIVE)
+  deactivatedAt    DateTime?
   refreshTokenHash String?
   profile          UserProfile?
   jobRequests      JobRequest[]       @relation("EmployerJobs")

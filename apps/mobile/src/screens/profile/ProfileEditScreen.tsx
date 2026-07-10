@@ -33,6 +33,7 @@ import { useTheme } from '../../design/theme';
 import { AppTabParamList } from '../../navigation/types';
 import { AppearanceMode, useAppearanceStore } from '../../store/appearance.store';
 import { useAuthStore } from '../../store/auth.store';
+import { signOutGoogleSession } from '../../services/googleSignIn';
 import {
   deactivateCurrentDevicePushToken,
   getPushRegistrationDiagnostics,
@@ -197,7 +198,10 @@ export function ProfileEditScreen() {
   const logoutMutation = useMutation({
     mutationFn: api.logout,
     onSettled: async () => {
-      await deactivateCurrentDevicePushToken();
+      await Promise.allSettled([
+        deactivateCurrentDevicePushToken(),
+        signOutGoogleSession(),
+      ]);
       await clearSession();
       queryClient.clear();
     },
@@ -206,6 +210,7 @@ export function ProfileEditScreen() {
     mutationFn: api.deleteAccount,
     onSuccess: async () => {
       setDeleteAccountOpen(false);
+      await signOutGoogleSession();
       await clearSession();
       queryClient.clear();
     },

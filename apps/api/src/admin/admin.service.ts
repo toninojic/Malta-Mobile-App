@@ -506,14 +506,20 @@ export class AdminService {
       throw new NotFoundException('User not found.');
     }
 
-    if (user.status === status) {
+    const convertsSelfDeactivationToModerationSuspension =
+      status === UserStatus.SUSPENDED && user.status === UserStatus.SUSPENDED && Boolean(user.deactivatedAt);
+
+    if (user.status === status && !convertsSelfDeactivationToModerationSuspension) {
       return this.toAdminUser(user);
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.user.update({
         where: { id: userId },
-        data: { status },
+        data: {
+          status,
+          deactivatedAt: null,
+        },
         include: adminUserInclude,
       });
 

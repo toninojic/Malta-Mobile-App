@@ -226,6 +226,128 @@ async function main() {
   }
   console.info('OK Google auth fetches existing user');
 
+  const concurrentGoogleToken = mockGoogleToken({
+    googleId: `google-concurrent-${suffix}`,
+    email: `m12.google.concurrent.${suffix}@malta.test`,
+    emailVerified: true,
+    audience: 'mock',
+  });
+  const [concurrentGoogleA, concurrentGoogleB] = await Promise.all([
+    request('/auth/google', {
+      method: 'POST',
+      body: { idToken: concurrentGoogleToken, role: 'EMPLOYER', termsAccepted: true, privacyAccepted: true },
+    }),
+    request('/auth/google', {
+      method: 'POST',
+      body: { idToken: concurrentGoogleToken, role: 'EMPLOYER', termsAccepted: true, privacyAccepted: true },
+    }),
+  ]);
+  if (concurrentGoogleA.user.id !== concurrentGoogleB.user.id) {
+    throw new Error('Concurrent Google registration created inconsistent users.');
+  }
+  console.info('OK concurrent Google registration resolves to one user');
+
+  await request('/users/me', {
+    method: 'DELETE',
+    token: googleFetched.accessToken,
+  });
+  const deactivatedGoogle = await prisma.user.findUnique({ where: { id: googleCreated.user.id } });
+  if (deactivatedGoogle?.status !== 'SUSPENDED' || !deactivatedGoogle.deactivatedAt) {
+    throw new Error('Self-deactivation was not recorded separately from admin suspension.');
+  }
+
+  const googleLoginReactivated = await request('/auth/google', {
+    method: 'POST',
+    body: { idToken: googleToken },
+  });
+  if (googleLoginReactivated.user.id !== googleCreated.user.id || googleLoginReactivated.user.status !== 'ACTIVE') {
+    throw new Error('Google login did not reactivate the self-deactivated account.');
+  }
+  console.info('OK Google login reactivates a self-deactivated account');
+
+  await request('/users/me', {
+    method: 'DELETE',
+    token: googleLoginReactivated.accessToken,
+  });
+  await expectStatus('Google reactivation cannot change the original role', 400, () =>
+    request('/auth/google', {
+      method: 'POST',
+      body: { idToken: googleToken, role: 'CONTRACTOR', termsAccepted: true, privacyAccepted: true },
+    }),
+  );
+  const googleRegistrationReactivated = await request('/auth/google', {
+    method: 'POST',
+    body: { idToken: googleToken, role: 'EMPLOYER', termsAccepted: true, privacyAccepted: true },
+  });
+  if (googleRegistrationReactivated.user.id !== googleCreated.user.id || !googleRegistrationReactivated.accountReactivated) {
+    throw new Error('Google registration did not reactivate the existing account.');
+  }
+  console.info('OK Google registration reactivates a self-deactivated account');
+
+  await request('/users/me', {
+    method: 'DELETE',
+    token: googleRegistrationReactivated.accessToken,
+  });
+  await prisma.user.update({
+    where: { id: googleCreated.user.id },
+    data: { deactivatedAt: null },
+  });
+  const legacyGoogleReactivated = await request('/auth/google', {
+    method: 'POST',
+    body: { idToken: googleToken },
+  });
+  if (legacyGoogleReactivated.user.id !== googleCreated.user.id || legacyGoogleReactivated.user.status !== 'ACTIVE') {
+    throw new Error('Legacy Google self-deactivation compatibility failed.');
+  }
+  console.info('OK legacy Google self-deactivation can be reactivated');
+
+  const moderatedGoogleEmail = `m12.google.moderated.${suffix}@malta.test`;
+  const moderatedGoogleToken = mockGoogleToken({
+    googleId: `google-moderated-${suffix}`,
+    email: moderatedGoogleEmail,
+    emailVerified: true,
+    audience: 'mock',
+  });
+  const moderatedGoogle = await request('/auth/google', {
+    method: 'POST',
+    body: { idToken: moderatedGoogleToken, role: 'CONTRACTOR', termsAccepted: true, privacyAccepted: true },
+  });
+  const auditAdmin =
+    (await prisma.user.findFirst({ where: { role: 'ADMIN' }, select: { id: true } })) ??
+    (await prisma.user.create({
+      data: {
+        email: `m12.audit-admin.${suffix}@malta.test`,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    }));
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: moderatedGoogle.user.id },
+      data: { status: 'SUSPENDED', deactivatedAt: null },
+    }),
+    prisma.auditLog.create({
+      data: {
+        adminId: auditAdmin.id,
+        action: 'USER_SUSPENDED',
+        entityType: 'User',
+        entityId: moderatedGoogle.user.id,
+      },
+    }),
+  ]);
+  await expectStatus('admin-suspended Google user cannot reactivate', 401, () =>
+    request('/auth/google', {
+      method: 'POST',
+      body: {
+        idToken: moderatedGoogleToken,
+        role: 'CONTRACTOR',
+        termsAccepted: true,
+        privacyAccepted: true,
+      },
+    }),
+  );
+
   const linkUser = await register('CONTRACTOR', 'link-google');
   const linkToken = mockGoogleToken({
     googleId: `google-link-${suffix}`,

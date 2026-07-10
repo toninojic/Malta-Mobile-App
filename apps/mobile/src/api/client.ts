@@ -330,6 +330,7 @@ export const api = {
       method: 'POST',
       body: input,
       authenticated: false,
+      retryOnUnauthorized: false,
     }).then((session) => {
       track(session.user.role === 'EMPLOYER' ? 'EMPLOYER_REGISTER_COMPLETED' : 'CONTRACTOR_REGISTER_COMPLETED', {
         screen: 'Register',
@@ -351,6 +352,7 @@ export const api = {
       },
       authenticated: false,
       debugLabel: 'login',
+      retryOnUnauthorized: false,
     });
   },
   googleAuth(input: {
@@ -363,6 +365,7 @@ export const api = {
       method: 'POST',
       body: input,
       authenticated: false,
+      retryOnUnauthorized: false,
     }).then((session) => {
       logGoogleBackendAuthResult({
         screen: input.role ? 'Register' : 'Login',

@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArrowLeft, Building2, Check, HardHat, LockKeyhole, Mail, Square, UserRound } from 'lucide-react-native';
 import { ComponentType } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
@@ -14,7 +14,7 @@ import { useTheme } from '../../design/theme';
 import { AuthStackParamList } from '../../navigation/types';
 import { track } from '../../services/analytics';
 import { getContractorSetupDecision, markContractorSetupRequired } from '../../services/contractorSetup';
-import { useGoogleIdTokenRequest } from '../../services/googleSignIn';
+import { signOutGoogleSession, useGoogleIdTokenRequest } from '../../services/googleSignIn';
 import {
   getGoogleAuthStartBlockMessage,
   getGoogleResponseFailureMessage,
@@ -40,11 +40,12 @@ export function RegisterScreen({ navigation }: Props) {
   const [companyName, setCompanyName] = useState('');
   const [tradeCategories, setTradeCategories] = useState('');
   const [legalAccepted, setLegalAccepted] = useState(false);
-  const [googleRequest, googleResponse, promptGoogleAsync] = useGoogleIdTokenRequest();
-  const handledGoogleResponseRef = useRef<unknown>(null);
+  const [googlePromptPending, setGooglePromptPending] = useState(false);
+  const [googleRequest, , promptGoogleAsync] = useGoogleIdTokenRequest();
 
   const completeRegistration = async (session: Awaited<ReturnType<typeof api.register>>, authAction: 'register' | 'google-register') => {
-    if (session.user.role === 'CONTRACTOR') {
+    const isNewlyRegisteredContractor = session.user.role === 'CONTRACTOR' && !session.accountReactivated;
+    if (isNewlyRegisteredContractor) {
       await markSetupRequiredWithTimeout(session.user.id);
     }
     const setupDecision = getContractorSetupDecision(session.user);
@@ -52,7 +53,8 @@ export function RegisterScreen({ navigation }: Props) {
       authAction,
       userId: session.user.id,
       role: session.user.role,
-      isNewlyRegistered: session.user.role === 'CONTRACTOR',
+      isNewlyRegistered: isNewlyRegisteredContractor,
+      accountReactivated: Boolean(session.accountReactivated),
       contractorOnboardingRequired: setupDecision.contractorOnboardingRequired,
       contractorOnboardingCompleted: setupDecision.contractorOnboardingCompleted,
       contractorOnboardingSkipped: setupDecision.contractorOnboardingSkipped,
@@ -76,39 +78,11 @@ export function RegisterScreen({ navigation }: Props) {
   const googleMutation = useMutation({
     mutationFn: api.googleAuth,
     onSuccess: (session) => completeRegistration(session, 'google-register'),
-    onError: (error) => {
+    onError: async (error) => {
+      await signOutGoogleSession();
       Alert.alert('Google registration failed', error instanceof Error ? error.message : 'Please try again.');
     },
   });
-
-  useEffect(() => {
-    if (!googleResponse || handledGoogleResponseRef.current === googleResponse) {
-      return;
-    }
-
-    handledGoogleResponseRef.current = googleResponse;
-
-    if (googleResponse.type !== 'success') {
-      const message = getGoogleResponseFailureMessage(googleResponse);
-      if (message) {
-        Alert.alert('Google registration failed', message);
-      }
-      return;
-    }
-
-    const idToken = googleResponse.params.id_token;
-    if (!idToken) {
-      Alert.alert('Google registration failed', 'Google did not return an ID token.');
-      return;
-    }
-
-    googleMutation.mutate({
-      idToken,
-      role,
-      termsAccepted: legalAccepted,
-      privacyAccepted: legalAccepted,
-    });
-  }, [googleResponse]);
 
   const submit = () => {
     if (!legalAccepted) {
@@ -137,6 +111,10 @@ export function RegisterScreen({ navigation }: Props) {
   };
 
   const startGoogleRegistration = async () => {
+    if (googlePromptPending || googleMutation.isPending) {
+      return;
+    }
+
     const requestReady = Boolean(googleRequest?.url);
     const promptAsyncExists = typeof promptGoogleAsync === 'function';
     logGoogleButtonDiagnostics({
@@ -160,15 +138,39 @@ export function RegisterScreen({ navigation }: Props) {
     }
 
     track('GOOGLE_LOGIN_STARTED', { screen: 'Register', metadata: { role } });
+    setGooglePromptPending(true);
     try {
       const result = await promptGoogleAsync();
       logGooglePromptResult('Register', result);
+
+      if (result.type !== 'success') {
+        const message = getGoogleResponseFailureMessage(result);
+        if (message) {
+          Alert.alert('Google registration failed', message);
+        }
+        return;
+      }
+
+      const idToken = result.params.id_token;
+      if (!idToken) {
+        Alert.alert('Google registration failed', 'Google did not return an ID token.');
+        return;
+      }
+
+      googleMutation.mutate({
+        idToken,
+        role,
+        termsAccepted: legalAccepted,
+        privacyAccepted: legalAccepted,
+      });
     } catch (error) {
       console.warn('[google-auth] prompt failed', {
         screen: 'Register',
         message: error instanceof Error ? error.message : String(error),
       });
       Alert.alert('Google registration failed', error instanceof Error ? error.message : 'Google Sign-In could not be opened.');
+    } finally {
+      setGooglePromptPending(false);
     }
   };
 
@@ -204,8 +206,8 @@ export function RegisterScreen({ navigation }: Props) {
       <Button
         title={`Continue with Google as ${role === 'EMPLOYER' ? 'Employer' : 'Contractor'}`}
         variant="secondary"
-        loading={googleMutation.isPending}
-        disabled={googleMutation.isPending}
+        loading={googlePromptPending || googleMutation.isPending}
+        disabled={googlePromptPending || googleMutation.isPending}
         onPress={() => void startGoogleRegistration()}
       />
       <Button title="Log In" variant="secondary" onPress={() => navigation.navigate('Login')} />

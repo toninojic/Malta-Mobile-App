@@ -52,7 +52,7 @@ if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
 
 if (buildProfile === 'production' && !configuredGoogleWebClientId) {
   throw new Error(
-    'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production build. Set the Web OAuth client ID used by the Expo AuthSession proxy redirect.',
+    'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production build. Set the Web OAuth client ID used to request a backend-verifiable Google ID token.',
   );
 }
 
@@ -90,7 +90,10 @@ module.exports = () => {
     ...baseConfig,
     android,
     plugins: ensurePlugin(
-      ensurePlugin(baseConfig.plugins ?? [], 'expo-web-browser'),
+      ensurePlugin(
+        ensurePlugin(baseConfig.plugins ?? [], 'expo-web-browser'),
+        '@react-native-google-signin/google-signin',
+      ),
       './plugins/withAndroidBrowserQueries',
     ),
     extra: {

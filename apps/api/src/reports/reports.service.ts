@@ -246,7 +246,10 @@ export class ReportsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
-        data: { status: UserStatus.SUSPENDED },
+        data: {
+          status: UserStatus.SUSPENDED,
+          deactivatedAt: null,
+        },
       });
 
       await this.auditLogsService.create(
@@ -289,7 +292,10 @@ export class ReportsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
-        data: { status: UserStatus.ACTIVE },
+        data: {
+          status: UserStatus.ACTIVE,
+          deactivatedAt: null,
+        },
       });
 
       await this.auditLogsService.create(
