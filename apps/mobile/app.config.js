@@ -43,6 +43,7 @@ const configuredGoogleWebClientId =
 const buildProfile = process.env.EAS_BUILD_PROFILE ?? baseConfig.extra?.buildProfile;
 const buildPlatform = process.env.EAS_BUILD_PLATFORM;
 const googleServicesFile = resolveGoogleServicesFile();
+const optimizeAndroidRelease = buildProfile === 'production';
 
 if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
   throw new Error(
@@ -86,16 +87,27 @@ module.exports = () => {
     delete android.googleServicesFile;
   }
 
-  return {
-    ...baseConfig,
-    android,
-    plugins: ensurePlugin(
+  const plugins = ensureConfiguredPlugin(
+    ensurePlugin(
       ensurePlugin(
         ensurePlugin(baseConfig.plugins ?? [], 'expo-web-browser'),
         '@react-native-google-signin/google-signin',
       ),
       './plugins/withAndroidBrowserQueries',
     ),
+    'expo-build-properties',
+    {
+      android: {
+        enableMinifyInReleaseBuilds: optimizeAndroidRelease,
+        enableShrinkResourcesInReleaseBuilds: optimizeAndroidRelease,
+      },
+    },
+  );
+
+  return {
+    ...baseConfig,
+    android,
+    plugins,
     extra: {
       ...baseConfig.extra,
       apiUrl: resolvedApiUrl,
@@ -118,6 +130,19 @@ function ensurePlugin(plugins, pluginName) {
   return plugins.some((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === pluginName)
     ? plugins
     : [...plugins, pluginName];
+}
+
+function ensureConfiguredPlugin(plugins, pluginName, options) {
+  const existingIndex = plugins.findIndex(
+    (plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === pluginName,
+  );
+  const configuredPlugin = [pluginName, options];
+
+  if (existingIndex === -1) {
+    return [...plugins, configuredPlugin];
+  }
+
+  return plugins.map((plugin, index) => (index === existingIndex ? configuredPlugin : plugin));
 }
 
 function ensureMaltaProIntentFilter(intentFilters) {
