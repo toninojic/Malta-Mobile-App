@@ -25,6 +25,7 @@ async function upsertUser(input: {
   tradeCategories?: string[];
 }) {
   const passwordHash = await bcrypt.hash(password, 12);
+  const acceptedAt = new Date();
 
   const user = await prisma.user.upsert({
     where: { email: input.email },
@@ -32,6 +33,10 @@ async function upsertUser(input: {
       email: input.email,
       passwordHash,
       role: input.role,
+      status: 'ACTIVE',
+      emailVerifiedAt: acceptedAt,
+      termsAcceptedAt: acceptedAt,
+      privacyAcceptedAt: acceptedAt,
       profile: {
         create: {
           displayName: input.displayName,
@@ -51,6 +56,9 @@ async function upsertUser(input: {
       passwordHash,
       role: input.role,
       status: 'ACTIVE',
+      emailVerifiedAt: acceptedAt,
+      termsAcceptedAt: acceptedAt,
+      privacyAcceptedAt: acceptedAt,
       profile: {
         upsert: {
           create: {

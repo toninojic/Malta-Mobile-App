@@ -58,6 +58,7 @@ async function deleteMarketplaceData() {
 
 async function upsertUser(input) {
   const passwordHash = await bcrypt.hash(password, 12);
+  const acceptedAt = new Date();
 
   return prisma.user.upsert({
     where: { email: input.email },
@@ -66,6 +67,9 @@ async function upsertUser(input) {
       passwordHash,
       role: input.role,
       status: 'ACTIVE',
+      emailVerifiedAt: acceptedAt,
+      termsAcceptedAt: acceptedAt,
+      privacyAcceptedAt: acceptedAt,
       profile: {
         create: {
           displayName: input.displayName,
@@ -85,6 +89,9 @@ async function upsertUser(input) {
       passwordHash,
       role: input.role,
       status: 'ACTIVE',
+      emailVerifiedAt: acceptedAt,
+      termsAcceptedAt: acceptedAt,
+      privacyAcceptedAt: acceptedAt,
       refreshTokenHash: null,
       profile: {
         upsert: {
