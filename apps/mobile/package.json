@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "main": "index.ts",
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "exclude": [
+          "@react-native-google-signin/google-signin"
+        ]
+      }
+    }
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
