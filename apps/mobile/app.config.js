@@ -44,20 +44,27 @@ const buildProfile = process.env.EAS_BUILD_PROFILE ?? baseConfig.extra?.buildPro
 const buildPlatform = process.env.EAS_BUILD_PLATFORM;
 const googleServicesFile = resolveGoogleServicesFile();
 const optimizeAndroidRelease = buildProfile === 'production';
+const isIosBuild = buildPlatform === 'ios';
 
-if (buildProfile === 'production' && !configuredRevenueCatAndroidKey) {
+if (buildProfile === 'production' && isIosBuild && !configuredRevenueCatIosKey) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_REVENUECAT_API_KEY_IOS for production iOS build. Set the RevenueCat public key that starts with appl_ in EAS production environment variables.',
+  );
+}
+
+if (buildProfile === 'production' && !isIosBuild && !configuredRevenueCatAndroidKey) {
   throw new Error(
     'Missing EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID for production build. Set the Google RevenueCat public key that starts with goog_ in EAS environment variables.',
   );
 }
 
-if (buildProfile === 'production' && !configuredGoogleWebClientId) {
+if (buildProfile === 'production' && !isIosBuild && !configuredGoogleWebClientId) {
   throw new Error(
     'Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for production build. Set the Web OAuth client ID used to request a backend-verifiable Google ID token.',
   );
 }
 
-if (buildProfile === 'production' && !configuredGoogleAndroidClientId) {
+if (buildProfile === 'production' && !isIosBuild && !configuredGoogleAndroidClientId) {
   throw new Error(
     'Missing EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID for production build. Set the Android OAuth client ID for mt.marketplace.craftsman.',
   );
@@ -87,14 +94,14 @@ module.exports = () => {
     delete android.googleServicesFile;
   }
 
+  let nativePlugins = ensurePlugin(baseConfig.plugins ?? [], 'expo-web-browser');
+  if (!isIosBuild) {
+    nativePlugins = ensurePlugin(nativePlugins, '@react-native-google-signin/google-signin');
+  }
+  nativePlugins = ensurePlugin(nativePlugins, './plugins/withAndroidBrowserQueries');
+
   const plugins = ensureConfiguredPlugin(
-    ensurePlugin(
-      ensurePlugin(
-        ensurePlugin(baseConfig.plugins ?? [], 'expo-web-browser'),
-        '@react-native-google-signin/google-signin',
-      ),
-      './plugins/withAndroidBrowserQueries',
-    ),
+    nativePlugins,
     'expo-build-properties',
     {
       android: {

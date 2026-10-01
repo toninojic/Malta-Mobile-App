@@ -41,6 +41,16 @@ export function useConversationMessages(conversationId?: string, poll = false) {
   });
 }
 
+export function useConversationDetails(conversationId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['messages', 'conversation-details', conversationId],
+    queryFn: () => api.conversation(conversationId as string),
+    enabled: Boolean(conversationId) && enabled,
+    staleTime: 5_000,
+    retry: false,
+  });
+}
+
 export function useSendMessage() {
   const queryClient = useQueryClient();
 

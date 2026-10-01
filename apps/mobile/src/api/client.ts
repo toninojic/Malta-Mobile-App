@@ -14,6 +14,7 @@ import {
   AdminStatistics,
   AdminUser,
   AuditLog,
+  BlockedUser,
   ChatMessage,
   CompletionStatusResponse,
   ContactUnlock,
@@ -443,6 +444,19 @@ export const api = {
   },
   deleteAccount() {
     return request<{ success: true; status: UserStatus; message: string }>('/users/me', {
+      method: 'DELETE',
+    });
+  },
+  blockedUsers() {
+    return request<BlockedUser[]>('/users/me/blocked-users');
+  },
+  blockUser(userId: string) {
+    return request<{ blockedUserId: string; isBlocked: true }>(`/users/${userId}/block`, {
+      method: 'POST',
+    });
+  },
+  unblockUser(userId: string) {
+    return request<{ blockedUserId: string; isBlocked: false }>(`/users/${userId}/block`, {
       method: 'DELETE',
     });
   },

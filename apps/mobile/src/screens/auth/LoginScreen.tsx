@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArrowLeft, Mail, LockKeyhole, LogIn } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
@@ -152,13 +152,15 @@ export function LoginScreen({ navigation }: Props) {
         loading={mutation.isPending}
         onPress={() => mutation.mutate({ email: email.trim(), password })}
       />
-      <Button
-        title="Continue with Google"
-        variant="secondary"
-        loading={googlePromptPending || googleMutation.isPending}
-        disabled={googlePromptPending || googleMutation.isPending}
-        onPress={() => void startGoogleLogin()}
-      />
+      {Platform.OS !== 'ios' ? (
+        <Button
+          title="Continue with Google"
+          variant="secondary"
+          loading={googlePromptPending || googleMutation.isPending}
+          disabled={googlePromptPending || googleMutation.isPending}
+          onPress={() => void startGoogleLogin()}
+        />
+      ) : null}
       <Button title="Forgot your password?" variant="ghost" onPress={() => navigation.navigate('ForgotPassword')} />
       <Button title="Create Account" variant="secondary" onPress={() => navigation.navigate('Register')} />
     </Screen>

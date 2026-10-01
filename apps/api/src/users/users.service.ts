@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import { normalizePhoneNumber } from '../common/phone';
 import { PrismaService } from '../prisma/prisma.service';
@@ -122,6 +122,82 @@ export class UsersService {
       success: true,
       status: UserStatus.SUSPENDED,
       message: 'Account deactivated. Existing marketplace records are retained for audit and transaction history.',
+    };
+  }
+
+  async findBlockedUsers(userId: string) {
+    const blocks = await this.prisma.userBlock.findMany({
+      where: { blockerId: userId },
+      select: {
+        id: true,
+        blockedId: true,
+        createdAt: true,
+        blocked: {
+          select: {
+            id: true,
+            role: true,
+            profile: {
+              select: {
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return blocks.map((block) => ({
+      id: block.id,
+      blockedUserId: block.blockedId,
+      createdAt: block.createdAt,
+      user: block.blocked,
+    }));
+  }
+
+  async blockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException('You cannot block yourself.');
+    }
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: blockedId },
+      select: { id: true },
+    });
+
+    if (!target) {
+      throw new NotFoundException('User not found.');
+    }
+
+    const block = await this.prisma.userBlock.upsert({
+      where: {
+        blockerId_blockedId: { blockerId, blockedId },
+      },
+      create: { blockerId, blockedId },
+      update: {},
+      select: {
+        id: true,
+        blockedId: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      ...block,
+      blockedUserId: block.blockedId,
+      isBlocked: true,
+    };
+  }
+
+  async unblockUser(blockerId: string, blockedId: string) {
+    await this.prisma.userBlock.deleteMany({
+      where: { blockerId, blockedId },
+    });
+
+    return {
+      blockedUserId: blockedId,
+      isBlocked: false,
     };
   }
 }

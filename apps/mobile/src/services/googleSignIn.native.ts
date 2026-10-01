@@ -12,13 +12,14 @@ let configuredWebClientId: string | null = null;
 
 export function useGoogleIdTokenRequest() {
   const [response, setResponse] = useState<AuthSessionResult | null>(null);
+  const googleEnabledOnPlatform = Platform.OS !== 'ios';
   const request = useMemo(
-    () => (googleAuthConfig.isConfigured ? { url: 'native-google-signin://ready' } : null),
-    [],
+    () => (googleEnabledOnPlatform && googleAuthConfig.isConfigured ? { url: 'native-google-signin://ready' } : null),
+    [googleEnabledOnPlatform],
   );
 
   useEffect(() => {
-    if (!googleAuthConfig.isConfigured || isExpoGo()) {
+    if (!googleEnabledOnPlatform || !googleAuthConfig.isConfigured || isExpoGo()) {
       return;
     }
 
@@ -28,9 +29,13 @@ export function useGoogleIdTokenRequest() {
         message: errorToMessage(error),
       });
     });
-  }, []);
+  }, [googleEnabledOnPlatform]);
 
   const promptGoogleAsync = useCallback(async (): Promise<AuthSessionResult> => {
+    if (!googleEnabledOnPlatform) {
+      throw new Error('Google Sign-In is not available on iOS. Use email and password to continue.');
+    }
+
     if (isExpoGo()) {
       throw new Error('Google Sign-In requires an installed EAS build and is not available in Expo Go.');
     }
@@ -88,7 +93,7 @@ export function useGoogleIdTokenRequest() {
       });
       throw new Error(friendlyNativeGoogleError(code, message));
     }
-  }, []);
+  }, [googleEnabledOnPlatform]);
 
   useEffect(() => {
     if (!shouldLogGoogleAuthDiagnostics()) {
@@ -106,8 +111,9 @@ export function useGoogleIdTokenRequest() {
       hasAndroidClientId: Boolean(googleAuthConfig.androidClientId),
       hasWebClientId: Boolean(googleAuthConfig.webClientId),
       hasIosClientId: Boolean(googleAuthConfig.iosClientId),
+      enabledOnPlatform: googleEnabledOnPlatform,
     });
-  }, []);
+  }, [googleEnabledOnPlatform]);
 
   return [request, response, promptGoogleAsync] as const;
 }
@@ -117,7 +123,7 @@ export function googleAuthIsConfigured() {
 }
 
 export async function signOutGoogleSession() {
-  if (isExpoGo() || !googleAuthConfig.webClientId) {
+  if (Platform.OS === 'ios' || isExpoGo() || !googleAuthConfig.webClientId) {
     return;
   }
 

@@ -680,6 +680,21 @@ export type Conversation = {
   lastMessage?: ChatMessage | null;
   messages?: ChatMessage[];
   unreadCount: number;
+  blocking: {
+    isBlockedByMe: boolean;
+    isMessagingBlocked: boolean;
+  };
+};
+
+export type BlockedUser = {
+  id: string;
+  blockedUserId: string;
+  createdAt: string;
+  user: {
+    id: string;
+    role: UserRole;
+    profile?: Pick<UserProfile, 'displayName' | 'avatarUrl'> | null;
+  };
 };
 
 export type InAppNotification = {

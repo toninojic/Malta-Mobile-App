@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
-import { Flag, SendHorizontal, ThumbsUp } from 'lucide-react-native';
+import { Flag, SendHorizontal, ThumbsUp, UserCheck, UserX } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -18,7 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '../../api/client';
-import { useConversationMessages, useMarkMessageRead, useSendMessage } from '../../api/messageHooks';
+import { useConversationDetails, useConversationMessages, useMarkMessageRead, useSendMessage } from '../../api/messageHooks';
+import { useBlockUser, useUnblockUser } from '../../api/userBlockHooks';
 import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -42,14 +43,26 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   const [content, setContent] = useState('');
   const [keyboardClearance, setKeyboardClearance] = useState(0);
   const [messageToReport, setMessageToReport] = useState<ChatMessage | null>(null);
+  const [blockConfirmationOpen, setBlockConfirmationOpen] = useState(false);
   const messagesQuery = useConversationMessages(route.params.conversationId, isFocused);
+  const conversationQuery = useConversationDetails(route.params.conversationId, isFocused);
   const sendMutation = useSendMessage();
   const markReadMutation = useMarkMessageRead();
+  const blockUserMutation = useBlockUser();
+  const unblockUserMutation = useUnblockUser();
   const markedReadIdsRef = useRef(new Set<string>());
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const isNewContactConversation =
     messagesQuery.error instanceof ApiError && messagesQuery.error.status === 404;
   const messages = isNewContactConversation ? [] : messagesQuery.data ?? [];
+  const conversation = conversationQuery.data;
+  const otherUser = conversation
+    ? conversation.employerId === user?.id
+      ? conversation.contractor
+      : conversation.employer
+    : null;
+  const isBlockedByMe = conversation?.blocking?.isBlockedByMe === true;
+  const isMessagingBlocked = conversation?.blocking?.isMessagingBlocked === true;
 
   useEffect(() => {
     if (isFocused) {
@@ -106,6 +119,9 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
   }, []);
 
   const send = (overrideContent?: string) => {
+    if (isMessagingBlocked) {
+      return;
+    }
     const nextContent = overrideContent ?? content;
     const trimmed = nextContent.trim();
     if (!trimmed) {
@@ -150,6 +166,29 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
       params: { targetType, targetId, targetSummary },
     });
   };
+  const blockUser = () => {
+    if (!otherUser) {
+      return;
+    }
+
+    blockUserMutation.mutate(otherUser.id, {
+      onSuccess: () => setBlockConfirmationOpen(false),
+      onError: (error) => {
+        Alert.alert('Could not block user', error instanceof Error ? error.message : 'Please try again.');
+      },
+    });
+  };
+  const unblockUser = () => {
+    if (!otherUser) {
+      return;
+    }
+
+    unblockUserMutation.mutate(otherUser.id, {
+      onError: (error) => {
+        Alert.alert('Could not unblock user', error instanceof Error ? error.message : 'Please try again.');
+      },
+    });
+  };
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['left', 'right']}>
@@ -174,6 +213,26 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
         ]}
         onRequestClose={() => setMessageToReport(null)}
       />
+      <AppModal
+        visible={blockConfirmationOpen}
+        title="Block User"
+        body="They will no longer be able to exchange new messages with you. Existing messages remain available for safety and reporting."
+        icon={UserX}
+        actions={[
+          { label: 'Cancel', variant: 'secondary', onPress: () => setBlockConfirmationOpen(false) },
+          {
+            label: 'Block User',
+            variant: 'danger',
+            disabled: blockUserMutation.isPending,
+            onPress: blockUser,
+          },
+        ]}
+        onRequestClose={() => {
+          if (!blockUserMutation.isPending) {
+            setBlockConfirmationOpen(false);
+          }
+        }}
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
@@ -184,8 +243,19 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
             title="Report Conversation"
             icon={Flag}
             variant="secondary"
+            style={styles.threadActionButton}
             onPress={() => openReportForm('CONVERSATION', route.params.conversationId, 'Conversation')}
           />
+          {otherUser ? (
+            <Button
+              title={isBlockedByMe ? 'Unblock User' : 'Block User'}
+              icon={isBlockedByMe ? UserCheck : UserX}
+              variant={isBlockedByMe ? 'secondary' : 'danger'}
+              style={styles.threadActionButton}
+              loading={blockUserMutation.isPending || unblockUserMutation.isPending}
+              onPress={isBlockedByMe ? unblockUser : () => setBlockConfirmationOpen(true)}
+            />
+          ) : null}
         </View>
         <FlatList
           ref={listRef}
@@ -231,44 +301,68 @@ export function ConversationThreadScreen({ route, navigation }: Props) {
           )}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         />
-        <View
-          style={[
-            styles.composer,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-              marginBottom: keyboardClearance,
-              paddingBottom: Math.max(insets.bottom, 8),
-            },
-          ]}
-        >
-          <View style={[styles.inputWrap, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
-            <TextInput
-              value={content}
-              onChangeText={setContent}
-              placeholder="Message"
-              placeholderTextColor={theme.colors.textMuted}
-              multiline
-              style={[styles.input, { color: theme.colors.text }]}
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={hasMessage ? 'Send message' : 'Send like'}
-            disabled={sendMutation.isPending}
-            onPress={() => send(hasMessage ? undefined : '\u{1F44D}')}
-            style={({ pressed }) => [
-              styles.sendButton,
+        {isMessagingBlocked ? (
+          <View
+            style={[
+              styles.blockedComposer,
               {
-                backgroundColor: theme.colors.primary,
-                opacity: sendMutation.isPending ? 0.55 : pressed ? 0.82 : 1,
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                paddingBottom: Math.max(insets.bottom, 10),
               },
             ]}
           >
-            <ComposerIcon color="#FFFFFF" size={21} />
-          </Pressable>
-        </View>
+            <Text style={[styles.blockedText, { color: theme.colors.textMuted }]}>Messaging is unavailable for this conversation.</Text>
+            {isBlockedByMe ? (
+              <Button
+                title="Unblock User"
+                icon={UserCheck}
+                variant="secondary"
+                loading={unblockUserMutation.isPending}
+                onPress={unblockUser}
+              />
+            ) : null}
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.composer,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                marginBottom: keyboardClearance,
+                paddingBottom: Math.max(insets.bottom, 8),
+              },
+            ]}
+          >
+            <View style={[styles.inputWrap, { backgroundColor: theme.colors.surfaceMuted, borderColor: theme.colors.border }]}>
+              <TextInput
+                value={content}
+                onChangeText={setContent}
+                placeholder="Message"
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+                style={[styles.input, { color: theme.colors.text }]}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={hasMessage ? 'Send message' : 'Send like'}
+              disabled={sendMutation.isPending}
+              onPress={() => send(hasMessage ? undefined : '\u{1F44D}')}
+              style={({ pressed }) => [
+                styles.sendButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                  opacity: sendMutation.isPending ? 0.55 : pressed ? 0.82 : 1,
+                },
+              ]}
+            >
+              <ComposerIcon color="#FFFFFF" size={21} />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -307,8 +401,13 @@ const styles = StyleSheet.create({
   },
   threadActions: {
     borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  threadActionButton: {
+    flex: 1,
   },
   mine: {
     alignSelf: 'flex-end',
@@ -359,5 +458,16 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  blockedComposer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  blockedText: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 });

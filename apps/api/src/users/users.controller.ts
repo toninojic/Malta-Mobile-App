@@ -6,6 +6,8 @@ import {
   Get,
   Headers,
   Patch,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
   UploadedFile,
@@ -13,6 +15,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-user.type';
@@ -47,6 +50,29 @@ export class UsersController {
   @Delete('me')
   deactivateMe(@CurrentUser() user: AuthenticatedUser) {
     return this.usersService.deactivateAccount(user.id);
+  }
+
+  @Get('me/blocked-users')
+  blockedUsers(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.findBlockedUsers(user.id);
+  }
+
+  @Post(':userId/block')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  blockUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.usersService.blockUser(user.id, userId);
+  }
+
+  @Delete(':userId/block')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  unblockUser(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.usersService.unblockUser(user.id, userId);
   }
 
   @Post('me/avatar')

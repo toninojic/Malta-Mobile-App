@@ -3,7 +3,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArrowLeft, Building2, Check, HardHat, LockKeyhole, Mail, Square, UserRound } from 'lucide-react-native';
 import { ComponentType } from 'react';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../api/client';
 import { Button } from '../../components/Button';
 import { PhoneNumberInput } from '../../components/PhoneNumberInput';
@@ -203,13 +203,15 @@ export function RegisterScreen({ navigation }: Props) {
         disabled={!legalAccepted}
         onPress={submit}
       />
-      <Button
-        title={`Continue with Google as ${role === 'EMPLOYER' ? 'Employer' : 'Contractor'}`}
-        variant="secondary"
-        loading={googlePromptPending || googleMutation.isPending}
-        disabled={googlePromptPending || googleMutation.isPending}
-        onPress={() => void startGoogleRegistration()}
-      />
+      {Platform.OS !== 'ios' ? (
+        <Button
+          title={`Continue with Google as ${role === 'EMPLOYER' ? 'Employer' : 'Contractor'}`}
+          variant="secondary"
+          loading={googlePromptPending || googleMutation.isPending}
+          disabled={googlePromptPending || googleMutation.isPending}
+          onPress={() => void startGoogleRegistration()}
+        />
+      ) : null}
       <Button title="Log In" variant="secondary" onPress={() => navigation.navigate('Login')} />
     </Screen>
   );

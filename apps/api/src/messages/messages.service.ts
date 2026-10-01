@@ -72,6 +72,20 @@ export class MessagesService {
       const conversation = await this.getOrCreateConversation(tx, user, conversationOrContactId);
       const recipientId = conversation.employerId === user.id ? conversation.contractorId : conversation.employerId;
 
+      const blockingRelation = await tx.userBlock.findFirst({
+        where: {
+          OR: [
+            { blockerId: user.id, blockedId: recipientId },
+            { blockerId: recipientId, blockedId: user.id },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (blockingRelation) {
+        throw new ForbiddenException('Messaging is unavailable for this conversation.');
+      }
+
       const message = await tx.message.create({
         data: {
           conversationId: conversation.id,
@@ -293,6 +307,10 @@ export class MessagesService {
       contractor: conversation.contractor,
       lastMessage: lastMessage ? this.toMessage(lastMessage) : null,
       unreadCount,
+      blocking: {
+        isBlockedByMe: false,
+        isMessagingBlocked: false,
+      },
     };
   }
 

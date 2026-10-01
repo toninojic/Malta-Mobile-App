@@ -216,8 +216,14 @@ export class ConversationsService {
   }
 
   private async toConversation(conversation: ConversationWithRelations, viewerId: string) {
-    const unreadCount = viewerId
-      ? await this.prisma.message.count({
+    const otherUserId = viewerId
+      ? conversation.employerId === viewerId
+        ? conversation.contractorId
+        : conversation.employerId
+      : null;
+    const [unreadCount, blockingRelations] = await Promise.all([
+      viewerId
+        ? this.prisma.message.count({
           where: {
             conversationId: conversation.id,
             senderId: { not: viewerId },
@@ -225,13 +231,25 @@ export class ConversationsService {
             deletedAt: null,
           },
         })
-      : await this.prisma.message.count({
+        : this.prisma.message.count({
           where: {
             conversationId: conversation.id,
             isRead: false,
             deletedAt: null,
           },
-        });
+        }),
+      viewerId && otherUserId
+        ? this.prisma.userBlock.findMany({
+            where: {
+              OR: [
+                { blockerId: viewerId, blockedId: otherUserId },
+                { blockerId: otherUserId, blockedId: viewerId },
+              ],
+            },
+            select: { blockerId: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
     const lastMessage = conversation.messages[0];
 
@@ -272,6 +290,10 @@ export class ConversationsService {
           }
         : null,
       unreadCount,
+      blocking: {
+        isBlockedByMe: blockingRelations.some((block) => block.blockerId === viewerId),
+        isMessagingBlocked: blockingRelations.length > 0,
+      },
     };
   }
 

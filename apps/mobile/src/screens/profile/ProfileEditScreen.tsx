@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import { BellRing, ChevronDown, ChevronRight, ExternalLink, Flag, ImagePlus, LogOut, MailCheck, RefreshCw, Save, ShieldCheck, Trash2, UserRound } from 'lucide-react-native';
+import { BellRing, ChevronDown, ChevronRight, ExternalLink, Flag, ImagePlus, LogOut, MailCheck, RefreshCw, Save, ShieldCheck, Trash2, UserCheck, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { api } from '../../api/client';
@@ -18,6 +18,7 @@ import {
   useUploadPortfolioImages,
 } from '../../api/offerWorkHooks';
 import { useEmployerRatingSummary } from '../../api/reviewHooks';
+import { useBlockedUsers, useUnblockUser } from '../../api/userBlockHooks';
 import { Badge } from '../../components/Badge';
 import { AppModal } from '../../components/AppModal';
 import { Button } from '../../components/Button';
@@ -125,6 +126,8 @@ export function ProfileEditScreen() {
   const updateServiceAreasMutation = useUpdateContractorServiceAreas();
   const updateServiceCategoriesMutation = useUpdateContractorServiceCategories();
   const employerRatingQuery = useEmployerRatingSummary(currentUser?.role === 'EMPLOYER' ? currentUser.id : undefined);
+  const blockedUsersQuery = useBlockedUsers(Boolean(currentUser) && currentUser?.role !== 'ADMIN');
+  const unblockUserMutation = useUnblockUser();
   const uploadPortfolioMutation = useUploadPortfolioImages();
   const removePortfolioMutation = useRemovePortfolioImage();
   const uploadVerificationMutation = useUploadContractorVerification();
@@ -516,12 +519,16 @@ export function ProfileEditScreen() {
         verificationQuery.isRefetching ||
         employerRatingQuery.isRefetching ||
         notificationPreferencesQuery.isRefetching ||
+        blockedUsersQuery.isRefetching ||
         serviceAreasQuery.isRefetching ||
         serviceCategoriesQuery.isRefetching
       }
       onRefresh={() => {
         void query.refetch();
         void notificationPreferencesQuery.refetch();
+        if (role !== 'ADMIN') {
+          void blockedUsersQuery.refetch();
+        }
         if (isContractor) {
           void portfolioQuery.refetch();
           void verificationQuery.refetch();
@@ -1008,6 +1015,64 @@ export function ProfileEditScreen() {
         variant="secondary"
         onPress={() => navigation.navigate('ActivityTab', { screen: 'MyReports' })}
       />
+      {role !== 'ADMIN' ? (
+        <Card>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderText}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Blocked Users</Text>
+              <Text style={[styles.email, { color: theme.colors.textMuted }]}>Manage people you have blocked from messaging you.</Text>
+            </View>
+            <Badge status={String(blockedUsersQuery.data?.length ?? 0)} />
+          </View>
+          {blockedUsersQuery.isLoading ? (
+            <Text style={[styles.email, { color: theme.colors.textMuted }]}>Loading blocked users...</Text>
+          ) : blockedUsersQuery.isError ? (
+            <Text style={[styles.errorText, { color: theme.colors.danger }]}>Could not load blocked users.</Text>
+          ) : blockedUsersQuery.data?.length ? (
+            <View style={styles.blockedUserList}>
+              {blockedUsersQuery.data.map((item) => {
+                const blockedUserName = item.user.profile?.displayName?.trim() || 'MaltaPro user';
+                const blockedUserAvatar = item.user.profile?.avatarUrl;
+                const isUnblockingThisUser =
+                  unblockUserMutation.isPending && unblockUserMutation.variables === item.blockedUserId;
+
+                return (
+                  <View key={item.id} style={[styles.blockedUserRow, { borderColor: theme.colors.border }]}>
+                    <View style={[styles.blockedUserAvatar, { backgroundColor: theme.colors.primary }]}>
+                      {blockedUserAvatar ? (
+                        <Image source={{ uri: blockedUserAvatar }} style={styles.blockedUserAvatarImage} />
+                      ) : (
+                        <UserRound color="#FFFFFF" size={18} />
+                      )}
+                    </View>
+                    <View style={styles.blockedUserInfo}>
+                      <Text numberOfLines={1} style={[styles.preferenceTitle, { color: theme.colors.text }]}>
+                        {blockedUserName}
+                      </Text>
+                      <Text style={[styles.email, { color: theme.colors.textMuted }]}>{item.user.role.toLowerCase()}</Text>
+                    </View>
+                    <Button
+                      title="Unblock"
+                      icon={UserCheck}
+                      variant="secondary"
+                      style={styles.unblockButton}
+                      loading={isUnblockingThisUser}
+                      disabled={unblockUserMutation.isPending && !isUnblockingThisUser}
+                      onPress={() =>
+                        unblockUserMutation.mutate(item.blockedUserId, {
+                          onError: (error) => Alert.alert('Could not unblock user', readableError(error)),
+                        })
+                      }
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={[styles.email, { color: theme.colors.textMuted }]}>You have not blocked anyone.</Text>
+          )}
+        </Card>
+      ) : null}
       <Card>
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Legal</Text>
         <View style={styles.legalLinkList}>
@@ -1246,6 +1311,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 11,
+  },
+  blockedUserList: {
+    gap: 8,
+  },
+  blockedUserRow: {
+    alignItems: 'center',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingTop: 10,
+  },
+  blockedUserAvatar: {
+    alignItems: 'center',
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 40,
+  },
+  blockedUserAvatarImage: {
+    height: '100%',
+    width: '100%',
+  },
+  blockedUserInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  unblockButton: {
+    minHeight: 40,
+    paddingHorizontal: 10,
   },
 });
 

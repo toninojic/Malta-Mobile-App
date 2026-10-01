@@ -19,9 +19,10 @@
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
-        "CFBundleDisplayName": "MaltaPro"
+        "CFBundleDisplayName": "MaltaPro",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "mt.marketplace.craftsman"
     },
