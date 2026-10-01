@@ -77,14 +77,6 @@ Start the API:
 npm run api:dev
 ```
 
-Default test accounts:
-
-```text
-employer@malta.test / Password123!
-contractor@malta.test / Password123!
-admin@malta.test / Password123!
-```
-
 ## Mobile App
 
 Start Expo:
