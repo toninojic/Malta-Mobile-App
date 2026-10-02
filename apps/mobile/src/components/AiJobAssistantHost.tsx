@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useAiJobAssistant,
   useCreateAiJobAssistantConversation,
@@ -113,6 +113,7 @@ function AiJobAssistantModal({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const safeTop = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0, Platform.OS === 'ios' ? 47 : 24);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [createRequested, setCreateRequested] = useState(false);
@@ -230,7 +231,10 @@ function AiJobAssistantModal({
 
   return (
     <Modal animationType="slide" visible={visible} presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={[styles.modalRoot, { backgroundColor: theme.colors.background }]}>
+      <SafeAreaView
+        edges={['left', 'right']}
+        style={[styles.modalRoot, { backgroundColor: theme.colors.background, paddingTop: safeTop }]}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}

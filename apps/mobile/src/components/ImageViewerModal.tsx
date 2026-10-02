@@ -1,6 +1,7 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Image, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Image, Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type ImageItem = {
   id: string;
@@ -17,6 +18,8 @@ type Props = {
 
 export function ImageViewerModal({ images, initialIndex, visible, onClose }: Props) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const safeTop = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0, Platform.OS === 'ios' ? 47 : 24);
   const listRef = useRef<FlatList<ImageItem>>(null);
   const [index, setIndex] = useState(initialIndex);
 
@@ -32,7 +35,7 @@ export function ImageViewerModal({ images, initialIndex, visible, onClose }: Pro
   return (
     <Modal animationType="fade" visible={visible} transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { paddingTop: safeTop + 10 }]}>
           <Text style={styles.counter}>{images.length ? `${index + 1} / ${images.length}` : ''}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close image viewer" onPress={onClose} style={styles.closeButton}>
             <X color="#FFFFFF" size={24} />
@@ -71,7 +74,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     left: 0,
     paddingHorizontal: 18,
-    paddingTop: 18,
     position: 'absolute',
     right: 0,
     top: 0,
